@@ -5,8 +5,9 @@ Created on Sat Jun 25 16:49:36 2022
 @author: Tsinu
 """
 import numpy as np
+import os
 
-def of_readProbe(fileName, trimOverlap = True):
+def __of_readProbe_singleT(fileName,field):
     probes = []
     p = []
     time  = []
@@ -35,3 +36,39 @@ def of_readProbe(fileName, trimOverlap = True):
    
     return probes, time, p
 
+def of_readProbe(probeName, postProcDir, field, trimOverlap = True):
+    probeDir = postProcDir+probeName+"/"
+    timeDirs = os.listdir(probeDir)
+    
+    pts = []
+    T = []
+    P = []
+    
+    for t in timeDirs:
+    
+        fileName = probeDir+t+"/"+field
+        
+        (pts,time,p) = __of_readProbe_singleT(fileName, field)
+        
+        T.append(time)
+        P.append(p)
+        print(np.shape(p))
+        print(np.shape(P))
+        
+    if trimOverlap:
+        T,idx = np.unique(T,return_index=True)
+        P = P[idx]
+        
+    return pts,T,P
+    
+    
+    
+    
+    
+caseDir = "D:/OneDrive - The University of Western Ontario/Documents/PhD/Thesis/CodeRepositories/windCalc/data/exampleOFcase/"
+postProcDir = caseDir+"postProcessing/"
+probeName = "probes.tapsABCD"
+
+probes,time,p = of_readProbe(probeName, postProcDir, "p",trimOverlap = False)
+
+# print(probes,time,p)
