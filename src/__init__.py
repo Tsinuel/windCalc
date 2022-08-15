@@ -8,3 +8,8 @@ Created on Sat Jun 25 17:54:16 2022
 def main():
     """Entry point for the application script"""
     print("Call your main application code here")
+    
+    
+    
+if __name__ == "__main__":
+    main()
