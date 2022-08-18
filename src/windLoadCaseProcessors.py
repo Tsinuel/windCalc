@@ -7,10 +7,12 @@ Created on Fri Aug 12 16:25:30 2022
 
 import numpy as np
 import windBasics as wind
+import pandas as pd
 import warnings
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_pdf import PdfPages
 
-def processVelProfile(Z, vel, dt, zRef, interpMethod='nearest', getSpectAt=[], showPlots=False):
+def processVelProfile(Z, vel, dt, zRef, interpMethod='nearest', getSpectAt=[], showPlots=(False,'')):
     """
     
 
@@ -104,57 +106,72 @@ def processVelProfile(Z, vel, dt, zRef, interpMethod='nearest', getSpectAt=[], s
             iSpectOthrs[i] = (np.abs(Z - z)).argmin()
     
 
-    if showPlots:
-        fig1 = plt.figure() # U
-        ax = fig1.add_subplot(1,1,1)
-        ax.plot(U,Z,'sr',label='mean U',ms=3)
+    if showPlots[0]:
+        pdf = PdfPages(showPlots[1])       
+        fig = plt.figure() 
+        
+        # U
+        plt.plot(U,Z,'sr',label='mean U',ms=3)
         plt.xlabel('U')
         plt.ylabel('Z')
-        ax.legend()
-        plt.show()
+        plt.legend()        
+        pdf.savefig(fig)
+        plt.clf()
         
-        fig2 = plt.figure() # TI
-        ax = fig2.add_subplot(1,1,1)
-        ax.plot(TI[:,0],Z,'sr',label='Iu',ms=3)
-        ax.plot(TI[:,1],Z,'dg',label='Iv',ms=3)
-        ax.plot(TI[:,2],Z,'ob',label='Iw',ms=3)
+        plt.plot(TI[:,0],Z,'sr',label='Iu',ms=3)
+        plt.plot(TI[:,1],Z,'dg',label='Iv',ms=3)
+        plt.plot(TI[:,2],Z,'ob',label='Iw',ms=3)
         plt.xlabel('TI')
         plt.ylabel('Z')
-        ax.legend()
-        plt.show()
+        plt.legend()
+        pdf.savefig(fig)
+        plt.clf()
         
-        fig3 = plt.figure() # xLi
-        ax = fig3.add_subplot(1,1,1)
-        ax.plot(L[:,0],Z,'sr',label='xLu',ms=3)
-        ax.plot(L[:,1],Z,'dg',label='xLv',ms=3)
-        ax.plot(L[:,2],Z,'ob',label='xLw',ms=3)
+        plt.plot(L[:,0],Z,'sr',label='xLu',ms=3)
+        plt.plot(L[:,1],Z,'dg',label='xLv',ms=3)
+        plt.plot(L[:,2],Z,'ob',label='xLw',ms=3)
         plt.xlabel('xLi')
         plt.ylabel('Z')
-        ax.legend()
-        plt.show()
+        plt.legend()
+        pdf.savefig(fig)
+        plt.clf()
         
-        fig4 = plt.figure() # Spect
-        ax = fig4.add_subplot(1,1,1)
-        ax.loglog(freq,Spect_H[:,0],'-r',label='Suu',ms=3)
+        plt.loglog(freq,Spect_H[:,0],'-r',label='Suu',ms=3)
         plt.xlabel('freq [Hz]')
         plt.ylabel('Suu')
-        ax.legend()
-        plt.show()
+        plt.legend()
+        pdf.savefig(fig)
+        plt.clf()
 
-        fig5 = plt.figure() # Spect
-        ax = fig5.add_subplot(1,1,1)
-        ax.loglog(freq,Spect_H[:,1],'-g',label='Svv',ms=3)
+        plt.loglog(freq,Spect_H[:,1],'-g',label='Svv',ms=3)
         plt.xlabel('freq [Hz]')
         plt.ylabel('Svv')
-        ax.legend()
-        plt.show()
+        plt.legend()
+        pdf.savefig(fig)
+        plt.clf()
 
-        fig6 = plt.figure() # Spect
-        ax = fig6.add_subplot(1,1,1)
-        ax.loglog(freq,Spect_H[:,2],'-b',label='Sww',ms=3)
+        plt.loglog(freq,Spect_H[:,2],'-b',label='Sww',ms=3)
         plt.xlabel('freq [Hz]')
         plt.ylabel('Sww')
-        ax.legend()
-        plt.show()
+        plt.legend()
+        pdf.savefig(fig)
+        plt.clf()
+        
+        pdf.close()
 
     return ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others
+
+def readVelProfile(velFile,zRef):
+    
+    data = pd.read_csv(velFile,delimiter=',')
+    
+    Z = np.asarray(data.Z,dtype=float)
+    U = np.asarray(data.U,dtype=float)
+    TI = np.asarray(data.values[:,2:5],dtype=float)
+    L = np.asarray(data.values[:,5:8],dtype=float)
+    
+    iRef = (np.abs(Z - zRef)).argmin()
+    
+    ref_U_TI_L = [U[iRef], TI[iRef,0], TI[iRef,1], TI[iRef,2], L[iRef,0], L[iRef,1], L[iRef,2]]
+    
+    return ref_U_TI_L, Z, U, TI, L
