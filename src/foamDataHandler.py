@@ -212,7 +212,23 @@ def readInflowDict(infFile):
         
     return inflDict
 
-def scaleInflowData(caseDir):
+def getClosest2DcoordsTo(X,Y,Zin):
+    from scipy import spatial
+    coords = []
+    for x, y in zip(X, Y):
+        coords.append((x,y))
+    inletPlane = spatial.KDTree(coords)
+    
+    pts = []    
+    for z in Zin:
+        pts.append((0,z))
+        
+    idx = inletPlane.query(pts)[1]
+    
+    return idx
+
+
+def scaleInflowData(caseDir,tRange,writeInflow=True):
     # caseDir = 'D:/tempData_depot/simData_CandC/ttuPSpcOP15.7'
     inflDict = readInflowDict(caseDir+'/system/scaleInflowDict')
     
@@ -222,9 +238,6 @@ def scaleInflowData(caseDir):
     profSclFctr = getProfileScaleFactor(inflDict["origProf"], targProf, inflDict["scaleBy"])
     
     origUofZ = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.U),fill_value='extrapolate')
-    # origIuOfZ = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iu),fill_value='extrapolate')
-    # origIvOfZ = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iv),fill_value='extrapolate')
-    # origIwOfZ = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iw),bounds_error=False,fill_value=(origProf.Iw[0],origProf.iloc[-1].Iw))
     
     fUofZ = scintrp.interp1d(np.asarray(profSclFctr.Z), np.asarray(profSclFctr.U),fill_value='extrapolate')
     fIuOfZ = scintrp.interp1d(np.asarray(profSclFctr.Z), np.asarray(profSclFctr.Iu),fill_value='extrapolate')
@@ -291,26 +304,15 @@ def scaleInflowData(caseDir):
     inflowDictFile.write("// ************************************************************************* //\n")
     inflowDictFile.close()
 
-def extractSampleProfileFromInflow(inletDir,figFile,tMax):
-    from scipy import spatial
-    import matplotlib.pyplot as plt
-    from matplotlib.backends.backend_pdf import PdfPages
+def extractSampleProfileFromInflow(inletDir,figFile,tMax,zRef):
     
     points = readBDformattedFile(inletDir + '/points')
     points.columns = ['X','Y','Z']
     
-    coords = []
-    for x, y in zip(points.Y, points.Z):
-        coords.append((x,y))
-    inletPlane = spatial.KDTree(coords)
-    
-    profPts = []    
-    for z in np.linspace(min(points.Z), max(points.Z), 100):
-        profPts.append((0,z))
-        
-    idx = inletPlane.query(profPts)[1]
+    Z = np.linspace(0.001,max(points.Z)-0.01,100)
+    idx = getClosest2DcoordsTo(points.Y,points.Z,Z)
     Z = np.asarray(points.Z[idx],dtype=float)
-    
+        
     times = [ name for name in os.listdir(inletDir) if os.path.isdir(os.path.join(inletDir, name)) ]
     times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
     
@@ -328,37 +330,48 @@ def extractSampleProfileFromInflow(inletDir,figFile,tMax):
         if t[1] > tMax:
             break
 
-    Umean = np.mean(velOfT[:,:,0],axis=0)
-    Iu = np.std(velOfT[:,:,0],axis=0)/Umean
-    Iv = np.std(velOfT[:,:,1],axis=0)/Umean
-    Iw = np.std(velOfT[:,:,2],axis=0)/Umean
-
-    pdf = PdfPages(figFile)       
-    fig = plt.figure(figsize=[15.0,12.0]) 
+    ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z, 
+                                                                                   velOfT, 
+                                                                                   times[1][1]-times[0][1], 
+                                                                                   zRef)
     
-    # plt.plot(points.Y,points.Z, 'xk')
-    # plt.plot(Z*0.0,Z, 'sr')
-    # pdf.savefig(fig)
-    # plt.clf()
+    wPlt.plotProfiles([Z],
+                      [U],
+                      TI=[TI], 
+                      L=[L],
+                      plotNames=(),
+                      pltFile=figFile)
+    
 
-    plt.figure()
-    plt.plot(Umean,Z, '-xk')
-    plt.xlabel('U')
-    plt.ylabel('Z')
-    pdf.savefig(fig)
-    plt.clf()
 
-    plt.figure()
-    plt.plot(Iu,Z, '-xk',label='Iu')
-    plt.plot(Iv,Z, '-dr',label='Iv')
-    plt.plot(Iw,Z, '-+b',label='Iw')
-    plt.xlabel('TI')
-    plt.ylabel('Z')
-    plt.legend()
-    pdf.savefig(fig)
-    plt.clf()
 
-    pdf.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 # Probe readers and related functions

@@ -6,9 +6,10 @@ Created on Fri Aug 12 18:23:09 2022
 """
 
 import numpy as np
+import warnings
 from scipy import signal
 
-def integTimeScale(x,dt,rho_tol=0.0001,showPlots=False):
+def integTimeScale(x,dt,rho_tol=0.0001,showPlots=False,removeNaNs=True):
     """
     Gets the integral time scale of a signal by integrating the right side of 
     its auto-correlation coefficient function up to the first zero crossing.
@@ -39,12 +40,21 @@ def integTimeScale(x,dt,rho_tol=0.0001,showPlots=False):
 
     """
 
+    if removeNaNs and not all(~np.isnan(x)):
+        x = x[np.argwhere(~np.isnan(x))]
+    if len(x) == 0:
+        warnings.warn("The input value has no valid number of elements.")
+        return np.nan, np.nan, [], []
+
     x = x - np.mean(x)
     rhoAll = signal.correlate(x,x)
     iMiddle = int(np.floor(len(rhoAll)/2))
     rhoAll = rhoAll/rhoAll[iMiddle]
     rho = rhoAll[iMiddle:]
     
+    if all(rho < rho_tol) or not all(~np.isnan(rho)):
+        return np.nan, np.nan, [], []
+            
     i_0 = np.where(rho < rho_tol)[0][0]
     rho = rho[0:i_0]
     tau = np.linspace(0, (len(rho)-1)*dt, len(rho))
