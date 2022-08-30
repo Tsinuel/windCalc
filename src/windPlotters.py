@@ -49,7 +49,10 @@ def plotProfiles(Z,U,
             Ulabel = 'U/Uref'
             Zlabel = 'Z/Zref'
     
-    pdf = PdfPages(pltFile)       
+    if isinstance(pltFile, str):
+        pdf = PdfPages(pltFile)
+    else:
+        pdf = pltFile
     fig = plt.figure() 
 
     for i in range(N):
@@ -117,6 +120,6 @@ def plotProfiles(Z,U,
         pdf.savefig(fig)
         plt.clf()
 
-      
-    pdf.close()
+    if isinstance(pltFile, str):
+        pdf.close()
     
