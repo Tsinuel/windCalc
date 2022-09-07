@@ -25,8 +25,11 @@ ctlSpect = {
 def plotProfiles(Z,U,
                  TI=(), L=(), ctl=(ctlProf,ctlSpect),
                  plotNames=(),
-                 normalize_zRef_Uref=(False, [0.0], [0.0]),
-                 pltFile=''):
+                 normalizer=(False, [0.0], [0.0]),
+                 pltFile='',
+                 lim_Z = 'max',
+                 lim_U = [0,2],
+                 lim_TI=[0.4, 0.3, 0.3]):
     clProf = ctl[0]
     clSpec = ctl[1]
     
@@ -40,14 +43,16 @@ def plotProfiles(Z,U,
     Ulabel = 'U'
     Zlabel = 'Z'
     
-    if normalize_zRef_Uref[0]:
+    if normalizer[0]:
         for i in range(N):
-            Z[i] /= normalize_zRef_Uref[1][i]
-            U[i] /= normalize_zRef_Uref[2][i]
+            Z[i] /= normalizer[1][i]
+            U[i] /= normalizer[2][i]
             if len(L) > 0:
-                L[i] /= normalize_zRef_Uref[1][i]
+                L[i] /= normalizer[1][i]
             Ulabel = 'U/Uref'
             Zlabel = 'Z/Zref'
+    if lim_Z == 'max':
+        lim_Z = max([item for sublist in Z for item in sublist])
     
     if isinstance(pltFile, str):
         pdf = PdfPages(pltFile)
@@ -59,7 +64,10 @@ def plotProfiles(Z,U,
         plt.plot(U[i],Z[i], color=clProf["col"][i], label=plotNames[i], ms=3, marker=clProf["marker"][i])
     plt.xlabel(Ulabel)
     plt.ylabel(Zlabel)
-    plt.legend()        
+    plt.xlim(lim_U)
+    plt.ylim([0, lim_Z])
+    plt.legend()
+    plt.grid()
     plt.title('mean U')
     pdf.savefig(fig)
     plt.clf()
@@ -69,7 +77,10 @@ def plotProfiles(Z,U,
             plt.plot(TI[i][:,0],Z[i],color=clProf["col"][i],label=plotNames[i],ms=3, marker=clProf["marker"][i])
         plt.xlabel('Iu')
         plt.ylabel(Zlabel)
+        plt.xlim([0, lim_TI[0]])
+        plt.ylim([0, lim_Z])
         plt.legend()
+        plt.grid()
         plt.title('Iu')
         pdf.savefig(fig)
         plt.clf()
@@ -78,7 +89,10 @@ def plotProfiles(Z,U,
             plt.plot(TI[i][:,1],Z[i],color=clProf["col"][i],label=plotNames[i],ms=3, marker=clProf["marker"][i])
         plt.xlabel('Iv')
         plt.ylabel(Zlabel)
+        plt.xlim([0, lim_TI[1]])
+        plt.ylim([0, lim_Z])
         plt.legend()
+        plt.grid()
         plt.title('Iv')
         pdf.savefig(fig)
         plt.clf()
@@ -87,7 +101,10 @@ def plotProfiles(Z,U,
             plt.plot(TI[i][:,2],Z[i],color=clProf["col"][i],label=plotNames[i],ms=3, marker=clProf["marker"][i])
         plt.xlabel('Iw')
         plt.ylabel(Zlabel)
+        plt.xlim([0, lim_TI[2]])
+        plt.ylim([0, lim_Z])
         plt.legend()
+        plt.grid()
         plt.title('Iw')
         pdf.savefig(fig)
         plt.clf()
@@ -97,6 +114,7 @@ def plotProfiles(Z,U,
             plt.plot(L[i][:,0],Z[i],color=clProf["col"][i],label=plotNames[i],ms=3, marker=clProf["marker"][i])
         plt.xlabel('xLu')
         plt.ylabel(Zlabel)
+        plt.ylim([0, lim_Z])
         plt.legend()
         plt.title('xLu')
         pdf.savefig(fig)
@@ -106,6 +124,7 @@ def plotProfiles(Z,U,
             plt.plot(L[i][:,1],Z[i],color=clProf["col"][i],label=plotNames[i],ms=3, marker=clProf["marker"][i])
         plt.xlabel('xLv')
         plt.ylabel(Zlabel)
+        plt.ylim([0, lim_Z])
         plt.legend()
         plt.title('xLv')
         pdf.savefig(fig)
@@ -115,6 +134,7 @@ def plotProfiles(Z,U,
             plt.plot(L[i][:,2],Z[i],color=clProf["col"][i],label=plotNames[i],ms=3, marker=clProf["marker"][i])
         plt.xlabel('xLw')
         plt.ylabel(Zlabel)
+        plt.ylim([0, lim_Z])
         plt.legend()
         plt.title('xLw')
         pdf.savefig(fig)

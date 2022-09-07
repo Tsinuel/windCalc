@@ -12,6 +12,7 @@ import scipy.interpolate as scintrp
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
+import windBasics as wind
 import windLoadCaseProcessors as wProc
 import windPlotters as wPlt
 
@@ -66,99 +67,94 @@ def writeBDformattedFile(file,vect):
     f.write(")")
     f.close()    
 
-def getProfileScaleFactor(origProf,targProf,scaleBy,figFile=''):
-    # pdf = PdfPages(figFile)
-    def plotProf(z,orig,targ,f,name,pdf):
+def getProfileScaleFactor(Z_intrp, origProf, targProf, scaleBy, readFromFile=False, figFile=''):
+    
+    def plotProf(Z_calc, orig, targ, fCalc, Z_intrp, fIntrp, name, pdf):
         if pdf == '':
             return
-           
         fig = plt.figure() 
         fig.add_subplot(1,2,1)
-        plt.plot(orig,z,'k-',label='orig')
-        plt.plot(targ,z,'r-',label='target')
+        plt.plot(orig,Z_calc,'k-',label='orig')
+        plt.plot(targ,Z_calc,'r-',label='target')
         plt.xlabel(name)
         plt.ylabel('Z')
         plt.legend()
         
         fig.add_subplot(1,2,2)
-        plt.plot(f,z,'k+-',label='Target/original')
-        plt.xlabel('Correction factor ('+name+')')
+        plt.plot(fCalc,Z_calc,'dk',label='Calculated')
+        plt.plot(fIntrp[::50],Z_intrp[::50],'.r',label='Interpolated',markersize=2)
+        plt.xlabel('Correction factor (Targ/Orig)')
         plt.ylabel('Z')
         plt.legend()
+        # plt.show()
         pdf.savefig(fig)
         plt.clf()
         
-        
-
-    Z = np.unique(np.sort(np.append(np.asarray(origProf.Z), np.asarray(targProf.Z))))
-    factor = Z
-    cNames = ['Z']
-    # if len(figFile) > 0:
-    #     __showPlots = True
+    
+    Z_calc = np.unique(np.sort(np.append(np.asarray(origProf.Z), np.asarray(targProf.Z))))
     
     if 'U' in scaleBy:
         intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.U),fill_value='extrapolate')
-        orig = intrp(Z)
+        orig = intrp(Z_calc)
         intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.U),fill_value='extrapolate')
-        targ = intrp(Z)
-        f = targ/orig
-        factor = np.vstack((factor,f))
-        cNames.append('U')
-        plotProf(Z,orig,targ,f,'U',figFile)
+        targ = intrp(Z_calc)
+        fU_calc = targ/orig
+        intrp = scintrp.interp1d(Z_calc, fU_calc, fill_value='extrapolate')
+        fU_intrp = intrp(Z_intrp)
+        plotProf(Z_calc,orig,targ,fU_calc, Z_intrp, fU_intrp,'U',figFile)
+    else:
+        fU_intrp = np.ones(Z_intrp.shape())
     
     if 'Iu' in scaleBy:
-        # intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iu),bounds_error=False,fill_value=(origProf.Iu[0],origProf.iloc[-1].Iu))
         intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iu),fill_value='extrapolate')
-        orig = intrp(Z)
-        # intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iu),bounds_error=False,fill_value=(targProf.Iu[0],targProf.iloc[-1].Iu))
+        orig = intrp(Z_calc)
         intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iu),fill_value='extrapolate')
-        targ = intrp(Z)
-        f = targ/orig
-        factor = np.vstack((factor,f))
-        cNames.append('Iu')
-        plotProf(Z,orig,targ,f,'Iu',figFile)
-    
+        targ = intrp(Z_calc)
+        fIu_calc = targ/orig
+        intrp = scintrp.interp1d(Z_calc, fIu_calc, fill_value='extrapolate')
+        fIu_intrp = intrp(Z_intrp)
+        plotProf(Z_calc,orig,targ,fIu_calc, Z_intrp, fIu_intrp,'Iu',figFile)
+    else:
+        fIu_intrp = np.ones(Z_intrp.shape())
+
     if 'Iv' in scaleBy:
-        # intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iv),bounds_error=False,fill_value=(origProf.Iv[0],origProf.iloc[-1].Iv))
         intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iv),fill_value='extrapolate')
-        orig = intrp(Z)
-        # intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iv),bounds_error=False,fill_value=(targProf.Iv[0],targProf.iloc[-1].Iv))
+        orig = intrp(Z_calc)
         intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iv),fill_value='extrapolate')
-        targ = intrp(Z)
-        f = targ/orig
-        factor = np.vstack((factor,f))
-        cNames.append('Iv')
-        plotProf(Z,orig,targ,f,'Iv',figFile)
+        targ = intrp(Z_calc)
+        fIv_calc = targ/orig
+        intrp = scintrp.interp1d(Z_calc, fIv_calc, fill_value='extrapolate')
+        fIv_intrp = intrp(Z_intrp)
+        plotProf(Z_calc,orig,targ,fIv_calc, Z_intrp, fIv_intrp,'Iv',figFile)
+    else:
+        fIv_intrp = np.ones(Z_intrp.shape())
     
     if 'Iw' in scaleBy:
         intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iw),bounds_error=False,fill_value=(origProf.Iw[0],origProf.iloc[-1].Iw))
-        orig = intrp(Z)
+        orig = intrp(Z_calc)
         intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iw),bounds_error=False,fill_value=(targProf.Iw[0],targProf.iloc[-1].Iw))
-        targ = intrp(Z)
-        f = targ/orig
-        factor = np.vstack((factor,f))
-        cNames.append('Iw')
-        plotProf(Z,orig,targ,f,'Iw',figFile)
+        targ = intrp(Z_calc)
+        fIw_calc = targ/orig
+        intrp = scintrp.interp1d(Z_calc, fIw_calc, fill_value='extrapolate')
+        fIw_intrp = intrp(Z_intrp)
+        plotProf(Z_calc,orig,targ,fIw_calc, Z_intrp, fIw_intrp,'Iw',figFile)
+    else:
+        fIw_intrp = np.ones(Z_intrp.shape())
     
-    factor = pd.DataFrame(np.transpose(factor),columns=cNames)
-    return factor
+    return fU_intrp,fIu_intrp,fIv_intrp,fIw_intrp
 
 def scaleVelocity(UofT,VofT,WofT,
                   Z, scaleBy,
-                  origUofZ, fUofZ, fIuOfZ, fIvOfZ, fIwOfZ,
+                  origUofZ, fU, fIu, fIv, fIw,
                   figFile=''):
     
-    U_MeanCorr = fUofZ(Z)*UofT
-    U_old = fUofZ(Z)*origUofZ(Z)
-    U_new = U_old + fIuOfZ(Z)*(U_MeanCorr-U_old)
+    U_MeanCorr = fU*UofT
+    U_old = fU*origUofZ(Z)
+    U_new = U_old + fIu*(U_MeanCorr-U_old)
     
-    # U_old = origUofZ(Z)
-    # u_old = UofT - U_old
-    # U_new = fUofZ(Z)*U_old + fIuOfZ(Z)*u_old
+    V_new = fU*fIv*VofT
     
-    V_new = fIvOfZ(Z)*VofT
-    
-    W_new = fIwOfZ(Z)*WofT
+    W_new = fU*fIw*WofT
         
     if len(figFile) > 0:
         pdf = PdfPages(figFile)       
@@ -244,104 +240,114 @@ def getClosest2DcoordsTo(X,Y,Zin):
     return idx
 
 
-def scaleInflowData(caseDir,tMin,tMax,zRef,writeInflow=True):
+def scaleInflowData(caseDir,tMin,tMax,zRef,writeInflow=True,smplName=''):
+    
     # caseDir = 'D:/tempData_depot/simData_CandC/ttuPSpcOP15.7'
     inflDict = readInflowDict(caseDir+'/system/scaleInflowDict')
-    pdfDoc = PdfPages(caseDir+'scaledInflow.pdf')
+    if smplName == '':
+        smplName = 'inflowScaling_'+str(tMin)+'_to_'+str(tMax)
+    if not os.path.exists(inflDict["outputDir"]+'/inlet'):
+        os.makedirs(inflDict["outputDir"]+'/inlet')
+    pdfDoc = PdfPages(inflDict["outputDir"]+'/'+smplName+'.pdf')
     
+    
+    ptsFile = inflDict["inflowDir"] + '/inlet/points'
+    points = readBDformattedFile(ptsFile)
+    points.columns = ['X','Y','Z']
+    
+    Z_smpl = np.linspace(0.001,max(points.Z)-0.01,100)
+    idx = getClosest2DcoordsTo(points.Y,points.Z,Z_smpl)
+    Z_smpl = np.asarray(points.Z[idx],dtype=float)
+
+    
+    
+    # prep for scaling
     origProf = readProfiles(inflDict["origProfFile"], inflDict["scaleBy"])
     targProf = readProfiles(inflDict["targProfFile"], inflDict["scaleBy"])
-    origProf.Z = origProf.Z*inflDict["lScl"]
-    profSclFctr = getProfileScaleFactor(origProf, targProf, inflDict["scaleBy"], figFile=pdfDoc)
+    # origProf.Z = origProf.Z*inflDict["lScl"]
+    fU,fIu,fIv,fIw = getProfileScaleFactor(points.Z, origProf, targProf, inflDict["scaleBy"], figFile=pdfDoc)
     
     origUofZ = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.U),fill_value='extrapolate')
     
-    fUofZ = scintrp.interp1d(np.asarray(profSclFctr.Z), np.asarray(profSclFctr.U),fill_value='extrapolate')
-    fIuOfZ = scintrp.interp1d(np.asarray(profSclFctr.Z), np.asarray(profSclFctr.Iu),fill_value='extrapolate')
-    fIvOfZ = scintrp.interp1d(np.asarray(profSclFctr.Z), np.asarray(profSclFctr.Iv),fill_value='extrapolate')
-    fIwOfZ = scintrp.interp1d(np.asarray(profSclFctr.Z), np.asarray(profSclFctr.Iw),bounds_error=False,fill_value=(profSclFctr.Iw[0],profSclFctr.iloc[-1].Iw))
     
-    if inflDict["inflowFormat"] == 'boundaryData':
-        ptsFile = inflDict["inflowDir"] + '/inlet/points'
-        points = readBDformattedFile(ptsFile)
-        points.columns = ['X','Y','Z']
+    inletDir = inflDict["inflowDir"]+'/inlet'
+    times = [ name for name in os.listdir(inletDir) if os.path.isdir(os.path.join(inletDir, name)) ]
+    times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
+    
+    file = inflDict["outputDir"]+'/inlet/points'
+    vect = np.transpose(np.asarray((points.X, points.Y, points.Z)))
+    if writeInflow:
+        writeBDformattedFile(file,vect)
+
+    Vsmpl_in = []
+    Vsmpl_out = []
+    for t in times:
+        if (t[1] < tMin or t[1] > tMax):
+            continue
+        tNew = str(round(t[1]*inflDict["tScl"],__precision))
+        if writeInflow:
+            if os.path.exists(inflDict["outputDir"]+'/inlet/'+tNew):
+                print("--- skipping \t t-old = "+t[0]+"\t\t--> t-new = "+tNew)
+                continue
+            else:
+                os.makedirs(inflDict["outputDir"]+'/inlet/'+tNew)
+        velFile = inletDir+'/'+t[0]+'/U'
+        if not os.path.exists(velFile):
+            print("--- File not found! " + velFile)
+            continue
+        vel = readBDformattedFile(velFile)
+        vel.columns = ['u','v','w']
+
+        U,V,W = scaleVelocity(vel.u, vel.v, vel.w,
+                                points.Z, inflDict["scaleBy"],
+                                origUofZ, fU, fIu, fIv, fIw)
+        file = inflDict["outputDir"]+'/inlet/'+tNew+'/U'
+        vect = np.transpose(np.asarray((U, V, W)))
         
-        Z_smpl = np.linspace(0.001,max(points.Z)-0.01,100)
-        idx = getClosest2DcoordsTo(points.Y,points.Z,Z_smpl)
-        Z_smpl = np.asarray(points.Z[idx],dtype=float)
-            
-        inletDir = inflDict["inflowDir"]+'/inlet'
-        times = [ name for name in os.listdir(inletDir) if os.path.isdir(os.path.join(inletDir, name)) ]
-        times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
+        if len(Vsmpl_in) == 0:
+            Vsmpl_in = np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3])
+            Vsmpl_out = np.reshape(np.asarray(vect[idx,:]),[1,-1,3])
+        else:
+            Vsmpl_in = np.append(Vsmpl_in, np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3]), axis=0)
+            Vsmpl_out = np.append(Vsmpl_out, np.reshape(np.asarray(vect[idx,:]),[1,-1,3]), axis=0)
         
-        if not os.path.exists(inflDict["outputDir"]+'/inlet'):
-            os.makedirs(inflDict["outputDir"]+'/inlet')
-        file = inflDict["outputDir"]+'/inlet/points'
-        vect = np.transpose(np.asarray((points.X, points.Y, points.Z)))
         if writeInflow:
             writeBDformattedFile(file,vect)
-    
-        Vsmpl_in = []
-        Vsmpl_out = []
-        for t in times:
-            if t[1] < tMin or t[1] > tMax:
-                continue
-            tNew = str(round(t[1]*inflDict["tScl"],__precision))
-            if writeInflow:
-                if os.path.exists(inflDict["outputDir"]+'/inlet/'+tNew):
-                    print("--- skipping \t t-old = "+t[0]+"\t\t--> t-new = "+tNew)
-                    continue
-                else:
-                    os.makedirs(inflDict["outputDir"]+'/inlet/'+tNew)
-            velFile = inletDir+'/'+t[0]+'/U'
-            if not os.path.exists(velFile):
-                print("--- File not found! " + velFile)
-                continue
-            vel = readBDformattedFile(velFile)
-            vel.columns = ['u','v','w']
-
-            U,V,W = scaleVelocity(vel.u, vel.v, vel.w,
-                                    points.Z, inflDict["scaleBy"],
-                                    origUofZ, fUofZ, fIuOfZ, fIvOfZ, fIwOfZ)
-            file = inflDict["outputDir"]+'/inlet/'+tNew+'/U'
-            vect = np.transpose(np.asarray((U, V, W)))
+        
+        print("Scaling \t t-old = "+t[0]+"\t\t--> t-new = "+tNew)
             
-            if len(Vsmpl_in) == 0:
-                Vsmpl_in = np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3])
-                Vsmpl_out = np.reshape(np.asarray(vect[idx,:]),[1,-1,3])
-            else:
-                Vsmpl_in = np.append(Vsmpl_in, np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3]), axis=0)
-                Vsmpl_out = np.append(Vsmpl_out, np.reshape(np.asarray(vect[idx,:]),[1,-1,3]), axis=0)
-            
-            if writeInflow:
-                writeBDformattedFile(file,vect)
-            
-            print("Scaling \t t-old = "+t[0]+"\t\t--> t-new = "+tNew)
-            
-    elif inflDict["inflowFormat"] == 'vtk':
-        raise NotImplementedError("vtk inflow format not implemented")
-    else:
-        raise NotImplementedError("Unknown inflow data format.")
     
     dt = times[1][1]-times[0][1]
-    # print(str(times[1][1]) + ' - ' + str(times[0][1]) + ' = ' + str(times[1][1]-times[0][1]))
     ref_U_TI_L_in, Z_in, U_in, TI_in, L_in, freq_in, Spect_H_in, Spect_Others_in = wProc.processVelProfile(Z_smpl, 
                                                                                    Vsmpl_in, 
                                                                                    dt, 
                                                                                    zRef)
+    smpleFile = inflDict["outputDir"]+'/'+smplName+'_orig.csv'
+    np.savetxt( smpleFile,
+               np.concatenate((np.reshape(Z_in,[-1,1]), np.reshape(U_in,[-1,1]), TI_in, L_in), axis=1), 
+               delimiter=',',header="Z, U, Iu, Iv, Iw, xLu, xLv, xLw")
+    np.save(inflDict["outputDir"]+'/'+smplName+'_orig_TH', Vsmpl_in)
+    
     dt = round(times[1][1] * inflDict["tScl"], __precision)  - round(times[0][1] * inflDict["tScl"], __precision)
-    # print(dt)
     ref_U_TI_L_out, Z_out, U_out, TI_out, L_out, freq_out, Spect_H_out, Spect_Others_out = wProc.processVelProfile(Z_smpl, 
                                                                                    Vsmpl_out, 
                                                                                    dt, 
                                                                                    zRef)
+    smpleFile = inflDict["outputDir"]+'/'+smplName+'_scaled.csv'
+    np.savetxt( smpleFile,
+               np.concatenate((np.reshape(Z_out,[-1,1]), np.reshape(U_out,[-1,1]), TI_out, L_out), axis=1), 
+               delimiter=',',header="Z, U, Iu, Iv, Iw, xLu, xLv, xLw")
+    np.save(inflDict["outputDir"]+'/'+smplName+'_scaled_TH', Vsmpl_out)
+
     
-    wPlt.plotProfiles([Z_in, Z_out],
-                      [U_in, U_out],
-                      TI=[TI_in, TI_out], 
-                      L=[L_in, L_out],
-                      plotNames=['Orig','Scaled'],
-                      pltFile=pdfDoc)
+    wPlt.plotProfiles([targProf.Z, Z_in, Z_out],
+                      [targProf.U, U_in, U_out],
+                      TI=[np.asarray(targProf.values[:,2:5]), TI_in, TI_out], 
+                      L=[np.asarray(targProf.values[:,5:]), L_in, L_out],
+                      plotNames=['Target','Original','Corrected'],
+                      pltFile=pdfDoc,
+                      lim_U=[0,25],
+                      lim_TI=[0.3,0.3,0.3])
  
     if writeInflow:
         inflowDictFile = open(caseDir+'/constant/inflowDict', 'w')
@@ -362,7 +368,7 @@ def scaleInflowData(caseDir,tMin,tMax,zRef,writeInflow=True):
 
     pdfDoc.close()
 
-def extractSampleProfileFromInflow(inletDir,figFile,tMax,zRef):
+def extractSampleProfileFromInflow(inletDir,outPath,figFile,tMax,zRef):
     
     points = readBDformattedFile(inletDir + '/points')
     points.columns = ['X','Y','Z']
@@ -387,7 +393,10 @@ def extractSampleProfileFromInflow(inletDir,figFile,tMax,zRef):
         print("t = "+t[0])
         if t[1] > tMax:
             break
-
+    
+    np.savetxt(outPath+"_UofT.csv",velOfT[:,:,0],delimiter=",")
+    np.savetxt(outPath+"_VofT.csv",velOfT[:,:,1],delimiter=",")
+    np.savetxt(outPath+"_WofT.csv",velOfT[:,:,2],delimiter=",")
     ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z, 
                                                                                    velOfT, 
                                                                                    times[1][1]-times[0][1], 
@@ -583,15 +592,20 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs=[[0,0]], trimOverlap=T
     return probes, T, data
     
 def processVelProfile(caseDir, probeName, targetProfile,
-                          writeToDataFile=False,
-                          showPlots=False,
-                          exportPlots=True):
+                        normalize=True,
+                        writeToDataFile=False,
+                        showPlots=False,
+                        exportPlots=True,
+                        lim_Z = 'max',
+                        lim_U = [0,2],
+                        lim_TI=[0.4, 0.3, 0.3]):
     
-    # caseDir = "D:/OneDrive - The University of Western Ontario/Documents/PhD/Thesis/CodeRepositories/windCalc/data/exampleOFcase/"
-    postProcDir = caseDir+"postProcessing/"
-    # probeName = "probes.tapsABCD"
-    # probeName = "probes.V1"
-    figFile = caseDir+"figures.pdf"
+    caseName = os.path.abspath(caseDir).split('\\')[-1]
+    postProcDir = caseDir+"/postProcessing/"
+    figFile = caseDir+"/prof_"+probeName+".pdf"
+    print("Processing OpenFOAM case: "+caseDir)
+    print("Probe read from: "+postProcDir+probeName)
+    print("Target profile read from: "+targetProfile)
     
     probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=[[0,0.5]])
     
@@ -599,17 +613,26 @@ def processVelProfile(caseDir, probeName, targetProfile,
     dt = np.mean(np.diff(time))
     zRef = 0.08
     
+    myProf = wind.profile(name=caseName,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
+                          WofT=np.transpose(vel[:,:,2]), Zref=zRef,dt=dt, units=wind.unitsCommonSI)
+    
     ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z,vel,dt,zRef)
     
     ref_U_TI_L_wt, Z_wt, U_wt, TI_wt, L_wt = wProc.readVelProfile(targetProfile, zRef)
     
-    wPlt.plotProfiles((Z, Z_wt),
-                      (U, U_wt),
-                     TI=(TI, TI_wt), 
-                     L=(L, L_wt),
-                     normalize_zRef_Uref=(False, [zRef, zRef], [ref_U_TI_L[0], ref_U_TI_L_wt[0]]),
+    normalizer = (normalize, [zRef, zRef], [ref_U_TI_L[0], ref_U_TI_L_wt[0]])
+    
+    wPlt.plotProfiles([Z, Z_wt],
+                      [U, U_wt],
+                     TI=[TI, TI_wt], 
+                     L=[L, L_wt],
+                     normalizer=normalizer,
                      plotNames=('LES','BLWT'),
-                     pltFile=figFile)
+                     pltFile=figFile,
+                     lim_Z = lim_Z,
+                     lim_U = lim_U,
+                     lim_TI=lim_TI)
     
     
- 
+    
+    
