@@ -23,7 +23,16 @@ __tol_data = 1e15
 __showPlots = False
 __precision = 6
 
-# Inflow data handlers
+"""
+===============================================================================
+=============================== FUNCTIONS =====================================
+===============================================================================
+"""
+"""
+-------------------------------------------------------------------------------
+>>>>>>>>>>>>>>>>>>>>>>>>  Inflow data handlers  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+-------------------------------------------------------------------------------
+"""
 
 def readProfiles(file,requiredFields):
     if ~os.path.exists(file):
@@ -67,7 +76,7 @@ def writeBDformattedFile(file,vect):
     f.write(")")
     f.close()    
 
-def getProfileScaleFactor(Z_intrp, origProf, targProf, scaleBy, readFromFile=False, figFile=''):
+def getProfileScaleFactor(Z_intrp, origProf, targProf, scaleBy, scalingFile=None, figFile=''):
     
     def plotProf(Z_calc, orig, targ, fCalc, Z_intrp, fIntrp, name, pdf):
         if pdf == '':
@@ -90,56 +99,59 @@ def getProfileScaleFactor(Z_intrp, origProf, targProf, scaleBy, readFromFile=Fal
         pdf.savefig(fig)
         plt.clf()
         
-    
-    Z_calc = np.unique(np.sort(np.append(np.asarray(origProf.Z), np.asarray(targProf.Z))))
-    
-    if 'U' in scaleBy:
-        intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.U),fill_value='extrapolate')
-        orig = intrp(Z_calc)
-        intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.U),fill_value='extrapolate')
-        targ = intrp(Z_calc)
-        fU_calc = targ/orig
-        intrp = scintrp.interp1d(Z_calc, fU_calc, fill_value='extrapolate')
-        fU_intrp = intrp(Z_intrp)
-        plotProf(Z_calc,orig,targ,fU_calc, Z_intrp, fU_intrp,'U',figFile)
+    if scalingFile is not None:
+        scaleFctrs = readProfiles(scalingFile, ["U", "Iu", "Iv", "Iw"])
+        
     else:
-        fU_intrp = np.ones(Z_intrp.shape())
+        Z_calc = np.unique(np.sort(np.append(np.asarray(origProf.Z), np.asarray(targProf.Z))))
+        
+        if 'U' in scaleBy:
+            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.U),fill_value='extrapolate')
+            orig = intrp(Z_calc)
+            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.U),fill_value='extrapolate')
+            targ = intrp(Z_calc)
+            fU_calc = targ/orig
+            intrp = scintrp.interp1d(Z_calc, fU_calc, fill_value='extrapolate')
+            fU_intrp = intrp(Z_intrp)
+            plotProf(Z_calc,orig,targ,fU_calc, Z_intrp, fU_intrp,'U',figFile)
+        else:
+            fU_intrp = np.ones(Z_intrp.shape())
+        
+        if 'Iu' in scaleBy:
+            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iu),fill_value='extrapolate')
+            orig = intrp(Z_calc)
+            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iu),fill_value='extrapolate')
+            targ = intrp(Z_calc)
+            fIu_calc = targ/orig
+            intrp = scintrp.interp1d(Z_calc, fIu_calc, fill_value='extrapolate')
+            fIu_intrp = intrp(Z_intrp)
+            plotProf(Z_calc,orig,targ,fIu_calc, Z_intrp, fIu_intrp,'Iu',figFile)
+        else:
+            fIu_intrp = np.ones(Z_intrp.shape())
     
-    if 'Iu' in scaleBy:
-        intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iu),fill_value='extrapolate')
-        orig = intrp(Z_calc)
-        intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iu),fill_value='extrapolate')
-        targ = intrp(Z_calc)
-        fIu_calc = targ/orig
-        intrp = scintrp.interp1d(Z_calc, fIu_calc, fill_value='extrapolate')
-        fIu_intrp = intrp(Z_intrp)
-        plotProf(Z_calc,orig,targ,fIu_calc, Z_intrp, fIu_intrp,'Iu',figFile)
-    else:
-        fIu_intrp = np.ones(Z_intrp.shape())
-
-    if 'Iv' in scaleBy:
-        intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iv),fill_value='extrapolate')
-        orig = intrp(Z_calc)
-        intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iv),fill_value='extrapolate')
-        targ = intrp(Z_calc)
-        fIv_calc = targ/orig
-        intrp = scintrp.interp1d(Z_calc, fIv_calc, fill_value='extrapolate')
-        fIv_intrp = intrp(Z_intrp)
-        plotProf(Z_calc,orig,targ,fIv_calc, Z_intrp, fIv_intrp,'Iv',figFile)
-    else:
-        fIv_intrp = np.ones(Z_intrp.shape())
-    
-    if 'Iw' in scaleBy:
-        intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iw),bounds_error=False,fill_value=(origProf.Iw[0],origProf.iloc[-1].Iw))
-        orig = intrp(Z_calc)
-        intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iw),bounds_error=False,fill_value=(targProf.Iw[0],targProf.iloc[-1].Iw))
-        targ = intrp(Z_calc)
-        fIw_calc = targ/orig
-        intrp = scintrp.interp1d(Z_calc, fIw_calc, fill_value='extrapolate')
-        fIw_intrp = intrp(Z_intrp)
-        plotProf(Z_calc,orig,targ,fIw_calc, Z_intrp, fIw_intrp,'Iw',figFile)
-    else:
-        fIw_intrp = np.ones(Z_intrp.shape())
+        if 'Iv' in scaleBy:
+            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iv),fill_value='extrapolate')
+            orig = intrp(Z_calc)
+            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iv),fill_value='extrapolate')
+            targ = intrp(Z_calc)
+            fIv_calc = targ/orig
+            intrp = scintrp.interp1d(Z_calc, fIv_calc, fill_value='extrapolate')
+            fIv_intrp = intrp(Z_intrp)
+            plotProf(Z_calc,orig,targ,fIv_calc, Z_intrp, fIv_intrp,'Iv',figFile)
+        else:
+            fIv_intrp = np.ones(Z_intrp.shape())
+        
+        if 'Iw' in scaleBy:
+            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iw),bounds_error=False,fill_value=(origProf.Iw[0],origProf.iloc[-1].Iw))
+            orig = intrp(Z_calc)
+            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iw),bounds_error=False,fill_value=(targProf.Iw[0],targProf.iloc[-1].Iw))
+            targ = intrp(Z_calc)
+            fIw_calc = targ/orig
+            intrp = scintrp.interp1d(Z_calc, fIw_calc, fill_value='extrapolate')
+            fIw_intrp = intrp(Z_intrp)
+            plotProf(Z_calc,orig,targ,fIw_calc, Z_intrp, fIw_intrp,'Iw',figFile)
+        else:
+            fIw_intrp = np.ones(Z_intrp.shape())
     
     return fU_intrp,fIu_intrp,fIv_intrp,fIw_intrp
 
@@ -410,38 +422,11 @@ def extractSampleProfileFromInflow(inletDir,outPath,figFile,tMax,zRef):
                       pltFile=figFile)
     
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Probe readers and related functions
+"""
+-------------------------------------------------------------------------------
+>>>>>>>>>>>>>>>>>>  Probe readers and related functions  <<<<<<<<<<<<<<<<<<<<<<
+-------------------------------------------------------------------------------
+"""
 
 def __readProbe_singleT(file,field):
     """
@@ -613,25 +598,33 @@ def processVelProfile(caseDir, probeName, targetProfile,
     dt = np.mean(np.diff(time))
     zRef = 0.08
     
-    myProf = wind.profile(name=caseName,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
+    vel_LES = wind.profile(name=caseName,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
                           WofT=np.transpose(vel[:,:,2]), Zref=zRef,dt=dt, units=wind.unitsCommonSI)
     
-    ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z,vel,dt,zRef)
+    vel_EXP = wind.profile(fileName=targetProfile)
     
-    ref_U_TI_L_wt, Z_wt, U_wt, TI_wt, L_wt = wProc.readVelProfile(targetProfile, zRef)
+    # profiles = wind.Profiles((vel_LES, vel_EXP))
     
-    normalizer = (normalize, [zRef, zRef], [ref_U_TI_L[0], ref_U_TI_L_wt[0]])
+    # profiles.plotProfiles(figFile)
     
-    wPlt.plotProfiles([Z, Z_wt],
-                      [U, U_wt],
-                     TI=[TI, TI_wt], 
-                     L=[L, L_wt],
-                     normalizer=normalizer,
-                     plotNames=('LES','BLWT'),
-                     pltFile=figFile,
-                     lim_Z = lim_Z,
-                     lim_U = lim_U,
-                     lim_TI=lim_TI)
+    return vel_LES, vel_EXP
+    
+    # ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z,vel,dt,zRef)
+    
+    # ref_U_TI_L_wt, Z_wt, U_wt, TI_wt, L_wt = wProc.readVelProfile(targetProfile, zRef)
+    
+    # normalizer = (normalize, [zRef, zRef], [ref_U_TI_L[0], ref_U_TI_L_wt[0]])
+    
+    # wPlt.plotProfiles([Z, Z_wt],
+    #                   [U, U_wt],
+    #                  TI=[TI, TI_wt], 
+    #                  L=[L, L_wt],
+    #                  normalizer=normalizer,
+    #                  plotNames=('LES','BLWT'),
+    #                  pltFile=figFile,
+    #                  lim_Z = lim_Z,
+    #                  lim_U = lim_U,
+    #                  lim_TI=lim_TI)
     
     
     

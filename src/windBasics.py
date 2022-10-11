@@ -7,7 +7,14 @@ Created on Fri Aug 12 18:23:09 2022
 
 import numpy as np
 import warnings
+import windPlotters as wplt
 from scipy import signal
+
+"""
+===============================================================================
+=============================== VARIABLES =====================================
+===============================================================================
+"""
 
 unitsCommonSI = {
         'L':'m',
@@ -23,6 +30,13 @@ unitsNone = {
         'P':None,
         'M':None
         }
+
+
+"""
+===============================================================================
+=============================== FUNCTIONS =====================================
+===============================================================================
+"""
 
 def integTimeScale(x,dt,rho_tol=0.0001,showPlots=False,removeNaNs=True):
     """
@@ -90,7 +104,7 @@ def integTimeScale(x,dt,rho_tol=0.0001,showPlots=False,removeNaNs=True):
     
     return I, tau_0, tau, rho
 
-def integLengthScale(vel,dt,meanU=None,rho_tol=0.0001,showPlots=False):
+def integLengthScale(x,dt,meanU=None,rho_tol=0.0001,showPlots=False):
     """
     Computes the longitudianl integral length scale of a velocity time history 
     where Taylor's frozen turbulence hypothesis applies (Simiu and Yeo (2019)). 
@@ -98,14 +112,9 @@ def integLengthScale(vel,dt,meanU=None,rho_tol=0.0001,showPlots=False):
 
     Parameters
     ----------
-    vel : 1-D or 2-D float array ; shape [nTime,nComponents]
-        Time-history of one or more velocity components. If there are more 
-        than one components in vel, the shape must be [nTime,nComponents] 
-        and u, v, and w in indices 0, 1, and 2, respectively. If it is a 
-        single component, either the mean longitudinal velocity U has to be 
-        supplied or else the mean value of the signal will be used. This may 
-        cause a problem for v and w or mean-remove u components. By default, 
-        vel is assumed to contain all three non-mean-removed components.
+    x : Velocity time history. If it is non-mean-removed longitudinal component,
+        the meanU can automatically be calculated. For v and w components, it 
+        has to be given separately, otherwise it would assume it as u component.
     dt : float
         The sampling time step of the velocity time history.
     meanU : float, optional
@@ -129,29 +138,11 @@ def integLengthScale(vel,dt,meanU=None,rho_tol=0.0001,showPlots=False):
         
     """
     
-    nComponents = np.shape(vel)[1]
+    if meanU is None:
+        meanU = np.mean(x)
     
-    if nComponents == 1:
-        UofT = vel
-    elif nComponents == 2:
-        UofT = vel[:,0]
-        VofT = vel[:,1]
-    elif nComponents == 3:
-        UofT = vel[:,0]
-        VofT = vel[:,1]
-        WofT = vel[:,2]
-    else:
-        raise Exception("The maximum number of components is three. Check if the matrix needs to be transposed so that the first dimension is the time and the second components.")
-    
-    if meanU is not None:
-        meanU = np.mean(UofT)
-    
-    xLu = meanU * integTimeScale(UofT-meanU, dt, rho_tol=rho_tol, showPlots=showPlots)[0]
-    xLv = meanU * integTimeScale(VofT-np.mean(VofT), dt, rho_tol=rho_tol, showPlots=showPlots)[0]
-    xLw = meanU * integTimeScale(WofT-np.mean(WofT), dt, rho_tol=rho_tol, showPlots=showPlots)[0]
-    
-    L = np.asarray([xLu, xLv, xLw],dtype=float)
-    
+    L = meanU * integTimeScale(x-meanU, dt, rho_tol=rho_tol, showPlots=showPlots)[0]
+     
     return L
 
 def psd(x,ns):
@@ -161,28 +152,91 @@ def psd(x,ns):
     
     return n,Sxx
 
+def vonKarmanSpectra(n_=None,U_=None,Iu_=None,Iv_=None,Iw_=None,xLu_=None,xLv_=None,xLw_=None):
+    
+    Suu = lambda n,U,Iu,xLu: np.divide((4*xLu*(Iu**2)*U), np.power((1 + 70.8*np.power(n*xLu/U,2)),5/6))
+    Svv = lambda n,U,Iv,xLv: np.divide( np.multiply( (4*xLv*(Iv**2)*U), (1 + 755.2*np.power(n*xLv/U,2) ) ), 
+                                       np.power((1 + 283.1*np.power(n*xLv/U,2)),11/6))
+    Sww = lambda n,U,Iw,xLw: np.divide( np.multiply( (4*xLw*(Iw**2)*U), (1 + 755.2*np.power(n*xLw/U,2) ) ), 
+                                       np.power((1 + 283.1*np.power(n*xLw/U,2)),11/6))
+    
+    if n_ is not None and U_ is not None and Iu_ is not None and xLu_ is not None:
+        Suu = Suu(n_,U_,Iu_,xLu_)
+    if n_ is not None and U_ is not None and Iv_ is not None and xLv_ is not None:
+        Svv = Svv(n_,U_,Iv_,xLv_)
+    if n_ is not None and U_ is not None and Iw_ is not None and xLw_ is not None:
+        Sww = Suu(n_,U_,Iw_,xLw_)
+    
+    return Suu, Svv, Sww
+
+"""
+===============================================================================
+================================ CLASSES ======================================
+===============================================================================
+"""
 
 class spectra:
-    def __init__(self, spectType='fromTH', UofT=[], VofT=[], WofT=[]):
+    Suu_vonK = Svv_vonK = Sww_vonK = None
+    UofT = VofT = WofT = None
+
+    def __calculateSpectra(self,n_smpl,UofT,VofT,WofT):
+        if UofT is not None:
+            self.n, self.Suu = psd(UofT, n_smpl)
+            self.U = np.mean(UofT)
+            self.Iu = np.std(UofT)
+            self.xLu = integLengthScale(UofT, 1/n_smpl)
+        if VofT is not None:
+            n, self.Svv = psd(VofT, n_smpl)
+            self.Iv = np.std(VofT)
+            self.xLv = integLengthScale(VofT, 1/n_smpl,meanU=self.U)
+            if self.n is None:
+                self.n = n
+            elif not len(n) == len(self.n):
+                raise Exception("UofT and VofT have different no. of time steps. The number of time steps in all UofT, VofT, and WofT must match for spectra calculation.")
+                
+        if WofT is not None:
+            n, self.Sww = psd(WofT, n_smpl)
+            self.Iw = np.std(WofT)
+            self.xLw = integLengthScale(WofT, 1/n_smpl,meanU=self.U)
+            if self.n is None:
+                self.n = n
+            elif not len(n) == len(self.n):
+                raise Exception("WofT has different no. of time steps from UofT and VofT. All three must have the same number of time steps for spectra calculation.")
+    
+    def __calcVonK(self):
+        Suu, Svv, Sww = vonKarmanSpectra()
+        self.Suu_vonK = lambda n: Suu(n,self.U,self.Iu,self.xLu)
+        self.Svv_vonK = lambda n: Svv(n,self.U,self.Iv,self.xLv)
+        self.Sww_vonK = lambda n: Sww(n,self.U,self.Iw,self.xLw)
+    
+    def __init__(self, UofT=None, VofT=None, WofT=None, n_smpl=None, keepTH=False,
+                 n=None, Suu=None, Svv=None, Sww=None,
+                 Z=None, U=None, Iu=None, Iv=None, Iw=None):
         
-        if spectType == 'fromTH':
-            pass
-        elif spectType == 'vonK':
-            pass
-        elif spectType == 'ESDU':
-            pass
-        elif spectType == 'fromFile':
-            pass
-        else:
-            pass
-            
-        pass
+        self.n = n
+        self.Suu = Suu
+        self.Svv = Svv
+        self.Sww = Sww
+        
+        self.Z = Z
+        self.U = U
+        self.Iu = Iu
+        self.Iv = Iv
+        self.Iw = Iw
+        
+        if keepTH:
+            self.UofT = UofT
+            self.VofT = VofT
+            self.WofT = WofT
+        
+        self.__calculateSpectra(n_smpl,UofT,VofT,WofT)
+        self.__calcVonK()
 
 class profile:
     
     isNormalized = False
     interpolateToZref = False
-    nPts = 0
+    N_pts = 0
     Zref = None
     Uref = None
     IuRef = None
@@ -193,7 +247,7 @@ class profile:
     units = unitsNone
     
     def __updateUref(self):
-        if self.nPts == 0:
+        if self.N_pts == 0:
             self.iRef = None
             self.Uref = self.IuRef = self.IvRef = self.IwRef = None
             return
@@ -209,44 +263,6 @@ class profile:
             self.IuRef = self.Iu[self.iRef]
             self.IvRef = self.Iv[self.iRef]
             self.IwRef = self.Iw[self.iRef]
-    
-    def __init__(self,name="profile", Z=None, U=None, V=None, W=None, Zref=None, 
-                 dt=None, UofT=None, VofT=None, WofT=None,
-                 Iu=None, Iv=None, Iw=None, 
-                 xLu=None, xLv=None, xLw=None,
-                 Spect_H=None, interpolateToZref=False, units=unitsNone):
-        self.name = name
-        self.Z = Z  # [nPts]
-        self.U = U  # [nPts]
-        self.V = V  # [nPts]
-        self.W = W  # [nPts]
-        
-        self.Zref = Zref
-        
-        self.dt = dt
-        self.UofT = UofT  # [nPts x nTime]
-        self.VofT = VofT  # [nPts x nTime]
-        self.WofT = WofT  # [nPts x nTime]
-        
-        self.Iu = Iu  # [nPts]
-        self.Iv = Iv  # [nPts]
-        self.Iw = Iw  # [nPts]
-        
-        self.xLu = xLu  # [nPts]
-        self.xLv = xLv  # [nPts]
-        self.xLw = xLw  # [nPts]
-        
-        self.Spect_H = Spect_H
-        
-        self.interpolateToZref = interpolateToZref
-        self.units = units
-        
-        # Compute params
-        self.__computeFromTH()
-        if self.Z is not None:
-            self.nPts = len(self.Z)
-            self.__updateUref()
-        self.__computeSpectra()
 
     def __computeFromTH(self):
         if self.UofT is not None:
@@ -254,8 +270,8 @@ class profile:
                 raise Exception("Z values not found while UofT is given.")
             self.U = np.mean(self.UofT,axis=1)
             self.Iu = np.std(self.UofT,axis=1)/self.U
-            self.xLu = np.zeros(self.nPts)
-            for i in range(self.nPts):
+            self.xLu = np.zeros(self.N_pts)
+            for i in range(self.N_pts):
                 self.xLu[i] = integLengthScale(self.UofT[i,:], self.dt)
             
         if self.VofT is not None:
@@ -263,8 +279,8 @@ class profile:
                 raise Exception("Either Z or U(z) does not exist to calculate V stats.")
             self.V = np.mean(self.VofT,axis=1)
             self.Iv = np.std(self.VofT,axis=1)/self.U
-            self.xLv = np.zeros(self.nPts)
-            for i in range(self.nPts):
+            self.xLv = np.zeros(self.N_pts)
+            for i in range(self.N_pts):
                 self.xLv[i] = integLengthScale(self.VofT[i,:], self.dt, meanU=self.U[i])
 
         if self.WofT is not None:
@@ -272,24 +288,86 @@ class profile:
                 raise Exception("Either Z or U(z) does not exist to calculate W stats.")
             self.W = np.mean(self.WofT,axis=1)
             self.Iw = np.std(self.WofT,axis=1)/self.U
-            self.xLw = np.zeros(self.nPts)
-            for i in range(self.nPts):
+            self.xLw = np.zeros(self.N_pts)
+            for i in range(self.N_pts):
                 self.xLw[i] = integLengthScale(self.WofT[i,:], self.dt, meanU=self.U[i])
-
+    
     def __computeSpectra(self):
-        pass
+        if self.iRef is None:
+            self.Spect_Zref = None
+            return
+        uOfT = vOfT = wOfT = None
+        if self.UofT is not None:
+            uOfT = self.UofT[self.iRef,:]
+        if self.VofT is not None:
+            vOfT = self.UofT[self.iRef,:]
+        if self.WofT is not None:
+            wOfT = self.UofT[self.iRef,:]
+        
+        self.Spect_Zref = spectra(UofT=uOfT, VofT=vOfT, WofT=wOfT, n_smpl=self.n_smpl )
+
+    def __init__(self,name="profile", 
+                 Z=None, Zref=None, dt=None, 
+                 U=None, V=None, W=None, 
+                 UofT=None, VofT=None, WofT=None,
+                 Iu=None, Iv=None, Iw=None, 
+                 xLu=None, xLv=None, xLw=None,
+                 Spect_Zref=None, 
+                 fileName=None,
+                 interpolateToZref=False, units=unitsNone):
+        self.name = name
+        self.Z = Z  # [N_pts]
+        self.U = U  # [N_pts]
+        self.V = V  # [N_pts]
+        self.W = W  # [N_pts]
+        
+        self.Zref = Zref
+        
+        self.dt = dt
+        self.n_smpl = None if dt is None else 1/dt
+        self.UofT = UofT  # [N_pts x nTime]
+        self.VofT = VofT  # [N_pts x nTime]
+        self.WofT = WofT  # [N_pts x nTime]
+        
+        self.Iu = Iu  # [N_pts]
+        self.Iv = Iv  # [N_pts]
+        self.Iw = Iw  # [N_pts]
+        
+        self.xLu = xLu  # [N_pts]
+        self.xLv = xLv  # [N_pts]
+        self.xLw = xLw  # [N_pts]
+        
+        self.Spect_Zref = Spect_Zref
+        
+        self.interpolateToZref = interpolateToZref
+        self.units = units
+        
+        # Compute params
+        self.__computeFromTH()
+        if self.Z is not None:
+            self.N_pts = len(self.Z)
+            self.__updateUref()
+        self.__computeSpectra()
+        
+        if fileName is not None:
+            self.readFromFile(fileName)
+
+        print("Here!!")
+
 
     def writeToFile(self,outDir,nameSuffix=''):
         pass
     
-    def readFromFile(self):
+    def readFromFile(self,fileName):
         pass
     
     def normalize(self):
         pass
     
     def plotProfiles(self):
-        pass
+        wplt.plotProfile(self.Z,self.U)
+        print("Here!")
+        
     
     def plotTimeHistory(self):
         pass
@@ -299,6 +377,15 @@ class profile:
     
     
 class Profiles:
-    def __init__(self, *args, **kwargs):
+    def __init__(self, profiles=None):
+        pass
+    
+    def plotProfiles(self):
+        pass
+    
+    def plotTimeHistory(self):
+        pass
+    
+    def plotSpectra(self):
         pass
 

@@ -143,3 +143,18 @@ def plotProfiles(Z,U,
     if isinstance(pltFile, str):
         pdf.close()
     
+
+def plotProfile(Z, X, zName, xName,
+                dataName=None,
+                file=None,
+                zLim = 'max',
+                xLim = None):
+    plt.plot(X,Z,label=dataName)
+    plt.xlabel(xName)
+    plt.ylabel(zName)
+    # plt.ylim([0, lim_Z])
+    plt.legend()
+    # plt.title('xLu')
+    plt.show()
+
+    pass
