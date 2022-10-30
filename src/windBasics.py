@@ -232,6 +232,25 @@ class spectra:
         self.__calculateSpectra(n_smpl,UofT,VofT,WofT)
         self.__calcVonK()
 
+    def plotSpectra(self, figFile=None, xLimits=None, figSize=[14,6]):
+        n = (self.n,)
+        val = (np.transpose(np.stack((self.Suu, self.Svv, self.Sww))),)
+        ylabels = ("Suu","Svv","Sww")
+        xlabel = 'n [Hz]'
+
+        wplt.plotSpectra(
+                        n, # ([n1,], [n2,], ... [nN,])
+                        val, # ([n1,M], [n2,M], ... [nN,M])
+                        dataLabels=(self.name,), # ("str1", "str2", ... "strN")
+                        pltFile=figFile, # "/path/to/plot/file.pdf"
+                        xLabel=xlabel,
+                        yLabels=ylabels, # ("str1", "str2", ... "str_m")
+                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                        # yLimits=[0,0.5], # [zMin, zMax]
+                        figSize=figSize,
+                        nCols=3
+                        )
+
 class profile:
     
     isNormalized = False
@@ -306,16 +325,19 @@ class profile:
         
         self.Spect_Zref = spectra(UofT=uOfT, VofT=vOfT, WofT=wOfT, n_smpl=self.n_smpl )
 
-    def __init__(self,name="profile", 
-                 Z=None, Zref=None, dt=None, 
-                 U=None, V=None, W=None, 
-                 UofT=None, VofT=None, WofT=None,
-                 Iu=None, Iv=None, Iw=None, 
-                 xLu=None, xLv=None, xLw=None,
-                 Spect_Zref=None, 
-                 fileName=None,
-                 interpolateToZref=False, units=unitsNone):
+    def __init__(self,
+                name="profile", 
+                profType=None, # {"continuous","discrete","scatter"}
+                Z=None, Zref=None, dt=None, 
+                U=None, V=None, W=None, 
+                UofT=None, VofT=None, WofT=None,
+                Iu=None, Iv=None, Iw=None, 
+                xLu=None, xLv=None, xLw=None,
+                Spect_Zref=None, 
+                fileName=None,
+                interpolateToZref=False, units=unitsNone):
         self.name = name
+        self.profType = profType
         self.Z = Z  # [N_pts]
         self.U = U  # [N_pts]
         self.V = V  # [N_pts]
@@ -352,11 +374,31 @@ class profile:
         if fileName is not None:
             self.readFromFile(fileName)
 
-        print("Here!!")
-
-
-    def writeToFile(self,outDir,nameSuffix=''):
-        pass
+    def writeToFile(self,outDir,
+                    nameSuffix='',writeTH=False, writeProfiles=True,writeSpectra=False):
+        if writeTH:
+            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_U-TH"
+            np.save(fileName,self.UofT)
+            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_V-TH"
+            np.save(fileName,self.VofT)
+            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_W-TH"
+            np.save(fileName,self.WofT)
+            
+        if writeProfiles:
+            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_profiles.csv"
+            M = np.reshape(self.Z,[-1,1])
+            header = "Z"
+            flds = ["U","Iu","Iv","Iw","xLu","xLv","xLw"]
+            for fld in flds:
+                ffld = getattr(self,fld)
+                if (ffld is not None) and not (ffld.size == 0):
+                    M = np.concatenate((M,np.reshape(ffld,[-1,1])), axis=1)
+                    header += ", "+fld
+            np.savetxt(fileName, M, 
+               delimiter=',',header=header,comments='')
+            
+        if writeSpectra:
+            pass
     
     def readFromFile(self,fileName):
         pass
@@ -364,28 +406,84 @@ class profile:
     def normalize(self):
         pass
     
-    def plotProfiles(self):
-        wplt.plotProfile(self.Z,self.U)
-        print("Here!")
-        
+    def plotProfiles(self,figFile=None,xLimits=None,figSize=[14,6]):
+        Z = (self.Z,)
+        val = (np.transpose(np.stack((self.U, self.Iu, self.Iv, self.Iw))),)
+        xlabels = ("U","Iu","Iv","Iw")
+        zlabel = 'Z'
+
+        wplt.plotProfiles(
+                        Z, # ([n1,], [n2,], ... [nN,])
+                        val, # ([n1,M], [n2,M], ... [nN,M])
+                        dataLabels=(self.name,), # ("str1", "str2", ... "strN")
+                        pltFile=figFile, # "/path/to/plot/file.pdf"
+                        xLabels=xlabels, # ("str1", "str2", ... "str_m")
+                        yLabel=zlabel,
+                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                        # yLimits=[0,0.5], # [zMin, zMax]
+                        figSize=figSize,
+                        nCols=4
+                        )
     
     def plotTimeHistory(self):
         pass
     
-    def plotSpectra(self):
-        pass
     
     
 class Profiles:
-    def __init__(self, profiles=None):
-        pass
+    def __init__(self, profs):
+        self.N = len(profs)
+        self.profiles = profs
     
-    def plotProfiles(self):
-        pass
+    def plotProfiles(self,figFile=None,xLimits=None,figSize=[14,6]):
+        Z = ()
+        val = ()
+        names = ()
+        for i in range(self.N):
+            Z += (self.profiles[i].Z,)
+            val += (np.transpose(np.stack((self.profiles[i].U, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
+            names += (self.profiles[i].name,)
+        xlabels = ("U","Iu","Iv","Iw")
+        zlabel = 'Z'
+
+        wplt.plotProfiles(
+                        Z, # ([n1,], [n2,], ... [nN,])
+                        val, # ([n1,M], [n2,M], ... [nN,M])
+                        dataLabels=names, # ("str1", "str2", ... "strN")
+                        pltFile=figFile, # "/path/to/plot/file.pdf"
+                        xLabels=xlabels, # ("str1", "str2", ... "str_m")
+                        yLabel=zlabel,
+                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                        # yLimits=[0,0.5], # [zMin, zMax]
+                        figSize=figSize,
+                        nCols=4
+                        )
     
     def plotTimeHistory(self):
         pass
     
-    def plotSpectra(self):
-        pass
+    def plotSpectra(self, figFile=None, xLimits=None, figSize=[16,4]):
+        n = ()
+        val = ()
+        names = ()
+        for i in range(self.N):
+            n += (self.profiles[i].Spect_Zref.n,)
+            val += (np.transpose(np.stack((self.profiles[i].Spect_Zref.Suu, self.profiles[i].Spect_Zref.Svv, self.profiles[i].Spect_Zref.Sww))),)
+            names += (self.profiles[i].name,)
+        ylabels = ("Suu","Svv","Sww")
+        xlabel = 'n'
+
+        wplt.plotSpectra(
+                        n, # ([n1,], [n2,], ... [nN,])
+                        val, # ([n1,M], [n2,M], ... [nN,M])
+                        dataLabels=names, # ("str1", "str2", ... "strN")
+                        pltFile=figFile, # "/path/to/plot/file.pdf"
+                        yLabels=ylabels, # ("str1", "str2", ... "str_m")
+                        xLabel=xlabel,
+                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                        # yLimits=[0,0.5], # [zMin, zMax]
+                        figSize=figSize,
+                        nCols=3
+                        )
+
 

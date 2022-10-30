@@ -11,6 +11,7 @@ import pandas as pd
 import scipy.interpolate as scintrp
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
+from datetime import datetime
 
 import windBasics as wind
 import windLoadCaseProcessors as wProc
@@ -101,7 +102,11 @@ def getProfileScaleFactor(Z_intrp, origProf, targProf, scaleBy, scalingFile=None
         
     if scalingFile is not None:
         scaleFctrs = readProfiles(scalingFile, ["U", "Iu", "Iv", "Iw"])
-        
+        fU_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.U, fill_value='extrapolate')
+        fIu_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.Iu, fill_value='extrapolate')
+        fIv_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.Iv, fill_value='extrapolate')
+        fIw_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.Iw, fill_value='extrapolate')
+
     else:
         Z_calc = np.unique(np.sort(np.append(np.asarray(origProf.Z), np.asarray(targProf.Z))))
         
@@ -221,6 +226,8 @@ def readInflowDict(infFile):
             inflDict["targProfFile"] = d[1]
         elif d[0] == 'origProfFile':
             inflDict["origProfFile"] = d[1]
+        elif d[0] == 'scaleFactorFile':
+            inflDict["scaleFactorFile"] = d[1]
         elif d[0] == 'dt':
             inflDict["dt"] = float(d[1])
         elif d[0] == 'precision':
@@ -277,7 +284,7 @@ def scaleInflowData(caseDir,tMin,tMax,zRef,writeInflow=True,smplName=''):
     origProf = readProfiles(inflDict["origProfFile"], inflDict["scaleBy"])
     targProf = readProfiles(inflDict["targProfFile"], inflDict["scaleBy"])
     # origProf.Z = origProf.Z*inflDict["lScl"]
-    fU,fIu,fIv,fIw = getProfileScaleFactor(points.Z, origProf, targProf, inflDict["scaleBy"], figFile=pdfDoc)
+    fU,fIu,fIv,fIw = getProfileScaleFactor(points.Z, origProf, targProf, inflDict["scaleBy"],scalingFile=inflDict["scaleFactorFile"], figFile=pdfDoc)
     
     origUofZ = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.U),fill_value='extrapolate')
     
@@ -312,7 +319,7 @@ def scaleInflowData(caseDir,tMin,tMax,zRef,writeInflow=True,smplName=''):
 
         U,V,W = scaleVelocity(vel.u, vel.v, vel.w,
                                 points.Z, inflDict["scaleBy"],
-                                origUofZ, fU, fIu, fIv, fIw)
+                                origUofZ, fU(points.Z), fIu(points.Z), fIv(points.Z), fIw(points.Z))
         file = inflDict["outputDir"]+'/inlet/'+tNew+'/U'
         vect = np.transpose(np.asarray((U, V, W)))
         
@@ -328,38 +335,52 @@ def scaleInflowData(caseDir,tMin,tMax,zRef,writeInflow=True,smplName=''):
         
         print("Scaling \t t-old = "+t[0]+"\t\t--> t-new = "+tNew)
             
-    
+    sfix = datetime.now().strftime("%Y-%m-%d_%H:%M")
+    sfix = str(tMin)+'_to_'+str(tMax)
     dt = times[1][1]-times[0][1]
-    ref_U_TI_L_in, Z_in, U_in, TI_in, L_in, freq_in, Spect_H_in, Spect_Others_in = wProc.processVelProfile(Z_smpl, 
-                                                                                   Vsmpl_in, 
-                                                                                   dt, 
-                                                                                   zRef)
-    smpleFile = inflDict["outputDir"]+'/'+smplName+'_orig.csv'
-    np.savetxt( smpleFile,
-               np.concatenate((np.reshape(Z_in,[-1,1]), np.reshape(U_in,[-1,1]), TI_in, L_in), axis=1), 
-               delimiter=',',header="Z, U, Iu, Iv, Iw, xLu, xLv, xLw")
-    np.save(inflDict["outputDir"]+'/'+smplName+'_orig_TH', Vsmpl_in)
-    
+    velUnscaled = wind.profile(name="Unscaled",Z=Z_smpl,dt=dt,Zref=zRef,
+                    UofT=np.transpose(Vsmpl_in[:,:,0]),
+                    VofT=np.transpose(Vsmpl_in[:,:,1]),
+                    WofT=np.transpose(Vsmpl_in[:,:,2]))
+    velUnscaled.writeToFile(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
+
     dt = round(times[1][1] * inflDict["tScl"], __precision)  - round(times[0][1] * inflDict["tScl"], __precision)
-    ref_U_TI_L_out, Z_out, U_out, TI_out, L_out, freq_out, Spect_H_out, Spect_Others_out = wProc.processVelProfile(Z_smpl, 
-                                                                                   Vsmpl_out, 
-                                                                                   dt, 
-                                                                                   zRef)
-    smpleFile = inflDict["outputDir"]+'/'+smplName+'_scaled.csv'
-    np.savetxt( smpleFile,
-               np.concatenate((np.reshape(Z_out,[-1,1]), np.reshape(U_out,[-1,1]), TI_out, L_out), axis=1), 
-               delimiter=',',header="Z, U, Iu, Iv, Iw, xLu, xLv, xLw")
-    np.save(inflDict["outputDir"]+'/'+smplName+'_scaled_TH', Vsmpl_out)
+    velScaled = wind.profile(name="Scaled",Z=Z_smpl,dt=dt,Zref=zRef,
+                    UofT=np.transpose(Vsmpl_out[:,:,0]),
+                    VofT=np.transpose(Vsmpl_out[:,:,1]),
+                    WofT=np.transpose(Vsmpl_out[:,:,2]))
+    velScaled.writeToFile(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
+
+    # ref_U_TI_L_in, Z_in, U_in, TI_in, L_in, freq_in, Spect_H_in, Spect_Others_in = wProc.processVelProfile(Z_smpl, 
+    #                                                                                Vsmpl_in, 
+    #                                                                                dt, 
+    #                                                                                zRef)
+    # smpleFile = inflDict["outputDir"]+'/'+smplName+'_orig.csv'
+    # np.savetxt( smpleFile,
+    #            np.concatenate((np.reshape(Z_in,[-1,1]), np.reshape(U_in,[-1,1]), TI_in, L_in), axis=1), 
+    #            delimiter=',',header="Z, U, Iu, Iv, Iw, xLu, xLv, xLw")
+    # np.save(inflDict["outputDir"]+'/'+smplName+'_orig_TH', Vsmpl_in)
+    
+    # dt = round(times[1][1] * inflDict["tScl"], __precision)  - round(times[0][1] * inflDict["tScl"], __precision)
+    # ref_U_TI_L_out, Z_out, U_out, TI_out, L_out, freq_out, Spect_H_out, Spect_Others_out = wProc.processVelProfile(Z_smpl, 
+    #                                                                                Vsmpl_out, 
+    #                                                                                dt, 
+    #                                                                                zRef)
+    # smpleFile = inflDict["outputDir"]+'/'+smplName+'_scaled.csv'
+    # np.savetxt( smpleFile,
+    #            np.concatenate((np.reshape(Z_out,[-1,1]), np.reshape(U_out,[-1,1]), TI_out, L_out), axis=1), 
+    #            delimiter=',',header="Z, U, Iu, Iv, Iw, xLu, xLv, xLw")
+    # np.save(inflDict["outputDir"]+'/'+smplName+'_scaled_TH', Vsmpl_out)
 
     
-    wPlt.plotProfiles([targProf.Z, Z_in, Z_out],
-                      [targProf.U, U_in, U_out],
-                      TI=[np.asarray(targProf.values[:,2:5]), TI_in, TI_out], 
-                      L=[np.asarray(targProf.values[:,5:]), L_in, L_out],
-                      plotNames=['Target','Original','Corrected'],
-                      pltFile=pdfDoc,
-                      lim_U=[0,25],
-                      lim_TI=[0.3,0.3,0.3])
+    # wPlt.plotProfiles([targProf.Z, Z_in, Z_out],
+    #                   [targProf.U, U_in, U_out],
+    #                   TI=[np.asarray(targProf.values[:,2:5]), TI_in, TI_out], 
+    #                   L=[np.asarray(targProf.values[:,5:]), L_in, L_out],
+    #                   plotNames=['Target','Original','Corrected'],
+    #                   pltFile=pdfDoc,
+    #                   lim_U=[0,25],
+    #                   lim_TI=[0.3,0.3,0.3])
  
     if writeInflow:
         inflowDictFile = open(caseDir+'/constant/inflowDict', 'w')
@@ -379,6 +400,8 @@ def scaleInflowData(caseDir,tMin,tMax,zRef,writeInflow=True,smplName=''):
         inflowDictFile.close()
 
     pdfDoc.close()
+
+    return velUnscaled, velScaled
 
 def extractSampleProfileFromInflow(inletDir,outPath,figFile,tMax,zRef):
     
@@ -590,7 +613,7 @@ def processVelProfile(caseDir, probeName, targetProfile,
     figFile = caseDir+"/prof_"+probeName+".pdf"
     print("Processing OpenFOAM case: "+caseDir)
     print("Probe read from: "+postProcDir+probeName)
-    print("Target profile read from: "+targetProfile)
+    print("Target profile read from:--- "+targetProfile)
     
     probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=[[0,0.5]])
     

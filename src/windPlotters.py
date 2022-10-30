@@ -22,14 +22,135 @@ ctlSpect = {
     "mrkrSize": (2,2,2,2,2,2,2,2,2,2,2,2)
     }
 
-def plotProfiles(Z,U,
-                 TI=(), L=(), ctl=(ctlProf,ctlSpect),
-                 plotNames=(),
-                 normalizer=(False, [0.0], [0.0]),
-                 pltFile='',
-                 lim_Z = 'max',
-                 lim_U = [0,2],
-                 lim_TI=[0.4, 0.3, 0.3]):
+
+def plotProfiles(
+                Z, # ([n1,], [n2,], ... [nN,])
+                val, # ([n1,M], [n2,M], ... [nN,M])
+                dataLabels=None, # ("str1", "str2", ... "strN")
+                pltFile=None, # "/path/to/plot/file.pdf"
+                xLabels=None, # ("str1", "str2", ... "str_m")
+                yLabel='Z',
+                xLimits='auto', # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                yLimits='auto', # [zMin, zMax]
+                figSize=[6.4, 4.8],
+                nCols=3
+                ):
+    
+  
+    N = len(Z)
+    M = val[0].shape[1]
+    nRows = int(np.ceil((M/nCols)))
+    
+    if dataLabels is None:
+        dataLabels = (['Dataset_1'])
+        for i in range(1,N):
+            dataLabels += (['Dataset_'+str(i+1)])
+    if xLabels is None:
+        xLabels = (['Var_1'])
+        for i in range(1,M):
+            xLabels += (['Var_'+str(i+1)])
+
+    if yLimits == 'auto':
+        yLimits = [0, max([item for sublist in Z for item in sublist])]
+    
+    if isinstance(pltFile, str):
+        pdf = PdfPages(pltFile)
+    else:
+        pdf = pltFile
+    fig = plt.figure(figsize=figSize) 
+
+    for m in range(M):
+        plt.subplot(nRows,nCols,m+1)
+        for i in range(N):
+            plt.plot(val[i][:,m], Z[i], color=ctlProf['col'][i], label=dataLabels[i])
+        plt.xlabel(xLabels[m])
+        plt.ylabel(yLabel)
+        if xLimits is not None and not xLimits == 'auto':
+            plt.xlim(xLimits[m])
+        plt.ylim(yLimits)
+        plt.legend()
+        plt.grid()
+    
+    if isinstance(pltFile, str):
+        pdf.savefig(fig)
+        plt.clf()
+    else:
+        plt.show()
+
+    if isinstance(pltFile, str):
+        pdf.close()
+
+def plotSpectra(
+                freq, # ([n1,], [n2,], ... [nN,])
+                Spect, # ([n1,M], [n2,M], ... [nN,M])
+                dataLabels=None, # ("str1", "str2", ... "strN")
+                pltFile=None, # "/path/to/plot/file.pdf"
+                xLabel='n [Hz]',
+                yLabels=None, # ("str1", "str2", ... "str_m")
+                xLimits='auto',
+                yLimits='auto',
+                figSize=[10, 4.8],
+                nCols=3
+                ):
+    
+    N = len(freq)
+    M = Spect[0].shape[1]
+    nRows = int(np.ceil((M/nCols)))
+    
+    if dataLabels is None:
+        dataLabels = (['Dataset_1'])
+        for i in range(1,N):
+            dataLabels += (['Dataset_'+str(i+1)])
+    if yLabels is None:
+        yLabels = (['Spect_1'])
+        for i in range(1,M):
+            yLabels += (['Spect_'+str(i+1)])
+
+    if xLimits == 'auto':
+        xLimits = [min([item for sublist in freq for item in sublist]), max([item for sublist in freq for item in sublist])]
+    
+    if isinstance(pltFile, str):
+        pdf = PdfPages(pltFile)
+    else:
+        pdf = pltFile
+    fig = plt.figure(figsize=figSize) 
+
+    for m in range(M):
+        plt.subplot(nRows,nCols,m+1)
+        for i in range(N):
+            plt.loglog(freq[i], Spect[i][:,m], color=ctlSpect['col'][i], label=dataLabels[i])
+        plt.xlabel(xLabel)
+        plt.ylabel(yLabels[m])
+        if xLimits is not None and not xLimits == 'auto':
+            plt.xlim(xLimits)
+        if yLimits is not None and not yLimits == 'auto':
+            plt.ylim(yLimits[m])
+        plt.legend()
+        plt.grid()
+    
+    if isinstance(pltFile, str):
+        pdf.savefig(fig)
+        plt.clf()
+    else:
+        plt.show()
+
+    if isinstance(pltFile, str):
+        pdf.close()
+
+
+def plotProfiles2(Z, U,
+                 TI = (),
+                 L = (),
+                 yLabel = "Z",
+                 xLabels = ["U","Iu","Iv","Iw","xLu","xLv","xLw"],
+                 pltCtl = ctlProf,
+                 plotNames = (),
+                 pltFile = None,
+                 showPlot = True,
+                 zLimit = 'max',
+                 Ulims = [0,2],
+                 TIlims = [0.4, 0.3, 0.3],
+                 Llims = 'max'):
     clProf = ctl[0]
     clSpec = ctl[1]
     
@@ -142,19 +263,3 @@ def plotProfiles(Z,U,
 
     if isinstance(pltFile, str):
         pdf.close()
-    
-
-def plotProfile(Z, X, zName, xName,
-                dataName=None,
-                file=None,
-                zLim = 'max',
-                xLim = None):
-    plt.plot(X,Z,label=dataName)
-    plt.xlabel(xName)
-    plt.ylabel(zName)
-    # plt.ylim([0, lim_Z])
-    plt.legend()
-    # plt.title('xLu')
-    plt.show()
-
-    pass
