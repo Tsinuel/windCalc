@@ -6,6 +6,7 @@ Created on Fri Aug 12 18:23:09 2022
 """
 
 import numpy as np
+import pandas as pd
 import warnings
 import windPlotters as wplt
 from scipy import signal
@@ -169,6 +170,8 @@ def vonKarmanSpectra(n_=None,U_=None,Iu_=None,Iv_=None,Iw_=None,xLu_=None,xLv_=N
     
     return Suu, Svv, Sww
 
+
+
 """
 ===============================================================================
 ================================ CLASSES ======================================
@@ -311,6 +314,8 @@ class profile:
             for i in range(self.N_pts):
                 self.xLw[i] = integLengthScale(self.WofT[i,:], self.dt, meanU=self.U[i])
     
+        self.__updateUref()
+    
     def __computeSpectra(self):
         if self.iRef is None:
             self.Spect_Zref = None
@@ -323,12 +328,12 @@ class profile:
         if self.WofT is not None:
             wOfT = self.UofT[self.iRef,:]
         
-        self.Spect_Zref = spectra(UofT=uOfT, VofT=vOfT, WofT=wOfT, n_smpl=self.n_smpl )
+        self.Spect_Zref = spectra(UofT=uOfT, VofT=vOfT, WofT=wOfT, n_smpl=self.n_smpl, Z=self.Zref )
 
     def __init__(self,
                 name="profile", 
                 profType=None, # {"continuous","discrete","scatter"}
-                Z=None, Zref=None, dt=None, 
+                Z=None, Zref=None, dt=None, t=None,
                 U=None, V=None, W=None, 
                 UofT=None, VofT=None, WofT=None,
                 Iu=None, Iv=None, Iw=None, 
@@ -347,6 +352,7 @@ class profile:
         
         self.dt = dt
         self.n_smpl = None if dt is None else 1/dt
+        self.t = t
         self.UofT = UofT  # [N_pts x nTime]
         self.VofT = VofT  # [N_pts x nTime]
         self.WofT = WofT  # [N_pts x nTime]
@@ -361,6 +367,7 @@ class profile:
         
         self.Spect_Zref = Spect_Zref
         
+        self.origFileName = fileName
         self.interpolateToZref = interpolateToZref
         self.units = units
         
@@ -368,14 +375,16 @@ class profile:
         self.__computeFromTH()
         if self.Z is not None:
             self.N_pts = len(self.Z)
-            self.__updateUref()
         self.__computeSpectra()
         
         if fileName is not None:
             self.readFromFile(fileName)
+        self.__updateUref()
 
     def writeToFile(self,outDir,
-                    nameSuffix='',writeTH=False, writeProfiles=True,writeSpectra=False):
+                    nameSuffix='',
+                    writeTH=False, writeTimeWithTH=False, writeZwithTH=False,
+                    writeProfiles=True,writeSpectra=False):
         if writeTH:
             fileName = outDir + "/" + self.name + "_" + nameSuffix + "_U-TH"
             np.save(fileName,self.UofT)
@@ -400,8 +409,19 @@ class profile:
         if writeSpectra:
             pass
     
-    def readFromFile(self,fileName):
-        pass
+    def readFromFile(self,fileName,getZrefFromU_Uh=False):
+        data = pd.read_csv(fileName)
+        self.Z = data.Z
+        self.U = data.U
+        self.Iu = data.Iu
+        self.Iv = data.Iv
+        self.Iw = data.Iw
+        if 'U_Uh' in data.columns and self.Zref is None:
+            idx = (np.abs(data.U_Uh - 1)).argmin()
+            self.Zref = self.Z[idx]
+
+        self.N_pts = len(self.Z)
+        self.__updateUref()
     
     def normalize(self):
         pass
@@ -425,26 +445,56 @@ class profile:
                         nCols=4
                         )
     
-    def plotTimeHistory(self):
-        pass
-    
-    
-    
+    def plotTimeHistory(self,figFile=None):
+        if all((self.UofT is None, self.VofT is None, self.WofT is None)):
+            raise Exception("At least one of UofT, VofT, or WofT has to be provided to plot time history.")
+        if all((self.dt is None, self.t is None)):
+            raise Exception("Either dt or t has to be provided to plot time history.")
+        
+        if self.UofT is not None:
+            N_T = np.shape(self.UofT)[1]
+        elif self.VofT is not None:
+            N_T = np.shape(self.VofT)[1]
+        else:
+            N_T = np.shape(self.WofT)[1]
+        if self.t is None:
+            self.t = range(0,N_T,self.dt)
+        if self.dt is None:
+            self.dt = np.mean(np.diff(self.t))
+        
+
+
+
+
 class Profiles:
     def __init__(self, profs):
         self.N = len(profs)
         self.profiles = profs
     
-    def plotProfiles(self,figFile=None,xLimits=None,figSize=[14,6]):
+    def plotProfiles(self,figFile=None,xLimits='auto',zLimits='auto',figSize=[14,6],normalize=True):
         Z = ()
         val = ()
         names = ()
-        for i in range(self.N):
-            Z += (self.profiles[i].Z,)
-            val += (np.transpose(np.stack((self.profiles[i].U, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
-            names += (self.profiles[i].name,)
-        xlabels = ("U","Iu","Iv","Iw")
-        zlabel = 'Z'
+        # maxU = 0
+        if normalize:
+            for i in range(self.N):
+                Z += (self.profiles[i].Z/self.profiles[i].Zref,)
+                val += (np.transpose(np.stack((self.profiles[i].U/self.profiles[i].Uref, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
+                names += (self.profiles[i].name,)
+                # maxU = max(maxU, max(val[i][:,0]))
+            xlabels = ("U/Uref","Iu","Iv","Iw")
+            zlabel = 'Z/Zref'
+        else:
+            for i in range(self.N):
+                Z += (self.profiles[i].Z,)
+                val += (np.transpose(np.stack((self.profiles[i].U, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
+                names += (self.profiles[i].name,)
+                # maxU = max(maxU, max(val[i][:,0]))
+            xlabels = ("U","Iu","Iv","Iw")
+            zlabel = 'Z'
+
+        if xLimits is None:
+            xLimits = [[0, 2],[0,0.4],[0,0.4],[0,0.3]]
 
         wplt.plotProfiles(
                         Z, # ([n1,], [n2,], ... [nN,])
@@ -454,7 +504,7 @@ class Profiles:
                         xLabels=xlabels, # ("str1", "str2", ... "str_m")
                         yLabel=zlabel,
                         xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                        # yLimits=[0,0.5], # [zMin, zMax]
+                        yLimits=zLimits, # [zMin, zMax]
                         figSize=figSize,
                         nCols=4
                         )
@@ -462,16 +512,32 @@ class Profiles:
     def plotTimeHistory(self):
         pass
     
-    def plotSpectra(self, figFile=None, xLimits=None, figSize=[16,4]):
+    def plotSpectra(self, figFile=None, xLimits=None, figSize=[16,4], normalize=True, 
+                    normSby='Uref' # {'Uref','sig_ui'}
+                    ):
         n = ()
         val = ()
         names = ()
-        for i in range(self.N):
-            n += (self.profiles[i].Spect_Zref.n,)
-            val += (np.transpose(np.stack((self.profiles[i].Spect_Zref.Suu, self.profiles[i].Spect_Zref.Svv, self.profiles[i].Spect_Zref.Sww))),)
-            names += (self.profiles[i].name,)
-        ylabels = ("Suu","Svv","Sww")
-        xlabel = 'n'
+        if normalize:
+            if normSby == 'Uref':
+                for i in range(self.N):
+                    n += (self.profiles[i].Spect_Zref.n * self.profiles[i].Spect_Zref.Z / self.profiles[i].Spect_Zref.U ,)
+                    val += (np.transpose(np.stack(( np.multiply(self.profiles[i].Spect_Zref.n, self.profiles[i].Spect_Zref.Suu) / (self.profiles[i].Spect_Zref.U)**2 , 
+                                                    np.multiply(self.profiles[i].Spect_Zref.n, self.profiles[i].Spect_Zref.Svv) / (self.profiles[i].Spect_Zref.U)**2 , 
+                                                    np.multiply(self.profiles[i].Spect_Zref.n, self.profiles[i].Spect_Zref.Sww) / (self.profiles[i].Spect_Zref.U)**2
+                                                    ))),)
+                    names += (self.profiles[i].name,)
+                ylabels = ("nSuu/Uref^2","nSvv/Uref^2","nSww/Uref^2")
+                xlabel = 'n.Zref/Uref'
+            elif normSby == 'sig_ui':
+                raise NotImplemented("This normalization type has not been implemented")
+        else:
+            for i in range(self.N):
+                n += (self.profiles[i].Spect_Zref.n,)
+                val += (np.transpose(np.stack((self.profiles[i].Spect_Zref.Suu, self.profiles[i].Spect_Zref.Svv, self.profiles[i].Spect_Zref.Sww))),)
+                names += (self.profiles[i].name,)
+            ylabels = ("Suu","Svv","Sww")
+            xlabel = 'n'
 
         wplt.plotSpectra(
                         n, # ([n1,], [n2,], ... [nN,])

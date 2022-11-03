@@ -603,14 +603,10 @@ def processVelProfile(caseDir, probeName, targetProfile,
                         normalize=True,
                         writeToDataFile=False,
                         showPlots=False,
-                        exportPlots=True,
-                        lim_Z = 'max',
-                        lim_U = [0,2],
-                        lim_TI=[0.4, 0.3, 0.3]):
+                        exportPlots=True):
     
-    caseName = os.path.abspath(caseDir).split('\\')[-1]
+    caseName = os.path.abspath(caseDir).split(os.sep)[-1]
     postProcDir = caseDir+"/postProcessing/"
-    figFile = caseDir+"/prof_"+probeName+".pdf"
     print("Processing OpenFOAM case: "+caseDir)
     print("Probe read from: "+postProcDir+probeName)
     print("Target profile read from:--- "+targetProfile)
@@ -622,32 +618,25 @@ def processVelProfile(caseDir, probeName, targetProfile,
     zRef = 0.08
     
     vel_LES = wind.profile(name=caseName,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
-                          WofT=np.transpose(vel[:,:,2]), Zref=zRef,dt=dt, units=wind.unitsCommonSI)
+                          WofT=np.transpose(vel[:,:,2]), Zref=zRef, dt=dt, units=wind.unitsCommonSI)
     
-    vel_EXP = wind.profile(fileName=targetProfile)
+    if writeToDataFile:
+        vel_LES.writeToFile(caseDir,writeTH=True,writeProfiles=True)
+
+    vel_EXP = wind.profile(fileName=targetProfile,Zref=zRef)
     
-    # profiles = wind.Profiles((vel_LES, vel_EXP))
-    
-    # profiles.plotProfiles(figFile)
+    profiles = wind.Profiles((vel_LES, vel_EXP))
+    figFile = caseDir+"/"+probeName+"_profiles.pdf"
+    profiles.plotProfiles(figFile,normalize=normalize)
+
+    figFile = caseDir+"/"+probeName+"_spectra.pdf"
+    if vel_EXP.Spect_Zref is not None:
+        # profiles = wind.Profiles((vel_LES,))
+        wind.Profiles((vel_LES,)).plotSpectra(figFile,normalize=normalize)
+    else:
+        profiles.plotSpectra(figFile,normalize=normalize)
     
     return vel_LES, vel_EXP
-    
-    # ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z,vel,dt,zRef)
-    
-    # ref_U_TI_L_wt, Z_wt, U_wt, TI_wt, L_wt = wProc.readVelProfile(targetProfile, zRef)
-    
-    # normalizer = (normalize, [zRef, zRef], [ref_U_TI_L[0], ref_U_TI_L_wt[0]])
-    
-    # wPlt.plotProfiles([Z, Z_wt],
-    #                   [U, U_wt],
-    #                  TI=[TI, TI_wt], 
-    #                  L=[L, L_wt],
-    #                  normalizer=normalizer,
-    #                  plotNames=('LES','BLWT'),
-    #                  pltFile=figFile,
-    #                  lim_Z = lim_Z,
-    #                  lim_U = lim_U,
-    #                  lim_TI=lim_TI)
     
     
     

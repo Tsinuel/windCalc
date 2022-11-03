@@ -33,10 +33,10 @@ def plotProfiles(
                 xLimits='auto', # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
                 yLimits='auto', # [zMin, zMax]
                 figSize=[6.4, 4.8],
+                alwaysShowFig=False,
                 nCols=3
                 ):
     
-  
     N = len(Z)
     M = val[0].shape[1]
     nRows = int(np.ceil((M/nCols)))
@@ -74,11 +74,59 @@ def plotProfiles(
     if isinstance(pltFile, str):
         pdf.savefig(fig)
         plt.clf()
-    else:
+    if alwaysShowFig:
         plt.show()
 
     if isinstance(pltFile, str):
         pdf.close()
+
+def plotVelTimeHistories(
+                    T, # ([n1,], [n2,], ... [nN,])
+                    U=None, # ([n1,], [n2,], ... [nN,])
+                    V=None, # ([n1,], [n2,], ... [nN,])
+                    W=None, # ([n1,], [n2,], ... [nN,])
+                    dataLabels=None, # ("str1", "str2", ... "strN")
+                    pltFile=None, # "/path/to/plot/file.pdf"
+                    xLabel='t [s]',
+                    yLabels=("U(t)","V(t)","W(t)"), 
+                    xLimits='auto', # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                    yLimits='auto', # [zMin, zMax]
+                    figSize=[12, 4.8],
+                    alwaysShowFig=False
+                    ):
+
+    nCols = 3 - (U,V,W).count(None)
+    N = len(U)
+    nRows = N
+
+    if isinstance(pltFile, str):
+        pdf = PdfPages(pltFile)
+    else:
+        pdf = pltFile
+    fig = plt.figure(figsize=figSize) 
+
+    # for m in range(M):
+    #     plt.subplot(nRows,nCols,m+1)
+    #     for i in range(N):
+    #         plt.plot(val[i][:,m], Z[i], color=ctlProf['col'][i], label=dataLabels[i])
+    #     plt.xlabel(xLabels[m])
+    #     plt.ylabel(yLabel)
+    #     if xLimits is not None and not xLimits == 'auto':
+    #         plt.xlim(xLimits[m])
+    #     plt.ylim(yLimits)
+    #     plt.legend()
+    #     plt.grid()
+    
+    # if isinstance(pltFile, str):
+    #     pdf.savefig(fig)
+    #     plt.clf()
+    # if alwaysShowFig:
+    #     plt.show()
+
+    # if isinstance(pltFile, str):
+    #     pdf.close()    
+    
+    
 
 def plotSpectra(
                 freq, # ([n1,], [n2,], ... [nN,])
@@ -90,6 +138,7 @@ def plotSpectra(
                 xLimits='auto',
                 yLimits='auto',
                 figSize=[10, 4.8],
+                alwaysShowFig=False,
                 nCols=3
                 ):
     
@@ -131,12 +180,11 @@ def plotSpectra(
     if isinstance(pltFile, str):
         pdf.savefig(fig)
         plt.clf()
-    else:
+    if alwaysShowFig:
         plt.show()
 
     if isinstance(pltFile, str):
         pdf.close()
-
 
 def plotProfiles2(Z, U,
                  TI = (),
