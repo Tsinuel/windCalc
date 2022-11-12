@@ -9,19 +9,27 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
+# from PyPDF2 import PdfFileReader, PdfFileWriter  # to append pdfs
+# https://stackoverflow.com/questions/38118510/append-page-to-existing-pdf-file-using-python-and-matplotlib
+
 ctlProf = {
-    "col":      ('r','g','b','k','m','c','r','g','b','k','m','c'),
-    "lStyle":   ('-','-','-','-','-','-','--','--','--','--','--','--'),
+    "col":      ('k','r','g','m','b','c','r','g','b','k','m','c'),
+    "lStyle":   ('-','--','-.',':','-','-','--','--','--','--','--','--'),
     "marker":   ('o','s','v','^','>','<','x','d','*','1','2','3'),
     "mrkrSize": (2,2,2,2,2,2,2,2,2,2,2,2)
     }
 ctlSpect = {
-    "col":      ('r','g','b','k','m','c','r','g','b','k','m','c'),
+    "col":      ('k','r','g','m','b','c','r','g','b','k','m','c'),
     "lStyle":   ('-','-','-','-','-','-','--','--','--','--','--','--'),
     "marker":   ('o','s','v','^','>','<','x','d','*','1','2','3'),
     "mrkrSize": (2,2,2,2,2,2,2,2,2,2,2,2)
     }
-
+plot = {
+        'loglog':plt.loglog,
+        'plot':plt.plot,
+        'semilogx':plt.semilogx,
+        'semilogy':plt.semilogy
+    }
 
 def plotProfiles(
                 Z, # ([n1,], [n2,], ... [nN,])
@@ -29,10 +37,10 @@ def plotProfiles(
                 dataLabels=None, # ("str1", "str2", ... "strN")
                 pltFile=None, # "/path/to/plot/file.pdf"
                 xLabels=None, # ("str1", "str2", ... "str_m")
-                yLabel='Z',
+                yLabel=r"$Z$",
                 xLimits='auto', # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
                 yLimits='auto', # [zMin, zMax]
-                figSize=[6.4, 4.8],
+                figSize=[15, 5],
                 alwaysShowFig=False,
                 nCols=3
                 ):
@@ -62,7 +70,7 @@ def plotProfiles(
     for m in range(M):
         plt.subplot(nRows,nCols,m+1)
         for i in range(N):
-            plt.plot(val[i][:,m], Z[i], color=ctlProf['col'][i], label=dataLabels[i])
+            plt.plot(val[i][:,m], Z[i], color=ctlProf['col'][i], linestyle=ctlProf['lStyle'][i], label=dataLabels[i])
         plt.xlabel(xLabels[m])
         plt.ylabel(yLabel)
         if xLimits is not None and not xLimits == 'auto':
@@ -70,6 +78,7 @@ def plotProfiles(
         plt.ylim(yLimits)
         plt.legend()
         plt.grid()
+        plt.tight_layout()
     
     if isinstance(pltFile, str):
         pdf.savefig(fig)
@@ -87,11 +96,11 @@ def plotVelTimeHistories(
                     W=None, # ([n1,], [n2,], ... [nN,])
                     dataLabels=None, # ("str1", "str2", ... "strN")
                     pltFile=None, # "/path/to/plot/file.pdf"
-                    xLabel='t [s]',
-                    yLabels=("U(t)","V(t)","W(t)"), 
-                    xLimits='auto', # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                    yLimits='auto', # [zMin, zMax]
-                    figSize=[12, 4.8],
+                    xLabel=r"$t [s]$",
+                    yLabels=(r"$U(t)$",r"$V(t)$",r"$W(t)$"), 
+                    xLimits='auto', # [tMin,tMax]
+                    yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
+                    figSize=[15, 5],
                     alwaysShowFig=False
                     ):
 
@@ -105,30 +114,160 @@ def plotVelTimeHistories(
         pdf = pltFile
     fig = plt.figure(figsize=figSize) 
 
-    # for m in range(M):
-    #     plt.subplot(nRows,nCols,m+1)
-    #     for i in range(N):
-    #         plt.plot(val[i][:,m], Z[i], color=ctlProf['col'][i], label=dataLabels[i])
-    #     plt.xlabel(xLabels[m])
-    #     plt.ylabel(yLabel)
-    #     if xLimits is not None and not xLimits == 'auto':
-    #         plt.xlim(xLimits[m])
-    #     plt.ylim(yLimits)
-    #     plt.legend()
-    #     plt.grid()
-    
-    # if isinstance(pltFile, str):
-    #     pdf.savefig(fig)
-    #     plt.clf()
-    # if alwaysShowFig:
-    #     plt.show()
+    for i in range(N):
+        m = 0
+        if U is not None:
+            plt.subplot(nRows,nCols,(i*nCols)+m+1)            
+            plt.plot(T[i], U[i], color=ctlProf['col'][i], label=dataLabels[i])
+            plt.xlabel(xLabel)
+            plt.ylabel(yLabels[0])
+            if xLimits is not None and not xLimits == 'auto':
+                plt.xlim(xLimits)
+            if yLimits is not None and not yLimits == 'auto':
+                plt.ylim(yLimits[0])
+            plt.legend()
+            plt.grid()
+            plt.tight_layout()
+            m += 1
 
-    # if isinstance(pltFile, str):
-    #     pdf.close()    
-    
+        if V is not None:
+            plt.subplot(nRows,nCols,(i*nCols)+m+1)            
+            plt.plot(T[i], V[i], color=ctlProf['col'][i], label=dataLabels[i])
+            plt.xlabel(xLabel)
+            plt.ylabel(yLabels[1])
+            if xLimits is not None and not xLimits == 'auto':
+                plt.xlim(xLimits)
+            if yLimits is not None and not yLimits == 'auto':
+                plt.ylim(yLimits[1])
+            if m == 0:
+                plt.legend()
+            plt.grid()
+            plt.tight_layout()
+            m += 1
+
+        if W is not None:
+            plt.subplot(nRows,nCols,(i*nCols)+m+1)            
+            plt.plot(T[i], W[i], color=ctlProf['col'][i], label=dataLabels[i])
+            plt.xlabel(xLabel)
+            plt.ylabel(yLabels[2])
+            if xLimits is not None and not xLimits == 'auto':
+                plt.xlim(xLimits)
+            if yLimits is not None and not yLimits == 'auto':
+                plt.ylim(yLimits[2])
+            if m == 0:
+                plt.legend()
+            plt.grid()
+            plt.tight_layout()
+            m += 1
+
+    if isinstance(pltFile, str):
+        pdf.savefig(fig)
+        plt.clf()
+    if alwaysShowFig:
+        plt.show()
+
+    if isinstance(pltFile, str):
+        pdf.close()    
     
 
 def plotSpectra(
+                freq, # ([n1,], [n2,], ... [nN,])
+                Suu=None, # ([n1,], [n2,], ... [nN,])
+                Svv=None, # ([n1,], [n2,], ... [nN,])
+                Sww=None, # ([n1,], [n2,], ... [nN,])
+                dataLabels=None, # ("str1", "str2", ... "strN")
+                plotType='loglog', # {'loglog','plot','semilogx','semilogy'}
+                pltFile=None, # "/path/to/plot/file.pdf"
+                xLabel=r"$n [Hz]$",
+                yLabels=(r"$S_{uu}$",r"$S_{vv}$",r"$S_{ww}$"), 
+                xLimits='auto', # [nMin,nMax]
+                yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
+                figSize=None,
+                legendOnAll=False,
+                drawXlineAt_rf1=False,
+                alwaysShowFig=False,
+                avoidZeroFreq=True
+                ):
+
+    nCols = 3 - (Suu,Svv,Sww).count(None)
+    N = len(Suu) if Suu is not None else len(Svv) if Svv is not None else len(Sww) if Sww is not None else 0
+    nRows = 1
+    i_n0 = 1 if avoidZeroFreq else 0
+    figSize = [5*nCols, 5] if figSize is None else figSize
+    dataLabels = ('data',)*N if dataLabels is None else dataLabels
+
+    if isinstance(pltFile, str):
+        pdf = PdfPages(pltFile)
+    else:
+        pdf = pltFile
+    fig = plt.figure(figsize=figSize)
+
+    m = 0
+    if Suu is not None:
+        plt.subplot(nRows,nCols,m+1)
+        for i in range(N):
+            plot[plotType](freq[i][i_n0:], Suu[i][1:], color=ctlProf['col'][i], label=dataLabels[i])
+        plt.xlabel(xLabel)
+        plt.ylabel(yLabels[0])
+        if drawXlineAt_rf1:
+            plt.axvline(x=1,linestyle='--',ls='--',c='k',lw=1.4)
+        if xLimits is not None and not xLimits == 'auto':
+            plt.xlim(xLimits)
+        if yLimits is not None and not yLimits == 'auto':
+            plt.ylim(yLimits[0])
+        if m == 0 or legendOnAll:
+            plt.legend()
+        plt.grid(which='both')
+        plt.tight_layout()
+        m += 1
+
+    if Svv is not None:
+        plt.subplot(nRows,nCols,m+1)
+        for i in range(N):
+            plot[plotType](freq[i][i_n0:], Svv[i][1:], color=ctlProf['col'][i], label=dataLabels[i])
+        plt.xlabel(xLabel)
+        plt.ylabel(yLabels[1])
+        if drawXlineAt_rf1:
+            plt.axvline(x=1,linestyle='--',ls='--',c='k',lw=1.4)
+        if xLimits is not None and not xLimits == 'auto':
+            plt.xlim(xLimits)
+        if yLimits is not None and not yLimits == 'auto':
+            plt.ylim(yLimits[1])
+        if m == 0 or legendOnAll:
+            plt.legend()
+        plt.grid(which='both')
+        plt.tight_layout()
+        m += 1
+
+    if Sww is not None:
+        plt.subplot(nRows,nCols,m+1)
+        for i in range(N):
+            plot[plotType](freq[i][i_n0:], Sww[i][1:], color=ctlProf['col'][i], label=dataLabels[i])
+        plt.xlabel(xLabel)
+        plt.ylabel(yLabels[2])
+        if drawXlineAt_rf1:
+            plt.axvline(x=1,linestyle='--',ls='--',c='k',lw=1.4)
+        if xLimits is not None and not xLimits == 'auto':
+            plt.xlim(xLimits)
+        if yLimits is not None and not yLimits == 'auto':
+            plt.ylim(yLimits[2])
+        if m == 0 or legendOnAll:
+            plt.legend()
+        plt.grid(which='both')
+        plt.tight_layout()
+        m += 1
+
+    if isinstance(pltFile, str):
+        pdf.savefig(fig)
+        plt.clf()
+    if alwaysShowFig:
+        plt.show()
+
+    if isinstance(pltFile, str):
+        pdf.close()
+
+
+def plotSpectra____depricated(
                 freq, # ([n1,], [n2,], ... [nN,])
                 Spect, # ([n1,M], [n2,M], ... [nN,M])
                 dataLabels=None, # ("str1", "str2", ... "strN")
@@ -162,7 +301,7 @@ def plotSpectra(
         pdf = PdfPages(pltFile)
     else:
         pdf = pltFile
-    fig = plt.figure(figsize=figSize) 
+    fig = plt.figure(figsize=figSize)
 
     for m in range(M):
         plt.subplot(nRows,nCols,m+1)
@@ -186,7 +325,7 @@ def plotSpectra(
     if isinstance(pltFile, str):
         pdf.close()
 
-def plotProfiles2(Z, U,
+def plotProfiles____depricated(Z, U,
                  TI = (),
                  L = (),
                  yLabel = "Z",

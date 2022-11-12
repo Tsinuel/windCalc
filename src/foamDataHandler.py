@@ -2,7 +2,7 @@
 """
 Created on Sat Jun 25 16:49:36 2022
 
-@author: Tsinu
+@author: Tsinuel Geleta
 """
 import numpy as np
 import os
@@ -259,7 +259,7 @@ def getClosest2DcoordsTo(X,Y,Zin):
     return idx
 
 
-def scaleInflowData(caseDir,tMin,tMax,zRef,writeInflow=True,smplName=''):
+def scaleInflowData(caseDir,tMin,tMax,H,writeInflow=True,smplName=''):
     
     # caseDir = 'D:/tempData_depot/simData_CandC/ttuPSpcOP15.7'
     inflDict = readInflowDict(caseDir+'/system/scaleInflowDict')
@@ -338,63 +338,32 @@ def scaleInflowData(caseDir,tMin,tMax,zRef,writeInflow=True,smplName=''):
     sfix = datetime.now().strftime("%Y-%m-%d_%H:%M")
     sfix = str(tMin)+'_to_'+str(tMax)
     dt = times[1][1]-times[0][1]
-    velUnscaled = wind.profile(name="Unscaled",Z=Z_smpl,dt=dt,Zref=zRef,
+    velUnscaled = wind.profile(name="Unscaled",Z=Z_smpl,dt=dt,H=H,
                     UofT=np.transpose(Vsmpl_in[:,:,0]),
                     VofT=np.transpose(Vsmpl_in[:,:,1]),
                     WofT=np.transpose(Vsmpl_in[:,:,2]))
     velUnscaled.writeToFile(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
 
     dt = round(times[1][1] * inflDict["tScl"], __precision)  - round(times[0][1] * inflDict["tScl"], __precision)
-    velScaled = wind.profile(name="Scaled",Z=Z_smpl,dt=dt,Zref=zRef,
+    velScaled = wind.profile(name="Scaled",Z=Z_smpl,dt=dt,H=H,
                     UofT=np.transpose(Vsmpl_out[:,:,0]),
                     VofT=np.transpose(Vsmpl_out[:,:,1]),
                     WofT=np.transpose(Vsmpl_out[:,:,2]))
     velScaled.writeToFile(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
-
-    # ref_U_TI_L_in, Z_in, U_in, TI_in, L_in, freq_in, Spect_H_in, Spect_Others_in = wProc.processVelProfile(Z_smpl, 
-    #                                                                                Vsmpl_in, 
-    #                                                                                dt, 
-    #                                                                                zRef)
-    # smpleFile = inflDict["outputDir"]+'/'+smplName+'_orig.csv'
-    # np.savetxt( smpleFile,
-    #            np.concatenate((np.reshape(Z_in,[-1,1]), np.reshape(U_in,[-1,1]), TI_in, L_in), axis=1), 
-    #            delimiter=',',header="Z, U, Iu, Iv, Iw, xLu, xLv, xLw")
-    # np.save(inflDict["outputDir"]+'/'+smplName+'_orig_TH', Vsmpl_in)
-    
-    # dt = round(times[1][1] * inflDict["tScl"], __precision)  - round(times[0][1] * inflDict["tScl"], __precision)
-    # ref_U_TI_L_out, Z_out, U_out, TI_out, L_out, freq_out, Spect_H_out, Spect_Others_out = wProc.processVelProfile(Z_smpl, 
-    #                                                                                Vsmpl_out, 
-    #                                                                                dt, 
-    #                                                                                zRef)
-    # smpleFile = inflDict["outputDir"]+'/'+smplName+'_scaled.csv'
-    # np.savetxt( smpleFile,
-    #            np.concatenate((np.reshape(Z_out,[-1,1]), np.reshape(U_out,[-1,1]), TI_out, L_out), axis=1), 
-    #            delimiter=',',header="Z, U, Iu, Iv, Iw, xLu, xLv, xLw")
-    # np.save(inflDict["outputDir"]+'/'+smplName+'_scaled_TH', Vsmpl_out)
-
-    
-    # wPlt.plotProfiles([targProf.Z, Z_in, Z_out],
-    #                   [targProf.U, U_in, U_out],
-    #                   TI=[np.asarray(targProf.values[:,2:5]), TI_in, TI_out], 
-    #                   L=[np.asarray(targProf.values[:,5:]), L_in, L_out],
-    #                   plotNames=['Target','Original','Corrected'],
-    #                   pltFile=pdfDoc,
-    #                   lim_U=[0,25],
-    #                   lim_TI=[0.3,0.3,0.3])
  
     if writeInflow:
-        inflowDictFile = open(caseDir+'/constant/inflowDict', 'w')
+        inflowDictFile = open(inflDict["outputDir"]+'/inflowDict', 'w')
         inflowDictFile.write("""/*--------------------------------*- C++ -*----------------------------------*
-                                | =========                |                                                 |
-                                | \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-                                |  \    /   O peration     | Version:  4.1                                   |
-                                |   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-                                |    \/     M anipulation  |                                                 |
-                                \*---------------------------------------------------------------------------*/
-                                
-                                // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-                                
-                                """)
+| =========                |                                                 |
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \    /   O peration     | Version:  4.1                                   |
+|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+""")
         inflowDictFile.write("maxInflowTime\t\t"+str(tNew)+";\n\n")
         inflowDictFile.write("// ************************************************************************* //\n")
         inflowDictFile.close()
@@ -403,7 +372,7 @@ def scaleInflowData(caseDir,tMin,tMax,zRef,writeInflow=True,smplName=''):
 
     return velUnscaled, velScaled
 
-def extractSampleProfileFromInflow(inletDir,outPath,figFile,tMax,zRef):
+def extractSampleProfileFromInflow(inletDir,outPath,figFile,tMax,H):
     
     points = readBDformattedFile(inletDir + '/points')
     points.columns = ['X','Y','Z']
@@ -435,7 +404,7 @@ def extractSampleProfileFromInflow(inletDir,outPath,figFile,tMax,zRef):
     ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z, 
                                                                                    velOfT, 
                                                                                    times[1][1]-times[0][1], 
-                                                                                   zRef)
+                                                                                   H)
     
     wPlt.plotProfiles([Z],
                       [U],
@@ -471,6 +440,7 @@ def __readProbe_singleT(file,field):
     data : np.array(float)
         The time history data of the field recorded with the probes.
 
+    @author: Tsinuel Geleta
     """
     probes = np.zeros([0])
     data = np.zeros([0])
@@ -556,6 +526,7 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs=[[0,0]], trimOverlap=T
     >>> np.shape(p)
     (3661, 46)
     
+    @author: Tsinuel Geleta
     """
     probeDir = postProcDir+probeName+"/"
     times = [ name for name in os.listdir(probeDir) if os.path.isdir(os.path.join(probeDir, name)) ]
@@ -599,43 +570,61 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs=[[0,0]], trimOverlap=T
         
     return probes, T, data
     
-def processVelProfile(caseDir, probeName, targetProfile,
+def processVelProfile(caseDir, probeName, targetProfile=None,
+                        name=None,
                         normalize=True,
                         writeToDataFile=False,
+                        trimTimeSegs=[[0,0.5]],
+                        H=None,
                         showPlots=False,
                         exportPlots=True):
     
     caseName = os.path.abspath(caseDir).split(os.sep)[-1]
     postProcDir = caseDir+"/postProcessing/"
-    print("Processing OpenFOAM case: "+caseDir)
-    print("Probe read from: "+postProcDir+probeName)
-    print("Target profile read from:--- "+targetProfile)
+    outDir = caseDir+"/_processed/"
+    if not os.path.exists(outDir):
+        os.mkdir(outDir)
+    print("Processing OpenFOAM case:\t"+caseDir)
+    print("Probe read from:\t\t"+postProcDir+probeName)
+    print("Target profile read from:\t"+str(targetProfile))
     
-    probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=[[0,0.5]])
+    print("  >> Reading probe data ...")
+    probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs)
+    print("             << Done!")
     
     Z = probes[:,2]
     dt = np.mean(np.diff(time))
-    zRef = 0.08
     
-    vel_LES = wind.profile(name=caseName,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
-                          WofT=np.transpose(vel[:,:,2]), Zref=zRef, dt=dt, units=wind.unitsCommonSI)
+    print("  >> Processing profile data.")
+    name = caseName+"__"+probeName if name is None else name
+    vel_LES = wind.profile(name=name,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
+                          WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.unitsCommonSI)
+    print("             << Done!")
     
+    print("  >> Writing data to file.")
     if writeToDataFile:
-        vel_LES.writeToFile(caseDir,writeTH=True,writeProfiles=True)
-
-    vel_EXP = wind.profile(fileName=targetProfile,Zref=zRef)
+        vel_LES.writeToFile(outDir=outDir,writeTH=True,writeProfiles=True)
+    print("             << Done!")
     
-    profiles = wind.Profiles((vel_LES, vel_EXP))
-    figFile = caseDir+"/"+probeName+"_profiles.pdf"
+    if targetProfile is None:
+        vel_EXP = None
+        profiles = wind.Profiles((vel_LES,))
+    else:
+        vel_EXP = wind.profile(name="target",fileName=targetProfile,H=H)
+        profiles = wind.Profiles((vel_EXP, vel_LES))
+    print("  >> Finished reading probe data.")
+    figFile = outDir+vel_LES.name+"_profiles.pdf"
     profiles.plotProfiles(figFile,normalize=normalize)
 
-    figFile = caseDir+"/"+probeName+"_spectra.pdf"
-    if vel_EXP.Spect_Zref is not None:
+    # figFile = outDir+probeName+"_spectra.pdf"
+    # if vel_EXP.Spect_H is not None:
         # profiles = wind.Profiles((vel_LES,))
-        wind.Profiles((vel_LES,)).plotSpectra(figFile,normalize=normalize)
-    else:
-        profiles.plotSpectra(figFile,normalize=normalize)
+        # wind.Profiles((vel_LES,)).plotSpectra(figFile,normalize=normalize)
+    # else:
+    #     profiles.plotSpectra(figFile,normalize=normalize)
     
+    
+
     return vel_LES, vel_EXP
     
     
