@@ -12,12 +12,9 @@ from scipy import signal
 
 import windPlotters as wplt
 
-"""
-===============================================================================
-=============================== VARIABLES =====================================
-===============================================================================
-"""
-
+#===============================================================================
+#==================== CONSTANTS & GLOBAL VARIABLES  ============================
+#===============================================================================
 unitsCommonSI = {
         'L':'m',
         'T':'s',
@@ -25,6 +22,7 @@ unitsCommonSI = {
         'P':'Pa',
         'M':'kg'
         }
+
 unitsNone = {
         'L':None,
         'T':None,
@@ -33,13 +31,11 @@ unitsNone = {
         'M':None
         }
 
+#===============================================================================
+#=============================== FUNCTIONS =====================================
+#===============================================================================
 
-"""
-===============================================================================
-=============================== FUNCTIONS =====================================
-===============================================================================
-"""
-
+#------------------------------- WIND FIELD ------------------------------------
 def integTimeScale(x,dt,rho_tol=0.0001,showPlots=False,removeNaNs=True):
     """
     Gets the integral time scale of a signal by integrating the right side of 
@@ -195,57 +191,282 @@ def vonKarmanSpectra___depricated(n_=None,U_=None,Iu_=None,Iv_=None,Iw_=None,xLu
     
     return Suu, Svv, Sww
 
+def fitESDUgivenIuRef(
+                    Zref,
+                    IuRef,
+                    z0i=[1e-7,1e1],
+                    Uref=10.0,
+                    phi=30,
+                    ESDUversion='ESDU85',
+                    tolerance=0.0001,
+                    ):
+    if ESDUversion == 'ESDU85':
+        es = ESDU85(z0=z0i[0],Zref=Zref,Z=Zref,Uref=Uref,phi=phi)
+    elif ESDUversion == 'ESDU74':
+        es = ESDU74(z0=z0i[0],Zref=Zref,Z=Zref,Uref=Uref,phi=phi)
+    else:
+        raise Exception("Unknown ESDU version: "+ESDUversion)
 
-"""
-===============================================================================
-================================ CLASSES ======================================
-===============================================================================
-"""
+    z0_0 = z0i[0]
+    z0_1 = z0i[1]
+
+    es.z0 = z0_0
+    Iu_0 = es.Iu()
+    es.z0 = z0_1
+    Iu_1 = es.Iu()
+
+    err_0 = IuRef - Iu_0
+    err_1 = IuRef - Iu_1
+
+    if err_0*err_1 > 0:
+        raise Exception("The initial estimates for z0 do not encompass the root. Change the values and try again.")
+
+    z0 = (z0_0 + z0_1)/2
+    es.z0 = z0
+    Iu = es.Iu()
+    err = IuRef - Iu
+
+    while abs(err) > tolerance:
+        # print("z0 = "+str(z0))
+        # print("Iu = "+str(Iu))
+        z0 = (z0_0 + z0_1)/2
+        es.z0 = z0
+        Iu = es.Iu()
+        err = IuRef - Iu
+        if err*err_0 < 0:
+            z0_1 = z0
+            err_1 = err
+        else:
+            z0_0 = z0
+            err_0 = err
+    z0 = (z0_0 + z0_1)/2
+    return z0, es
+
+
+#---------------------------- SURFACE PRESSURE ---------------------------------
+
+
+
+
+#===============================================================================
+#================================ CLASSES ======================================
+#===============================================================================
+
+#------------------------------- WIND FIELD ------------------------------------
 class ESDU74:
-    def __init__(self):
-        pass
-
-    def U(self):
-        pass
-
-    def Iu(self):
-        pass
-
-    def Iv(self):
-        pass
-
-    def Iw(self):
-        pass
-
-    def xLu(self):
-        pass
-
-
-class ESDU85:
-    __Omega = 72.9e-6            # Angular rate of rotation of the earth ESDU 82026 ssA1
-
+    __Omega = 72.7e-6            # Angular rate of rotation of the earth in [rad/s].  ESDU 74031 sect. A.1
+    __k = 0.4   # von Karman constant
     def __init__(self,
                     phi=30,
-                    z0=None,
-                    Z=None, 
+                    z0=0.03,
+                    Z=np.sort(np.append(np.logspace(np.log10(0.5),np.log10(300),99),10)), 
                     Zref=10,
                     Uref=10,
                     ):
         self.phi = phi # latitude in degrees
         self.z0 = z0
-        self.Z = Z=np.sort(np.append(np.logspace(np.log10(0.5),np.log10(300),99),10)) if Z is None else Z
+        self.Z = Z
         self.Zref = Zref
         self.Uref = Uref
 
-    def fitToThisIuRef(self,IuRef):
+    def d(self):
+        return 0.0  # The consideration of zero-displacement is not implemnted. See Section 3.10 of ESDU 72026 to implement it.
+
+    def Zd(self,Z=None):
+        Z = self.Z if Z is None else Z
+        return Z - self.d()
+
+    def f(self):
+        # Coriolis parameter            ESDU 72026, section A.1
+        return 2*self.__Omega*np.sin(np.radians(self.phi))
+
+    def Zg(self):
+        return 1000*np.power(self.z0,0.18)        # ESDU 74031, eq. A.14
+
+    def Ug(self):
         pass
+
+    def uStar(self):
+        if self.z0 is None or self.Uref is None or self.Zref is None or self.phi is None:
+            return None
+        else:
+            return np.divide(0.4*self.Uref, 2.303*np.log10(self.Zref/self.z0) + self.C()*self.f()*self.Zref)  # ESDU 72026, eq. A.2 (only for the lowest 200m)
+
+    def C(self):
+        return -20.5858*np.log10(self.f()*self.z0) - 70.4644  # ESDU 72026, Figure A.2
+
+    def checkZ(self,Z):
+        if (Z > 200).any():
+            raise Warning("The provided Z vector contains values higher than 200m which is beyond the range provided in ESDU 72026, eq. A.2.")
+
+    def U(self,Z=None):
+        Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
+        return np.multiply(self.uStar()/self.__k, 2.303*np.log10(Z/self.z0) + self.C()*self.f()*Z)    # ESDU 72026, eq. A.2 (only for the lowest 200m)
+
+    def lambda_(self):        # ESDU 74031, eq. A.4b
+        if self.z0 <= 0.02:
+            return 1.0
+        elif self.z0 <= 1.0:
+            return 0.76/(self.z0**0.07)
+        else:
+            return 0.76 
+
+    def Iu(self,Z=None):
+        Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
+        Fu = np.multiply(0.867 + 0.556*np.log10(Z) - 0.246*np.power(np.log10(Z),2), self.lambda_())     # ESDU 74031, eq. A.4a
+        return np.divide(Fu, 
+                        np.log(np.divide(Z, self.z0)) )      # ESDU 74031, eq. A.3
+
+    def Iv(self,Z=None):
+        Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
+        Fv = 0.655 + 0.201*np.log10(Z) - 0.095*np.power(np.log10(Z),2)     # ESDU 74031, eq. A.5
+        return np.divide(Fv, 
+                        np.log(np.divide(Z, self.z0)) )      # ESDU 74031, eq. A.3
+
+    def Iw(self,Z=None):
+        Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
+        Fv = 0.381 + 0.172*np.log10(Z) - 0.062*np.power(np.log10(Z),2)     # ESDU 74031, eq. A.5
+        return np.divide(Fv, 
+                        np.log(np.divide(Z, self.z0)) )      # ESDU 74031, eq. A.3
+
+    def uPwP(self,Z=None):
+        pass         # ESDU 74031, eq. A.10
+
+    def xLu(self,Z=None):
+        Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
+        return 25*np.divide(np.power(Z,0.35),
+                            np.power(self.z0,0.063))     # ESDU 74031, eq. A.16
+
+    def xLv(self,Z=None):
+        Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
+        return 5.1*np.divide(np.power(Z,0.48),
+                            np.power(self.z0,0.086))     # ESDU 74031, eq. A.17
+
+    def xLw(self,Z=None):
+        Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
+        return 0.35*Z     # ESDU 74031, eq. A.18
+
+    def Suu(self,n=None,Z=None):
+        Z = self.Zref if Z is None else Z
+        if n is None:
+            nu = np.logspace(-3,2,100)
+            n = np.multiply(nu, np.divide(self.U(Z), self.xLu(Z)))
+        else:
+            nu = np.multiply(n, np.divide(self.xLu(Z), self.U(Z)))
+        
+        rSuu = np.divide(4*nu,
+                         np.power(1 + 70.8*np.power(nu,2),5/6) )   # ESDU 74031, eq. 8
+
+        varU = np.power(np.multiply(self.Iu(Z),self.U(Z)),2)
+        return n, np.divide(np.multiply(rSuu,varU), n)
+
+    def Sii(self,ni,Z=None):
+        Z = self.Zref if Z is None else Z
+        return np.divide(np.multiply(4*ni, 1 + 755.2*np.power(ni,2)),
+                        np.power(1 + 283.2*np.power(ni,2), 11/6) ) # ESDU 74031, eq. 9 and 10
+        
+    def Svv(self,n=None,Z=None):
+        Z = self.Zref if Z is None else Z
+        if n is None:
+            nv = np.logspace(-3,2,100)
+            n = np.multiply(nv, np.divide(self.U(Z), self.xLv(Z)))
+        else:
+            nv = np.multiply(n, np.divide(self.xLv(Z), self.U(Z)))
+        varV = np.power(np.multiply(self.Iv(Z),self.U(Z)),2)
+        return n, np.divide(np.multiply(self.Sii(nv,Z),varV), n)
+
+    def Sww(self,n=None,Z=None):
+        Z = self.Zref if Z is None else Z
+        if n is None:
+            nw = np.logspace(-3,2,100)
+            n = np.multiply(nw, np.divide(self.U(Z), self.xLw(Z)))
+        else:
+            nw = np.multiply(n, np.divide(self.xLw(Z), self.U(Z)))
+        varW = np.power(np.multiply(self.Iw(Z),self.U(Z)),2)
+        return n, np.divide(np.multiply(self.Sii(nw,Z),varW), n)
+
+    def rf(self,n,Z=None,normZ='Z'):
+        Z = self.Zref if Z is None else Z
+        if normZ == 'Z':
+            normZ = Z
+        elif normZ == 'xLi':
+            normZ = self.xLu(Z=Z)
+        elif not type(normZ) == int or float:
+            raise Exception("Unknown normalization height type. Choose from {'Z', 'xLi'} or specify a number.")
+        Uref = self.U(Z=Z)
+        return n * normZ/Uref
+
+    def rSuu(self,n=None,normU='U',Z=None,normZ='Z'):
+        Z = self.Zref if Z is None else Z
+        if n is None:
+            n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLu(Z)))
+        if Z is None:
+            return None
+        if normU == 'U':
+            normU = self.U(Z)
+        elif normU == 'sigUi':
+            normU = self.Iu(Z) * self.U(Z)
+        return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Suu(n=n,Z=Z)[1])/(normU**2)
+
+    def rSvv(self,n=None,normU='U',Z=None,normZ='Z'):
+        Z = self.Zref if Z is None else Z
+        if n is None:
+            n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLv(Z)))
+        if Z is None:
+            return None
+        if normU == 'U':
+            normU = self.U(Z)
+        elif normU == 'sigUi':
+            normU = self.Iv(Z) * self.U(Z)
+        return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Svv(n=n,Z=Z)[1])/(normU**2)
+
+    def rSww(self,n=None,normU='U',Z=None,normZ='Z'):
+        Z = self.Zref if Z is None else Z
+        if n is None:
+            n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLw(Z)))
+        if Z is None:
+            return None
+        if normU == 'U':
+            normU = self.U(Z)
+        elif normU == 'sigUi':
+            normU = self.Iw(Z) * self.U(Z)
+        return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Sww(n=n,Z=Z)[1])/(normU**2)
+
+    def fitToIuRef(self,
+                    IuRef,
+                    z0i=[1e-7,1e1],
+                    tolerance=0.0001,
+                    ):
+        self.z0 = fitESDUgivenIuRef(
+            Zref=self.Zref,
+            IuRef=IuRef,
+            z0i=z0i,
+            Uref=self.Uref,
+            phi=self.phi,
+            ESDUversion='ESDU74',
+            tolerance=tolerance
+        )[0]
+
+class ESDU85:
+    __Omega = 72.9e-6            # Angular rate of rotation of the earth [rad/s] ESDU 82026 ssA1
+
+    def __init__(self,
+                    phi=30,
+                    z0=0.03,
+                    Z=np.sort(np.append(np.logspace(np.log10(0.5),np.log10(300),99),10)), 
+                    Zref=10,
+                    Uref=10,
+                    ):
+        self.phi = phi # latitude in degrees
+        self.z0 = z0
+        self.d = 0.0  # zero-plane displacement not implemented
+        self.Z = Z
+        self.Zref = Zref
+        self.Uref = Uref
 
     def f(self):
         # Coriolis parameter            ESDU 82026, section A1
-        if self.phi is None:
-            return None
-        else:
-            return 2*self.__Omega*np.sin(np.radians(self.phi))
+        return 2*self.__Omega*np.sin(np.radians(self.phi))
 
     def uStar(self):
         # Shear velocity.               ESDU 82026, eq. A1.8. (Works for the lowest 300m)
@@ -260,10 +481,12 @@ class ESDU85:
 
     def U(self,Z=None):
         Z = self.Z if Z is None else Z
+        # if (Z > 300).any():
+        #     raise Warning("The provided Z vector contains values higher than 300m which is beyond the range provided in ESDU 82026, eq. A1.8.")
         if Z is None or self.z0 is None or self.Uref is None or self.Zref is None:
             return None
         else:
-            return np.multiply(self.uStar()/0.4, (np.log(Z/self.z0) + 34.5*self.f()*Z/self.uStar()))
+            return np.multiply(self.uStar()/0.4, (np.log(Z/self.z0) + 34.5*self.f()*Z/self.uStar())) # ESDU 82026, eq. A1.8. (Works for the lowest 300m)
     
     def sigUbyUstar(self,Z=None):
         Z = self.Z if Z is None else Z
@@ -307,7 +530,7 @@ class ESDU85:
 
     def xLu(self,Z=None):
         Z = self.Z if Z is None else Z
-        Ro = self.uStar()/(self.f()*self.z0)
+        Ro = self.uStar()/(self.f()*self.z0) # Rosby number
         N = 1.24 * Ro**0.008    # ESDU 85020, eq. A2.21
         B = 24 * Ro**0.155      # ESDU 85020, eq. A2.20
         K0 = 0.39/(Ro**0.11)    # ESDU 85020, eq. A2.19
@@ -433,6 +656,20 @@ class ESDU85:
             normU = self.Iw(Z) * self.U(Z)
         return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Sww(n=n,Z=Z)[1])/(normU**2)
 
+    def fitToIuRef(self,
+                    IuRef,
+                    z0i=[1e-7,1e1],
+                    tolerance=0.0001,
+                    ):
+        self.z0 = fitESDUgivenIuRef(
+            Zref=self.Zref,
+            IuRef=IuRef,
+            z0i=z0i,
+            Uref=self.Uref,
+            phi=self.phi,
+            ESDUversion='ESDU85',
+            tolerance=tolerance
+        )[0]
 
 class spectra:
     UofT = VofT = WofT = None
@@ -967,7 +1204,6 @@ class profile:
                                 alwaysShowFig=alwaysShowFig
                                 )   
 
-
 class Profiles:
     def __init__(self, profs):
         self.N = len(profs)
@@ -1132,4 +1368,7 @@ class Profiles:
                         plotType=plotType,
                         drawXlineAt_rf1=drawXlineAt_rf1
                         )
+
+
+#---------------------------- SURFACE PRESSURE ---------------------------------
 
