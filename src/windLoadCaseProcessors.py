@@ -6,7 +6,7 @@ Created on Fri Aug 12 16:25:30 2022
 """
 
 import numpy as np
-import windBasics as wind
+import wind
 import pandas as pd
 import warnings
 import matplotlib.pyplot as plt

@@ -7,7 +7,7 @@ Created on Tue Aug 30 01:40:48 2022
 
 import sys
 # import numpy as np
-import foamDataHandler as foam
+import foam
 
 def main(args):
     caseDir = args[0]
