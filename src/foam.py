@@ -492,17 +492,11 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs=[[0,0]], trimOverlap=T
     field : str
         The field name to read from the probe files. e.g., 'p', 'U'
     trimOverlap : bool, optional
-        Whether or not to remove time overlap between consecutive records that 
-        commonly happens in OpenFOAM when the simulation is re-run from 
-        latestTime. The default is True.
+        Whether or not to remove time overlap between consecutive records that commonly happens in OpenFOAM when the simulation is re-run from latestTime. The default is True.
     shiftTimeToZero : bool, optional
-        Whether or not to shift the time vector in such a way that the time 
-        starts from zero. It is significant if there has been some trimming 
-        and clipping on the time history. The default is True.
+        Whether or not to shift the time vector in such a way that the time starts from zero. It is significant if there has been some trimming and clipping on the time history. The default is True.
     removeOutOfDomainProbes : bool, optional
-        Whether or not to remove probes which lie outside the computational 
-        domain indicated by absurdly high values like 1e+300. They do not 
-        normally result in errors. The default is True.
+        Whether or not to remove probes which lie outside the computational domain indicated by absurdly high values like 1e+300. They do not normally result in errors. The default is True.
 
     Returns
     -------
@@ -625,7 +619,7 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
     
     
 
-    return vel_LES, vel_EXP
+    return vel_LES #, vel_EXP
     
     
     

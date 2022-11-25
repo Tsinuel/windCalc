@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import warnings
 from scipy import signal
-from typing import overload
+from typing import Any, overload
 
 import windPlotters as wplt
 
@@ -31,6 +31,7 @@ unitsNone = {
         'P':None,
         'M':None
         }
+
 
 #===============================================================================
 #=============================== FUNCTIONS =====================================
@@ -229,7 +230,14 @@ def fitESDUgivenIuRef(
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
 
-
+def peak(x,axis=None,method='BLUE'):
+    if method == 'BLUE':
+        raise NotImplemented()
+    elif method == 'minmax':
+        return np.amin(x,axis=axis), np.amax(x,axis=axis)
+    else:
+        raise NotImplemented()
+    pass
 
 
 #===============================================================================
@@ -252,6 +260,9 @@ class ESDU74:
         self.Z = Z
         self.Zref = Zref
         self.Uref = Uref
+
+    def __str__(self):
+        return 'ESDU-74 (z0 = '+str(self.z0)+'m)'
 
     def d(self):
         return 0.0  # The consideration of zero-displacement is not implemnted. See Section 3.10 of ESDU 72026 to implement it.
@@ -447,6 +458,9 @@ class ESDU85:
         self.Z = Z
         self.Zref = Zref
         self.Uref = Uref
+
+    def __str__(self):
+        return 'ESDU-85 (z0 = '+str(self.z0)+'m)'
 
     def f(self):
         # Coriolis parameter            ESDU 82026, section A1
@@ -705,8 +719,11 @@ class spectra:
         self.VofT = VofT
         self.WofT = WofT
 
-        self.reAnalyze()
+        self.Update()
 
+    def __str__(self):
+        return self.name
+    
     """--------------------------------- Normalizers ----------------------------------"""
     def rf(self,n='auto',normZ='Z'):
         if n == 'auto':
@@ -753,7 +770,7 @@ class spectra:
             return np.multiply(self.n,self.Sww)/(normU**2)
     
     """-------------------------------- Data handlers ---------------------------------"""
-    def reAnalyze(self):
+    def Update(self):
         self.__calculateSpectra()
 
     def writeSpecsToFile(self):
@@ -1013,8 +1030,11 @@ class profile:
         self.interpolateToH = interpolateToH
         self.units = units
         
-        self.reAnalyze()
+        self.Update()
 
+    def __str__(self):
+        return self.name
+    
     """---------------------------------- Normalizers ---------------------------------"""
     def ZbyH(self,H=None):
         if H is None:
@@ -1060,7 +1080,7 @@ class profile:
         pass
 
     """-------------------------------- Data handlers ---------------------------------"""
-    def reAnalyze(self):
+    def Update(self):
         self.__verifyData()
         if self.Z is not None:
             self.N_pts = len(self.Z)
@@ -1187,10 +1207,27 @@ class profile:
                                 )   
 
 class Profiles:
-    def __init__(self, profs):
-        self.N = len(profs)
-        self.profiles = profs
-    
+    def __init__(self, profiles=[]):
+        self._currentIndex = 0
+        self.N = len(profiles)
+        self.profiles = profiles
+
+    def __numOfProfiles(self):
+        if self.profiles is None:
+            return 0
+        return len(self.profiles)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._currentIndex < self.__numOfProfiles():
+            member = self.profiles[self._currentIndex]
+            self._currentIndex += 1
+            return member
+        self._currentIndex = 0
+        raise StopIteration
+            
     def plotProfiles(self,figFile=None,xLimits='auto',zLimits='auto',figSize=[14,6],normalize=True):
         Z = ()
         val = ()
@@ -1378,43 +1415,142 @@ class profile_repeatedTest(profile):
 class building:
     class face:
         def __init__(self,
+                    name=None,
                     bldg=None,
                     origin=None,
                     normal=None,
                     vertics2D=None,
                     vertics3D=None,
-                    tapIdx=None,
+                    taps=None,
                     ):
+            self.name = name
             self.bldg = bldg
             self.origin = origin  # 
             self.normal = normal  # face normal unit vector
             self.vertics2D = vertics2D
             self.vertics3D = vertics3D
-    
+            self.taps = taps
+        
+        def __str__(self):
+            return self.name
+
+    class Faces:
+        def __init__(self,members=[]):
+            self._currentIndex = 0
+            self.members = members
+        
+        def _numOfMembers(self):
+            if self.members is None:
+                return 0
+            return len(self.members)
+
+        def __iter__(self):
+            return self
+
+        def __next__(self):
+            if self._currentIndex < self._numOfMembers():
+                member = self.members[self._currentIndex]
+                self._currentIndex += 1
+                return member
+            raise StopIteration
+
     def __init__(self,
+                name=None,
                 H=None,     # average roof height
                 He=None,    # eave height
                 Hr=None,    # ridge height 
                 B=None,     # shorter plan-inscribing-rectangle width
                 D=None,     # longer plan-inscribing-rectangle width
-                prof=None,  # the main profile
                 faces=None, # list of faces
+                tapNo=None,
+                tapName=None,
+                tapFaceID=None,
+                tapCoord3D=None,
+                tapCoord2D=None,
                 lScl=1.0,   # length scale
-                localCp=None,
-                areaAvgCp=None,
-                ):
-        self.prof = profile(H=H) if prof is None else prof
-        pass
+               ):
+        self.name = name
+        self.H = H
+        self.He = He
+        self.Hr = Hr
+        self.B = B
+        self.D = D
+        self.faces = faces
+        self.tapNo = tapNo      # [Ntaps,]
+        self.tapName = tapName  # [Ntaps,]
+        self.tapFaceID = tapFaceID  # [Ntaps,]
+        self.tapCoord3D = tapCoord3D  # [Ntaps,3]   ... from the building 3D origin
+        self.tapCoord2D = tapCoord2D  # [Ntaps,2]   ... from the local face origin
+        self.lScl = lScl
+    
+    def __str__(self):
+        return self.name
+
 
 class Cp:
-    def __init__(self,
-                bldg=None,
-                coord3D=None,
-                faceIdx=None,
-                
-                ):
+    def __verifyData(self):
         pass
 
+    def __computeCpTHfrom_p_TH(self):
+        p0ofT = 0.0 if self.p0ofT is None else self.p0ofT
+        if not np.isscalar(p0ofT) and not len(p0ofT) == np.shape(self.pOfT)[1]:
+            raise Exception(f"The p and p0 time series for Cp calculation do not match in time steps. Shapes of p0ofT : {np.shape(p0ofT)}, pOfT : {np.shape(self.pOfT)}")
+        self.CpOfT = np.divide(np.subtract(self.pOfT,p0ofT),
+                                0.5*self.airDensity*self.Uh**2)
+
+    def __computeCpStats(self):
+        if self.CpOfT is None:
+            return
+        self.CpMean = np.mean(self.CpOfT,axis=1)
+        self.CpStd = np.std(self.CpOfT,axis=1)
+        self.CpPeakMin, self.CpPeakMax = peak(self.CpOfT,axis=1,method='minmax')       
+
+    def __init__(self,
+                name=None,
+                bldg=None,
+                refProfile=None,
+                Uh=None,
+                samplingFreq=None,
+                airDensity=1.125,
+                AoA=None,
+                tapNo=None,
+                CpOfT=None,
+                pOfT=None,
+                p0ofT=None,
+                CpMean=None,
+                CpStd=None,
+                CpPeakMax=None,
+                CpPeakMin=None,
+                ):
+        
+        self.name = name
+        self.bldg = bldg
+        self.refProfile = refProfile
+        self.Uh = refProfile.Uh if Uh is None and refProfile is not None else Uh
+        self.samplingFreq = samplingFreq
+        self.airDensity = airDensity
+
+        self.AoA = AoA
+        self.tapNo = tapNo      # [Ntaps,]
+        self.CpOfT = CpOfT      # [Ntaps,Ntime]
+        self.pOfT = pOfT        # [Ntaps,Ntime]
+        self.p0ofT = p0ofT      # [Ntime,]
+
+        self.CpMean = CpMean    # [Ntaps,]
+        self.CpStd = CpStd          # [Ntaps,]
+        self.CpPeakMax = CpPeakMax    # [Ntaps,]
+        self.CpPeakMin = CpPeakMin    # [Ntaps,]
+
+        self.Update()
+
+    def __str__(self):
+        return self.name
+
+    def Update(self):
+        self.__verifyData()
+        self.__computeCpTHfrom_p_TH()
+        self.__computeCpStats()
+    
     def write(self):
         pass
     
