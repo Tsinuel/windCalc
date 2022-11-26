@@ -1118,6 +1118,10 @@ class profile:
         if writeSpectra:
             pass
     
+    def write(self,outDir):
+
+        pass
+
     def readFromFile(self,fileName,getHfromU_Uh=False):
         data = pd.read_csv(fileName)
         self.Z = data.Z
@@ -1152,13 +1156,18 @@ class profile:
                         nCols=4
                         )
     
+    def plot(self,figFile=None):
+        self.plotProfiles(figFile=figFile)
+        self.plotTimeHistory(figFile=figFile)
+        self.SpectH.plotSpectra(figFile=figFile)
+
     def plotTimeHistory(self,
                     figFile=None,
                     normalizeTime=False,
                     normalizeVel=False,
                     dataLabels='auto', # automatically taken from the profile object
                     xLabel='auto',
-                    yLabels=("U(t)","V(t)","W(t)"), 
+                    yLabels=("U(H,t)","V(H,t)","W(H,t)"), 
                     xLimits='auto', # [tMin,tMax]
                     yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
                     figSize=[15, 5],
@@ -1509,12 +1518,14 @@ class Cp:
                 name=None,
                 bldg=None,
                 refProfile=None,
-                Uh=None,
+                Zref_input=None,  # for the Cp TH being input below
+                Uref_input=None,  # for the Cp TH being input below
                 samplingFreq=None,
                 airDensity=1.125,
                 AoA=None,
                 tapNo=None,
-                CpOfT=None,
+                CpOfT=None,  # Cp TH referenced to Uref at Zref
+                reReferenceCpToH=True, # whether or not to re-reference Cp building height
                 pOfT=None,
                 p0ofT=None,
                 CpMean=None,

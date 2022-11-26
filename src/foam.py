@@ -14,7 +14,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from datetime import datetime
 
 import wind
-import windLoadCaseProcessors as wProc
+import windLoadCaseProcessors__toBeRemoved as wProc
 import windPlotters as wPlt
 
 __tol_time = 1e-7
@@ -257,7 +257,6 @@ def getClosest2DcoordsTo(X,Y,Zin):
     idx = inletPlane.query(pts)[1]
     
     return idx
-
 
 def scaleInflowData(caseDir,tMin,tMax,H,writeInflow=True,smplName=''):
     

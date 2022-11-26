@@ -10,8 +10,6 @@ import pandas as pd
 import warnings
 
 
-
-
 #===============================================================================
 #==================== CONSTANTS & GLOBAL VARIABLES  ============================
 #===============================================================================
@@ -57,14 +55,12 @@ def extractTapDataFromVTK(vtkFile,tapCoords):
 
     p = vtk_to_numpy(polydata.GetCellData().GetArray(0))
     return np.reshape(p[idx],[-1,1])
-
     # if first:
     #     p_tap = np.reshape(p[idx],[-1,1])
     #     first = False
     # else:
     #     p_tap = np.concatenate((p_tap, np.reshape(p[idx],[-1,1])), axis=1)
 
-      
 def readPSSfile(file_pssr,file_pssd):
     import scipy.io as sio
     
@@ -72,26 +68,33 @@ def readPSSfile(file_pssr,file_pssd):
     with open(file_pssr,'rb') as f:
         tester=np.multiply(np.fromfile(f,dtype='int16',count=-1),10/65536)
     
-    file_pssd_loaded=sio.loadmat(file_pssd)['WTTDATALOG']
-    channel_count=int(file_pssd_loaded['APPSPE'][0,0][0,0][0][0][0]['MAN']['StopAdd'][0,0][0][0]-file_pssd_loaded['APPSPE'][0,0][0,0][0][0][0]['MAN']['StartAdd'][0,0][0][0]+1)
+    WTTDATALOG=sio.loadmat(file_pssd)['WTTDATALOG']
+    channel_count=int(WTTDATALOG['APPSPE'][0,0][0,0][0][0][0]['MAN']['StopAdd'][0,0][0][0]-WTTDATALOG['APPSPE'][0,0][0,0][0][0][0]['MAN']['StartAdd'][0,0][0][0]+1)
     
-    modules_used_count=int(file_pssd_loaded['APPSPE'][0,0][0,0][0][0][0]['MAN']['ModulesInUse'][0,0][0].size)
-    modules_used=file_pssd_loaded['APPSPE'][0,0][0,0][0][0][0]['MAN']['ModulesInUse'][0,0][0]
+    modules_used_count=int(WTTDATALOG['APPSPE'][0,0][0,0][0][0][0]['MAN']['ModulesInUse'][0,0][0].size)
+    modules_used=WTTDATALOG['APPSPE'][0,0][0,0][0][0][0]['MAN']['ModulesInUse'][0,0][0]
     
     data=np.reshape(tester,
         (int(np.divide(np.divide(tester.size,modules_used_count),channel_count)),
         int(np.multiply(modules_used_count,channel_count))))
     
-    for analog_module in file_pssd_loaded['APPSPE'][0,0][0,0][0][0][0]['MAN']['AnalogModules'][0,0][0]:
+    for analog_module in WTTDATALOG['APPSPE'][0,0][0,0][0][0][0]['MAN']['AnalogModules'][0,0][0]:
         analog_index=np.arange(analog_module-1,data.shape[1],modules_used_count)
         analog=data[:,analog_module-1:data.shape[1]:modules_used_count]
         data=np.delete(data,analog_index,axis=1)
     
-        pth_modules=modules_used_count-file_pssd_loaded['APPSPE'][0,0][0,0][0][0][0]['MAN']['AnalogModules'][0,0][0].size
+        pth_modules=modules_used_count-WTTDATALOG['APPSPE'][0,0][0,0][0][0][0]['MAN']['AnalogModules'][0,0][0].size
         
-        if file_pssd_loaded['APPSPE'][0,0][0,0][0][0][0]['MAN']['ValidCal'][0,0][0][0]==1:
-            data=np.divide(data-np.tile(np.reshape(file_pssd_loaded['APPSPE'][0,0][0,0][0][0][0]['MAN']['CAL'][0,0][0][0]['Z'][0:pth_modules,:],((pth_modules)*channel_count),1).transpose(),(data.shape[0],1)),np.tile(np.reshape(file_pssd_loaded['APPSPE'][0,0][0,0][0][0][0]['MAN']['CAL'][0,0][0][0]['Q'][0:pth_modules,:],((pth_modules)*channel_count),1).transpose(),(data.shape[0],1)))
-    
+        if WTTDATALOG['APPSPE'][0,0][0,0][0][0][0]['MAN']['ValidCal'][0,0][0][0]==1:
+            toBeReshaped = WTTDATALOG['APPSPE'][0,0][0,0][0][0][0]['MAN']['CAL'][0,0][0][0]['Z'][0:pth_modules,:]
+            newShape = [1,((pth_modules)*channel_count)]
+            reshaped = np.reshape(toBeReshaped, newShape, 'F') #.transpose()
+            numer = data - reshaped #np.tile(reshaped, (data.shape[0],1))
+            toBeReshaped2 = WTTDATALOG['APPSPE'][0,0][0,0][0][0][0]['MAN']['CAL'][0,0][0][0]['Q'][0:pth_modules,:]
+            newShape2 = [1,((pth_modules)*channel_count)]
+            reshaped2 = np.reshape(toBeReshaped2,newShape2, 'F') #.transpose()
+            # denom = np.tile(reshaped2, (data.shape[0],1))
+            data=np.divide(numer,reshaped2)    
     cp_data=np.zeros((data.shape))
     
     for i in range(int(data.shape[1]/channel_count)-1):
@@ -104,9 +107,13 @@ def readPSSfile(file_pssr,file_pssd):
         for i in range(16):
             header.append(str(mod)+"{0:0>3}".format(i+1))
 
-    return (cp_data,analog,header)
+    return cp_data,analog,WTTDATALOG
 
+def readCobraProbeData():
+    raise NotImplemented
 
+def writeSpecFile(file,keyword,value,writeType):
+    pass
 
 
 

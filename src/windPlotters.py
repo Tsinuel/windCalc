@@ -18,12 +18,14 @@ ctlProf = {
     "marker":   ('o','s','v','^','>','<','x','d','*','1','2','3'),
     "mrkrSize": (2,2,2,2,2,2,2,2,2,2,2,2)
     }
+
 ctlSpect = {
     "col":      ('k','r','g','m','b','c','r','g','b','k','m','c'),
     "lStyle":   ('-','-','-','-','-','-','--','--','--','--','--','--'),
     "marker":   ('o','s','v','^','>','<','x','d','*','1','2','3'),
     "mrkrSize": (2,2,2,2,2,2,2,2,2,2,2,2)
     }
+
 plot = {
         'loglog':plt.loglog,
         'plot':plt.plot,
@@ -169,7 +171,6 @@ def plotVelTimeHistories(
     if isinstance(pltFile, str):
         pdf.close()    
     
-
 def plotSpectra(
                 freq, # ([n1,], [n2,], ... [nN,])
                 Suu=None, # ([n1,], [n2,], ... [nN,])
@@ -265,7 +266,6 @@ def plotSpectra(
 
     if isinstance(pltFile, str):
         pdf.close()
-
 
 def plotSpectra____depricated(
                 freq, # ([n1,], [n2,], ... [nN,])
