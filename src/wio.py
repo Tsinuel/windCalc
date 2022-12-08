@@ -7,6 +7,7 @@ Created on Fri Nov 18 9:20:05 2022
 
 import numpy as np
 import pandas as pd
+import os
 import warnings
 
 
@@ -55,11 +56,33 @@ def extractTapDataFromVTK(vtkFile,tapCoords):
 
     p = vtk_to_numpy(polydata.GetCellData().GetArray(0))
     return np.reshape(p[idx],[-1,1])
-    # if first:
-    #     p_tap = np.reshape(p[idx],[-1,1])
-    #     first = False
-    # else:
-    #     p_tap = np.concatenate((p_tap, np.reshape(p[idx],[-1,1])), axis=1)
+
+def extractTapDataFromCSV(fileDir,tapCoords,writeToFile=True):
+    import glob
+    from scipy.spatial import KDTree
+
+    data = pd.read_csv(fileDir+"/points.csv")
+    pts = data.to_numpy()
+    cells = KDTree(pts)
+    distance,idx = cells.query(tapCoords)
+    newPts = pts[idx,:]
+
+    files = glob.glob(os.path.join(fileDir, "p_*.csv"))
+
+    first = True
+    for f in files:
+        print("Reading: "+f+"   ...")
+        data = pd.read_csv(f)
+        if first:
+            p = np.reshape(data.to_numpy()[idx],[-1,1])
+            first = False
+        else:
+            p = np.concatenate((p,np.reshape(data.to_numpy()[idx],[-1,1])),axis=1)
+    if writeToFile:
+        np.save(fileDir+"/all_pOfT",p)
+        np.save(fileDir+"/tapCoords_closest",newPts)
+    
+    return p,newPts,distance
 
 def readPSSfile(file_pssr,file_pssd):
     import scipy.io as sio

@@ -1428,20 +1428,27 @@ class building:
                     bldg=None,
                     origin=None,
                     normal=None,
-                    vertics2D=None,
-                    vertics3D=None,
+                    vertices2D=None,
+                    vertices3D=None,
                     taps=None,
                     ):
             self.name = name
             self.bldg = bldg
             self.origin = origin  # 
             self.normal = normal  # face normal unit vector
-            self.vertics2D = vertics2D
-            self.vertics3D = vertics3D
+            self.vertices2D = vertices2D
+            self.vertices3D = vertices3D
             self.taps = taps
+            self.tribs = None
+            self.tribArea = None
+
+            self.__generateTributary()
         
         def __str__(self):
             return self.name
+
+        def __generateTributary():
+            pass
 
     class Faces:
         def __init__(self,members=[]):
@@ -1470,6 +1477,7 @@ class building:
                 Hr=None,    # ridge height 
                 B=None,     # shorter plan-inscribing-rectangle width
                 D=None,     # longer plan-inscribing-rectangle width
+                roofSlope=None,
                 faces=None, # list of faces
                 tapNo=None,
                 tapName=None,
@@ -1501,6 +1509,8 @@ class Cp:
         pass
 
     def __computeCpTHfrom_p_TH(self):
+        if self.CpOfT is not None:
+            return
         p0ofT = 0.0 if self.p0ofT is None else self.p0ofT
         if not np.isscalar(p0ofT) and not len(p0ofT) == np.shape(self.pOfT)[1]:
             raise Exception(f"The p and p0 time series for Cp calculation do not match in time steps. Shapes of p0ofT : {np.shape(p0ofT)}, pOfT : {np.shape(self.pOfT)}")
@@ -1514,6 +1524,25 @@ class Cp:
         self.CpStd = np.std(self.CpOfT,axis=1)
         self.CpPeakMin, self.CpPeakMax = peak(self.CpOfT,axis=1,method='minmax')       
 
+    def __reReferenceCp(self,Zref,Uref):
+        if self.refProfile is None or Zref is None or Uref is None:
+            return
+        if self.CpOfT is None and self.CpMean is None and self.CpStd is None and self.CpPeakMax is None and self.CpPeakMin is None:
+            return
+        
+        from scipy.interpolate import interp1d
+        vel = self.refProfile
+        UofZ = interp1d(vel.Z, vel.U)
+        vRatio = UofZ(Zref) / vel.Uh
+        factor = (vRatio)**2
+        self.CpOfT = self.CpOfT*factor if self.CpOfT is not None else self.CpOfT
+        self.CpMean = self.CpMean*factor if self.CpMean is not None else self.CpMean
+        self.CpStd = self.CpStd*factor if self.CpStd is not None else self.CpStd
+        self.CpPeakMax = self.CpPeakMax*factor if self.CpPeakMax is not None else self.CpPeakMax
+        self.CpPeakMin = self.CpPeakMin*factor if self.CpPeakMin is not None else self.CpPeakMin
+        self.Zref = vel.H
+        self.Uref = Uref/vRatio
+        
     def __init__(self,
                 name=None,
                 bldg=None,
@@ -1523,7 +1552,6 @@ class Cp:
                 samplingFreq=None,
                 airDensity=1.125,
                 AoA=None,
-                tapNo=None,
                 CpOfT=None,  # Cp TH referenced to Uref at Zref
                 reReferenceCpToH=True, # whether or not to re-reference Cp building height
                 pOfT=None,
@@ -1537,12 +1565,12 @@ class Cp:
         self.name = name
         self.bldg = bldg
         self.refProfile = refProfile
-        self.Uh = refProfile.Uh if Uh is None and refProfile is not None else Uh
         self.samplingFreq = samplingFreq
         self.airDensity = airDensity
 
+        self.Zref = Zref_input
+        self.Uref = Uref_input
         self.AoA = AoA
-        self.tapNo = tapNo      # [Ntaps,]
         self.CpOfT = CpOfT      # [Ntaps,Ntime]
         self.pOfT = pOfT        # [Ntaps,Ntime]
         self.p0ofT = p0ofT      # [Ntime,]
@@ -1552,6 +1580,10 @@ class Cp:
         self.CpPeakMax = CpPeakMax    # [Ntaps,]
         self.CpPeakMin = CpPeakMin    # [Ntaps,]
 
+
+        if reReferenceCpToH:
+            self.__reReferenceCp(Zref=Zref_input,Uref=Uref_input)
+        
         self.Update()
 
     def __str__(self):
