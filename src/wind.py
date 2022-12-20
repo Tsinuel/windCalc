@@ -10,6 +10,8 @@ import pandas as pd
 import warnings
 from scipy import signal
 from typing import Any, overload
+import shapely.geometry as shp
+from shapely.ops import voronoi_diagram
 
 import windPlotters as wplt
 
@@ -1397,7 +1399,7 @@ class Profiles:
                         drawXlineAt_rf1=drawXlineAt_rf1
                         )
 
-class profile_repeatedTest(profile):
+class profile_repeatedTest(profile): # should be mereged into or inherit Profiles class
     def __init__(self, 
                 name="profile", 
                 profType=None, 
@@ -1421,55 +1423,96 @@ class profile_repeatedTest(profile):
 
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
+class face:
+
+    def __init__(self,
+                name=None,
+                ID=None,
+                bldg=None,
+                origin=None,
+                basisVectors=None,
+                vertices=None,
+                tapNo=None,
+                tapName=None,
+                tapCoord=None,
+                zoneNames=None,
+                zones=None
+                ):
+        self.name = name
+        self.ID = ID
+        self.bldg = bldg
+        self.origin = origin                # origin of the face-local coordinate system
+        self.basisVectors = basisVectors    # [[3,], [3,], [3,]] basis vectors of the local coord sys in the main 3D coord sys.
+
+        self.vertices = vertices            # face corners that form a non-self-intersecting polygon. No need to close it with the last edge.
+        self.zoneNames = zoneNames          # list of lists: zone names per each zoning. e.g., [['NBCC-z1', 'NBCC-z2', ... 'NBCC-zM'], ['ASCE-a1', 'ASCE-a2', ... 'ASCE-aQ']]
+        self.zones = zones                  # list of array of arrays: vertices in local coord sys of each region (r) belonging to each zone (z or a) from each code.
+                                            #   e.g., zones = 
+                                            #         [ [[z1r1,2], [z1r2,2], ... [z1rN1,2]], [[z2r1,2], [z2r2,2], ... [z2rN2,2]], ....... [[zMr1,2], [zMr2,2], ... [zMrNM,2]],  # NBCC
+                                            #           [[a1r1,2], [a1r2,2], ... [a1rN1,2]], [[a2r1,2], [a2r2,2], ... [a2rN2,2]], ....... [[aQr1,2], [aQr2,2], ... [aQrNQ,2]] ] # ASCE
+                                            #          NBCC has M number of zones. Its zone 1 has N1 number of regions defined by the list vertices in zones[0][0]
+                                            #          zones[1][Q][NQ] is the coordinates of NQ'th region belonging to the Q'th zone of ASCE
+                                            # If one wants to avoid
+
+        self.tapNo = tapNo                  # [Ntaps,]
+        self.tapName = tapName              # [Ntaps,]
+        self.tapCoord = tapCoord            # [Ntaps,2]   ... from the local face origin
+
+        self.tribs = None
+        self.panels = None
+
+        self.__generateTributaries()
+        self.__generatePanels()
+    
+    def __str__(self):
+        return self.name
+
+    def __generateTributaries(self):
+        if self.vertices2D is None or self.tapCoord is None:
+            return
+        
+        from shapely.ops import voronoi_diagram
+
+        taps = shp.MultiPoint(self.tapCoord)
+        faceBoundary = shp.Polygon(self.vertices)
+        tributaries = voronoi_diagram(taps)
+        self.tribs = []
+        for trib in tributaries.geoms:
+            self.tribs.append(faceBoundary.intersection(trib))
+
+    def __generatePanels(self):
+        pass
+
+    def tapCoord3D(self):
+        pass
+
+    def vertices3D(self):
+        pass
+
+
+
+
+class Faces:
+    def __init__(self,members=[]):
+        self._currentIndex = 0
+        self.members = members
+    
+    def _numOfMembers(self):
+        if self.members is None:
+            return 0
+        return len(self.members)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._currentIndex < self._numOfMembers():
+            member = self.members[self._currentIndex]
+            self._currentIndex += 1
+            return member
+        raise StopIteration
+
 class building:
-    class face:
-        def __init__(self,
-                    name=None,
-                    bldg=None,
-                    origin=None,
-                    normal=None,
-                    vertices2D=None,
-                    vertices3D=None,
-                    taps=None,
-                    ):
-            self.name = name
-            self.bldg = bldg
-            self.origin = origin  # 
-            self.normal = normal  # face normal unit vector
-            self.vertices2D = vertices2D
-            self.vertices3D = vertices3D
-            self.taps = taps
-            self.tribs = None
-            self.tribArea = None
-
-            self.__generateTributary()
-        
-        def __str__(self):
-            return self.name
-
-        def __generateTributary():
-            pass
-
-    class Faces:
-        def __init__(self,members=[]):
-            self._currentIndex = 0
-            self.members = members
-        
-        def _numOfMembers(self):
-            if self.members is None:
-                return 0
-            return len(self.members)
-
-        def __iter__(self):
-            return self
-
-        def __next__(self):
-            if self._currentIndex < self._numOfMembers():
-                member = self.members[self._currentIndex]
-                self._currentIndex += 1
-                return member
-            raise StopIteration
-
     def __init__(self,
                 name=None,
                 H=None,     # average roof height
@@ -1479,11 +1522,6 @@ class building:
                 D=None,     # longer plan-inscribing-rectangle width
                 roofSlope=None,
                 faces=None, # list of faces
-                tapNo=None,
-                tapName=None,
-                tapFaceID=None,
-                tapCoord3D=None,
-                tapCoord2D=None,
                 lScl=1.0,   # length scale
                ):
         self.name = name
@@ -1492,12 +1530,8 @@ class building:
         self.Hr = Hr
         self.B = B
         self.D = D
+        self.roofSlope = roofSlope
         self.faces = faces
-        self.tapNo = tapNo      # [Ntaps,]
-        self.tapName = tapName  # [Ntaps,]
-        self.tapFaceID = tapFaceID  # [Ntaps,]
-        self.tapCoord3D = tapCoord3D  # [Ntaps,3]   ... from the building 3D origin
-        self.tapCoord2D = tapCoord2D  # [Ntaps,2]   ... from the local face origin
         self.lScl = lScl
     
     def __str__(self):
