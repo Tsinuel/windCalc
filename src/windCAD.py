@@ -283,3 +283,215 @@ def calculateTapWeightsPerPanel(panels,tapsAll,tapIdxAll, wghtTolerance=0.000000
 #===============================================================================
 #================================ CLASSES ======================================
 #===============================================================================
+
+class face:
+
+    def __init__(self,
+                name=None,
+                ID=None,
+                bldg=None,
+                origin=None,
+                basisVectors=None,
+                vertices=None,
+                tapNo=None,
+                tapIdx=None,
+                tapName=None,
+                tapCoord=None,
+                zoningCodeNames=None,
+                zoneNames=None,
+                zones=None,
+                nominalPanelAreas=None,
+                numOfNominalPanelAreas=5,
+                ):
+        self.name = name
+        self.ID = ID
+        self.bldg = bldg
+        self.origin = origin                # origin of the face-local coordinate system
+        self.basisVectors = basisVectors    # [[3,], [3,], [3,]] basis vectors of the local coord sys in the main 3D coord sys.
+
+        self.vertices = vertices            # [Nv, 2] face corners that form a non-self-intersecting polygon. No need to close it with the last edge.
+        self.zoningCodeNames = zoningCodeNames
+        self.zoneNames = zoneNames          # dict of dicts: zone names per each zoning. e.g., [['NBCC-z1', 'NBCC-z2', ... 'NBCC-zM'], ['ASCE-a1', 'ASCE-a2', ... 'ASCE-aQ']]
+        self.zones = zones                  # list of array of arrays: vertices in local coord sys of each subzone (r) belonging to each zone (z or a) from each code.
+                                            #   e.g., zones = 
+                                            #         [ [[z1r1,2], [z1r2,2], ... [z1rN1,2]], [[z2r1,2], [z2r2,2], ... [z2rN2,2]], ....... [[zMr1,2], [zMr2,2], ... [zMrNM,2]],  # NBCC
+                                            #           [[a1r1,2], [a1r2,2], ... [a1rN1,2]], [[a2r1,2], [a2r2,2], ... [a2rN2,2]], ....... [[aQr1,2], [aQr2,2], ... [aQrNQ,2]] ] # ASCE
+                                            #          NBCC has M number of zones. Its zone 1 has N1 number of subzones defined by the list vertices in zones[0][0]
+                                            #          zones[1][Q][NQ] is the coordinates of NQ'th subzone belonging to the Q'th zone of ASCE
+                                            # If you don't want to apply any zoning, put the face vertices as [[[[Nv,2],],],]
+        self.nominalPanelAreas = nominalPanelAreas  # a vector of nominal areas to generate panels. The panels areas will be close but not necessarily exactly equal to these.
+        self.numOfNominalPanelAreas = numOfNominalPanelAreas
+        self.tapNo = tapNo                  # [Ntaps,]
+        self.tapIdx = tapIdx                # [Ntaps,] tap indices in the main matrix of the entire building
+        self.tapName = tapName              # [Ntaps,]
+        self.tapCoord = tapCoord            # [Ntaps,2]   ... from the local face origin
+
+        self.tapTribs = None
+        self.panels = None
+        self.tapWghtPerPanel = None
+        self.tapIdxPerPanel = None
+        self.panelAreas = None
+
+
+        self.__generateTributaries()
+        self.__generatePanels()
+    
+    def __str__(self):
+        return self.name
+
+    def __generateTributaries(self):
+        if self.vertices is None or self.tapCoord is None:
+            return
+        self.tapTribs = trimmedVoronoi(self.vertices, self.tapCoord)
+
+    def __defaultZoneAndPanelConfig(self):
+        if self.zones is None and self.vertices is not None:
+            self.zoningCodeNames = {
+                            0:'Default',
+                        }
+            self.zoneNames = {
+                            0:{
+                                0:'Default',
+                            },
+                        }
+            self.zones = [
+                            [
+                                [
+                                    self.vertices, # subzone: None
+                                ], # Zone: Default
+                            ], # Code: Default
+                        ]
+        if self.nominalPanelAreas is None:
+            bound = shp.Polygon(self.vertices)
+            maxArea = bound.area
+            minArea = maxArea
+            for trib in self.tapTribs.geoms:
+                minArea = min((minArea, trib.area))
+
+            self.nominalPanelAreas = np.linspace(minArea, maxArea, self.numOfNominalPanelAreas)
+
+    def __generatePanels(self):
+        self.__defaultZoneAndPanelConfig()
+        if self.tapTribs is None or self.zones is None:
+            return
+
+        self.panels = ()
+        self.tapWghtPerPanel = ()
+        self.tapIdxPerPanel = ()
+        for c,code in enumerate(self.zones):
+            panels_c = ()
+            pnlWeights_c = ()
+            tapIdxByPnl_c = ()
+            for z,zone in enumerate(code):
+                panels_z = ()
+                pnlWeights_z = ()
+                tapIdxByPnl_z = ()
+                for a,area in enumerate(self.nominalPanelAreas):
+                    panels_a = np.asarray([],dtype=object)
+                    pnlWeights_a = np.asarray([],dtype=object)
+                    tapIdxByPnl_a = np.asarray([],dtype=object)
+                    for r,subzone in enumerate(zone):
+                        pnls,areas = meshRegionWithPanels(subzone,area,debug=False)
+                        panels_a = np.append(panels_a, pnls)
+
+                        tapsInSubzone = []
+                        idxInSubzone = []
+                        subzonePlygn = shp.Polygon(subzone)
+                        for i,tap in zip(self.tapIdx,self.tapTribs.geoms):
+                            if intersects(tap,subzonePlygn):
+                                tapsInSubzone.append(tap)
+                                idxInSubzone.append(i)
+                        wght, Idx, overlaps = calculateTapWeightsPerPanel(pnls,tapsInSubzone,idxInSubzone)
+                        pnlWeights_a = np.append(pnlWeights_a, wght)
+                        tapIdxByPnl_a = np.append(tapIdxByPnl_a, Idx)
+                    panels_z += (panels_a,)
+                    pnlWeights_z += (pnlWeights_a,)
+                    tapIdxByPnl_z += (tapIdxByPnl_a,)
+                panels_c += (panels_z,)
+                pnlWeights_c += (pnlWeights_z,)
+                tapIdxByPnl_c += (tapIdxByPnl_z,)
+            self.panels += (panels_c,)
+            self.tapWghtPerPanel += (pnlWeights_c,)
+            self.tapIdxPerPanel += (tapIdxByPnl_c,)
+
+        print(f"Shape of 'panels': {np.shape(np.array(self.panels,dtype=object))}")
+        print(f"Shape of 'pnlWeights': {np.shape(np.array(self.tapWghtPerPanel,dtype=object))}")
+        print(f"Shape of 'tapIdxByPnl': {np.shape(np.array(self.tapIdxPerPanel,dtype=object))}")
+
+        debugMode = False
+        if debugMode:
+            # plot panels
+            for c,code in enumerate(self.zones):
+                for a,area in enumerate(self.nominalPanelAreas):
+                    plt.figure(figsize=[20,10])
+                    plt.plot(taps[:,0],taps[:,1],'.k')
+                    for t in tribs.geoms:
+                        x,y = t.exterior.xy
+                        plt.plot(x,y,':r',lw=0.5)
+                    for z,zone in enumerate(code):
+                        for subzone in zone:
+                            plt.plot(subzone[:,0],subzone[:,1],'--k',lw=2.0)
+                        for p in panels[c][z][a]:
+                            # print(p)
+                            x,y = p.exterior.xy
+                            plt.plot(x,y,'-b',lw=0.5)
+                    plt.axis('equal')
+                    plt.show()
+
+
+
+
+    def tapCoord3D(self):
+        pass
+
+    def vertices3D(self):
+        pass
+
+
+
+
+class Faces:
+    def __init__(self,members=[]):
+        self._currentIndex = 0
+        self.members = members
+    
+    def _numOfMembers(self):
+        if self.members is None:
+            return 0
+        return len(self.members)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._currentIndex < self._numOfMembers():
+            member = self.members[self._currentIndex]
+            self._currentIndex += 1
+            return member
+        raise StopIteration
+
+class building:
+    def __init__(self,
+                name=None,
+                H=None,     # average roof height
+                He=None,    # eave height
+                Hr=None,    # ridge height 
+                B=None,     # shorter plan-inscribing-rectangle width
+                D=None,     # longer plan-inscribing-rectangle width
+                roofSlope=None,
+                faces=None, # list of faces
+                lScl=1.0,   # length scale
+               ):
+        self.name = name
+        self.H = H
+        self.He = He
+        self.Hr = Hr
+        self.B = B
+        self.D = D
+        self.roofSlope = roofSlope
+        self.faces = faces
+        self.lScl = lScl
+    
+    def __str__(self):
+        return self.name
+
