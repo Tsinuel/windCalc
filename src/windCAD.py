@@ -10,6 +10,8 @@ import pandas as pd
 import os
 import warnings
 import shapely.geometry as shp
+import json
+import matplotlib.pyplot as plt
 
 from shapely.ops import voronoi_diagram
 from shapely.validation import make_valid
@@ -24,9 +26,7 @@ from shapely.validation import make_valid
 #=============================== FUNCTIONS =====================================
 #===============================================================================
 
-
-
-
+#--------------------- TAPS, PANELS, & AREA AVERAGING --------------------------
 def getIntersection(pA, pB, allowMultiPolygon=True):
     
     # pA = shp.Polygon([])
@@ -97,9 +97,7 @@ def getIntersection(pA, pB, allowMultiPolygon=True):
                     warnings.warn("MultiPolygon obtained while intersecting. Make sure that the receiving function is capable of treating it.")
                 else:
                     overlap = None
-            elif overlap.geom_type == "LineString":
-                overlap = None
-            elif overlap.geom_type == "Point":
+            elif overlap.geom_type == "LineString" or overlap.geom_type == "Point" or overlap.geom_type == "MultiLineString":
                 overlap = None
             else:
                 raise Exception(f"Unknown geometry type {overlap.geom_type} obtained while intersecting.")
@@ -162,9 +160,8 @@ def trimmedVoronoi(bound,coords):
 
 def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False):
     if debug:
-        import matplotlib.pyplot as plt
-        # print(f"Region: shape {region.shape}, {region}\n")
-        # print(f"NominalArea = {area}")
+        print(f"Region: shape {region.shape}, {region}\n")
+        print(f"NominalArea = {area}")
 
     # generate a uniform grid of panel center points covering the extents of the region
     xMin, xMax = min(region[:,0]), max(region[:,0])
@@ -187,11 +184,6 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False):
     bound = shp.Polygon(region)
 
     if debug:
-        # print(f"xRange = {Dx}, yRange = {Dy}")
-        # print(f"N = {N}, M = {M}")
-        # plt.figure(figsize=[15,10])
-        # plt.plot(region[:,0],region[:,1],'-k',lw=2)
-        # plt.plot(X,Y,'.k')
         plt.figure(figsize=[15,10])
         x,y = bound.exterior.xy
         plt.plot(x,y,'-b',lw=3)
@@ -229,22 +221,19 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False):
             panels.append(newRig)
         else:
             continue
-        
         areas.append(newRig.area)
         x,y = newRig.exterior.xy
         panels.append(newRig)
-        # print(f"      xy shape of panel_i: {np.shape(xy)},    total panels shape: {np.shape(panels)}")
         
         if debug:
             summedArea += newRig.area
-            plt.plot(x,y,'-r',lw=0.5)
+            plt.fill(x,y,'r',alpha=0.5)
+            plt.plot(x,y,'-r',alpha=0.2,lw=0.5)
 
     if len(panels) == 0:
         panels.append(bound)
 
     if debug:
-        # plt.xlim([-0.15,0.12])
-        # plt.ylim([-0.03,0.05])
         print(f"Zone area = {bound.area}, summed area = {summedArea}")
         plt.axis('equal')
         plt.show()
@@ -253,11 +242,12 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False):
     panels = np.asarray(panels,dtype=object)
     return panels, areas
 
-def calculateTapWeightsPerPanel(panels,tapsAll,tapIdxAll, wghtTolerance=0.0000001):    
-    weights = np.array([],dtype=object)
-    tapIdxs = np.array([],dtype=object)
+def calculateTapWeightsPerPanel(panels,tapsAll,tapIdxAll, wghtTolerance=0.0000001, showLog=True):    
+    weights = ()
+    tapIdxs = ()
     overlaps = ()
-    for pnl in panels:
+    errIdxs = []
+    for p,pnl in enumerate(panels):
         A = pnl.area
         w = []
         idx = []
@@ -271,25 +261,37 @@ def calculateTapWeightsPerPanel(panels,tapsAll,tapIdxAll, wghtTolerance=0.000000
             else:
                 continue
         if abs(sum(w)-1) > wghtTolerance:
+            errIdxs.append(p)
             warnings.warn(f"The sum of area weights {sum(w)} from involved taps does not add up to 1 within the tolerance of 0.1%.")
-        weights = np.append(weights, w)
-        tapIdxs = np.append(tapIdxs, idx)
+        weights += (w,)
+        tapIdxs += (idx,)
         overlaps += (ovlps,)
+        if showLog:
+            print(f"\t\t\t\tNo. of taps in panel: {len(w)}, \tError in wights: {1-sum(w)}")
     
-    return weights, tapIdxs, overlaps
+    return weights, tapIdxs, overlaps, errIdxs
 
+#--------------------------- COORDINATE SYSTEMS --------------------------------
+def transform(geomIn,orig,T):
+    N,M = np.shape(geomIn)
+    if M == 2:
+        geomIn = np.append(geomIn,np.zeros((N,1)),axis=1)
+    geomOut =np.transpose(np.dot(T,np.transpose(np.add(geomIn,orig))))
+    return geomOut
 
 
 #===============================================================================
 #================================ CLASSES ======================================
 #===============================================================================
 
+#----------------------------- BUILDING MODELS ---------------------------------
 class face:
 
+    """---------------------------------- Internals -----------------------------------"""
     def __init__(self,
-                name=None,
                 ID=None,
-                bldg=None,
+                name=None,
+                note=None,
                 origin=None,
                 basisVectors=None,
                 vertices=None,
@@ -297,28 +299,20 @@ class face:
                 tapIdx=None,
                 tapName=None,
                 tapCoord=None,
-                zoningCodeNames=None,
-                zoneNames=None,
-                zones=None,
+                zoneDict=None,
                 nominalPanelAreas=None,
                 numOfNominalPanelAreas=5,
+                file_basic=None,
+                file_derived=None,
                 ):
-        self.name = name
+        # basics
         self.ID = ID
-        self.bldg = bldg
+        self.name = name
+        self.note = note
         self.origin = origin                # origin of the face-local coordinate system
         self.basisVectors = basisVectors    # [[3,], [3,], [3,]] basis vectors of the local coord sys in the main 3D coord sys.
-
         self.vertices = vertices            # [Nv, 2] face corners that form a non-self-intersecting polygon. No need to close it with the last edge.
-        self.zoningCodeNames = zoningCodeNames
-        self.zoneNames = zoneNames          # dict of dicts: zone names per each zoning. e.g., [['NBCC-z1', 'NBCC-z2', ... 'NBCC-zM'], ['ASCE-a1', 'ASCE-a2', ... 'ASCE-aQ']]
-        self.zones = zones                  # list of array of arrays: vertices in local coord sys of each subzone (r) belonging to each zone (z or a) from each code.
-                                            #   e.g., zones = 
-                                            #         [ [[z1r1,2], [z1r2,2], ... [z1rN1,2]], [[z2r1,2], [z2r2,2], ... [z2rN2,2]], ....... [[zMr1,2], [zMr2,2], ... [zMrNM,2]],  # NBCC
-                                            #           [[a1r1,2], [a1r2,2], ... [a1rN1,2]], [[a2r1,2], [a2r2,2], ... [a2rN2,2]], ....... [[aQr1,2], [aQr2,2], ... [aQrNQ,2]] ] # ASCE
-                                            #          NBCC has M number of zones. Its zone 1 has N1 number of subzones defined by the list vertices in zones[0][0]
-                                            #          zones[1][Q][NQ] is the coordinates of NQ'th subzone belonging to the Q'th zone of ASCE
-                                            # If you don't want to apply any zoning, put the face vertices as [[[[Nv,2],],],]
+        self.zoneDict = zoneDict            # dict of dicts: zone names per each zoning. e.g., [['NBCC-z1', 'NBCC-z2', ... 'NBCC-zM'], ['ASCE-a1', 'ASCE-a2', ... 'ASCE-aQ']]
         self.nominalPanelAreas = nominalPanelAreas  # a vector of nominal areas to generate panels. The panels areas will be close but not necessarily exactly equal to these.
         self.numOfNominalPanelAreas = numOfNominalPanelAreas
         self.tapNo = tapNo                  # [Ntaps,]
@@ -326,16 +320,24 @@ class face:
         self.tapName = tapName              # [Ntaps,]
         self.tapCoord = tapCoord            # [Ntaps,2]   ... from the local face origin
 
+        # derived
         self.tapTribs = None
         self.panels = None
+        self.panelAreas = None
         self.tapWghtPerPanel = None
         self.tapIdxPerPanel = None
-        self.panelAreas = None
+        self.error_in_panels = None
+        self.error_in_zones = None
 
 
-        self.__generateTributaries()
-        self.__generatePanels()
-    
+        # fill derived
+        if file_basic is None:
+            self.Update()
+        elif file_derived is None:
+            self.readFromFile(file_basic=file_basic)
+        else:
+            self.readFromFile(file_basic=file_basic,file_derived=file_derived)
+            
     def __str__(self):
         return self.name
 
@@ -345,116 +347,258 @@ class face:
         self.tapTribs = trimmedVoronoi(self.vertices, self.tapCoord)
 
     def __defaultZoneAndPanelConfig(self):
-        if self.zones is None and self.vertices is not None:
-            self.zoningCodeNames = {
-                            0:'Default',
+        if self.zoneDict is None and self.nominalPanelAreas is None:
+            return
+        if self.zoneDict == {}:
+            self.zoneDict = {
+                                0:['Default','Default', np.array(self.vertices)],
                         }
-            self.zoneNames = {
-                            0:{
-                                0:'Default',
-                            },
-                        }
-            self.zones = [
-                            [
-                                [
-                                    self.vertices, # subzone: None
-                                ], # Zone: Default
-                            ], # Code: Default
-                        ]
-        if self.nominalPanelAreas is None:
+        if self.nominalPanelAreas is None and self.zoneDict is not None:
             bound = shp.Polygon(self.vertices)
             maxArea = bound.area
             minArea = maxArea
             for trib in self.tapTribs.geoms:
                 minArea = min((minArea, trib.area))
 
-            self.nominalPanelAreas = np.linspace(minArea, maxArea, self.numOfNominalPanelAreas)
+            self.nominalPanelAreas = np.logspace(np.log10(minArea), np.log10(maxArea), self.numOfNominalPanelAreas)
 
     def __generatePanels(self):
         self.__defaultZoneAndPanelConfig()
-        if self.tapTribs is None or self.zones is None:
+        print(f"Generating panels ...")
+        # print(f"Shape of zones: {np.shape(self.zones)}")
+        if self.tapTribs is None or self.zoneDict is None:
             return
 
-        self.panels = ()
-        self.tapWghtPerPanel = ()
-        self.tapIdxPerPanel = ()
-        for c,code in enumerate(self.zones):
-            panels_c = ()
-            pnlWeights_c = ()
-            tapIdxByPnl_c = ()
-            for z,zone in enumerate(code):
-                panels_z = ()
-                pnlWeights_z = ()
-                tapIdxByPnl_z = ()
-                for a,area in enumerate(self.nominalPanelAreas):
-                    panels_a = np.asarray([],dtype=object)
-                    pnlWeights_a = np.asarray([],dtype=object)
-                    tapIdxByPnl_a = np.asarray([],dtype=object)
-                    for r,subzone in enumerate(zone):
-                        pnls,areas = meshRegionWithPanels(subzone,area,debug=False)
-                        panels_a = np.append(panels_a, pnls)
+        self.panels = ()    # [nZones][nAreas][nPanels]
+        self.panelAreas = ()    # [nZones][nAreas][nPanels]
+        self.tapWghtPerPanel = ()    # [nZones][nAreas][nPanels][nTapsPerPanel]
+        self.tapIdxPerPanel = ()   # [nZones][nAreas][nPanels][nTapsPerPanel]
+        self.error_in_panels = ()
+        self.error_in_zones = ()
+        for z,zn in enumerate(self.zoneDict):
+            print(f"\tWorking on: {self.zoneDict[zn][0]}-{self.zoneDict[zn][1]}")
+            zoneBoundary = self.zoneDict[zn][2]
+            panels_z = ()
+            panelA_z = ()
+            pnlWeights_z = ()
+            tapIdxByPnl_z = ()
+            err_pnl_z = ()
+            err_zn_z = ()
+            for a,area in enumerate(self.nominalPanelAreas):
+                print(f"\t\tWorking on nominal area: {area}")
+                print(f"zoneBoundary: {zoneBoundary}, area: {area}")
+                pnls,areas = meshRegionWithPanels(zoneBoundary,area,debug=False)
 
-                        tapsInSubzone = []
-                        idxInSubzone = []
-                        subzonePlygn = shp.Polygon(subzone)
-                        for i,tap in zip(self.tapIdx,self.tapTribs.geoms):
-                            if intersects(tap,subzonePlygn):
-                                tapsInSubzone.append(tap)
-                                idxInSubzone.append(i)
-                        wght, Idx, overlaps = calculateTapWeightsPerPanel(pnls,tapsInSubzone,idxInSubzone)
-                        pnlWeights_a = np.append(pnlWeights_a, wght)
-                        tapIdxByPnl_a = np.append(tapIdxByPnl_a, Idx)
-                    panels_z += (panels_a,)
-                    pnlWeights_z += (pnlWeights_a,)
-                    tapIdxByPnl_z += (tapIdxByPnl_a,)
-                panels_c += (panels_z,)
-                pnlWeights_c += (pnlWeights_z,)
-                tapIdxByPnl_c += (tapIdxByPnl_z,)
-            self.panels += (panels_c,)
-            self.tapWghtPerPanel += (pnlWeights_c,)
-            self.tapIdxPerPanel += (tapIdxByPnl_c,)
+                tapsInSubzone = []
+                idxInSubzone = []
+                zonePlygn = shp.Polygon(zoneBoundary)
+                for i,tap in zip(self.tapIdx,self.tapTribs.geoms):
+                    if intersects(tap,zonePlygn):
+                        tapsInSubzone.append(tap)
+                        idxInSubzone.append(i)
+                wght, Idx, overlaps, errIdxs = calculateTapWeightsPerPanel(pnls,tapsInSubzone,idxInSubzone)
+                
+                panels_z += (pnls,)
+                panelA_z += (areas,)
+                pnlWeights_z += (wght,)
+                tapIdxByPnl_z += (Idx,)
+                err_pnl_z += (errIdxs,)
+
+                errorInArea = 100*(zonePlygn.area - sum(areas))/zonePlygn.area
+                print(f"\t\t\tArea check: \t Zone area = {zonePlygn.area}, \t sum of all panel areas = {sum(areas)}, \t Error = {errorInArea}%")
+                print(f"\t\tGenerated number of panels: {len(pnls)}")
+                
+                if abs(errorInArea) > 1.0:
+                    err_zn_z += (a,)
+                    warnings.warn(f"The difference between Zone area and the sum of its panel areas exceeds the tolerance level.")
+                
+            self.panels += (panels_z,)
+            self.panelAreas += (panelA_z,)
+            self.tapWghtPerPanel += (pnlWeights_z,)
+            self.tapIdxPerPanel += (tapIdxByPnl_z,)
+            self.error_in_panels += (err_pnl_z,)
+            self.error_in_zones += (err_zn_z,)
 
         print(f"Shape of 'panels': {np.shape(np.array(self.panels,dtype=object))}")
+        print(f"Shape of 'panelAreas': {np.shape(np.array(self.panelAreas,dtype=object))}")
         print(f"Shape of 'pnlWeights': {np.shape(np.array(self.tapWghtPerPanel,dtype=object))}")
         print(f"Shape of 'tapIdxByPnl': {np.shape(np.array(self.tapIdxPerPanel,dtype=object))}")
 
-        debugMode = False
-        if debugMode:
-            # plot panels
-            for c,code in enumerate(self.zones):
-                for a,area in enumerate(self.nominalPanelAreas):
-                    plt.figure(figsize=[20,10])
-                    plt.plot(taps[:,0],taps[:,1],'.k')
-                    for t in tribs.geoms:
-                        x,y = t.exterior.xy
-                        plt.plot(x,y,':r',lw=0.5)
-                    for z,zone in enumerate(code):
-                        for subzone in zone:
-                            plt.plot(subzone[:,0],subzone[:,1],'--k',lw=2.0)
-                        for p in panels[c][z][a]:
-                            # print(p)
-                            x,y = p.exterior.xy
-                            plt.plot(x,y,'-b',lw=0.5)
-                    plt.axis('equal')
-                    plt.show()
-
-
-
+    """-------------------------------- Data handlers ---------------------------------"""
+    def Update(self):
+        self.__generateTributaries()
+        self.__generatePanels()
 
     def tapCoord3D(self):
-        pass
+        return transform(self.tapCoord, self.origin, self.basisVectors)
 
     def vertices3D(self):
-        pass
+        return transform(self.vertices, self.origin, self.basisVectors)
 
+    def to_dict(self,getDerived=False):
+        basic = {}
+        basic['ID'] = self.ID
+        basic['name'] = self.name
+        basic['note'] = self.note
+        basic['origin'] = self.origin
+        basic['basisVectors'] = self.basisVectors
+        basic['vertices'] = self.vertices
+        basic['zoneDict'] = self.zoneDict
+        if basic['zoneDict'] is not None:
+            for val in basic['zoneDict']:
+                if not basic['zoneDict'][val][2] == []:
+                    temp = list(basic['zoneDict'][val][2])
+                    for i,x in enumerate(temp):
+                        temp[i] = list(x)
+                    basic['zoneDict'][val][2] = temp
+        basic['nominalPanelAreas'] = self.nominalPanelAreas
+        basic['numOfNominalPanelAreas'] = self.numOfNominalPanelAreas
+        basic['tapNo'] = None if self.tapNo is None else self.tapNo.tolist()
+        basic['tapIdx'] = None if self.tapIdx is None else self.tapIdx.tolist()
+        basic['tapName'] = None if self.tapName is None else self.tapName.tolist()
+        basic['tapCoord'] = None if self.tapCoord is None else self.tapCoord.tolist()
 
+        derived = None
+        if getDerived:
+            derived = {}
+            derived['tapTribs'] = self.tapTribs
+            derived['panels'] = self.panels
+            derived['panelAreas'] = self.panelAreas
+            derived['tapWghtPerPanel'] = self.tapWghtPerPanel
+            derived['tapIdxPerPanel'] = self.tapIdxPerPanel
+            derived['error_in_panels'] = self.error_in_panels
+            derived['error_in_zones'] = self.error_in_zones
+        
+        return basic, derived
+        
+    def from_dict(self,basic,derived=None):
+        self.ID = basic['ID']
+        self.name = basic['name']
+        self.note = basic['note']
+        self.origin = basic['origin']
+        self.basisVectors = basic['basisVectors']
+        self.vertices = basic['vertices']
+        self.zoneDict = basic['zoneDict']
+        if self.zoneDict is not None:
+            for val in self.zoneDict:
+                self.zoneDict[val][2] = np.array(self.zoneDict[val][2])
+        self.nominalPanelAreas = basic['nominalPanelAreas']
+        self.numOfNominalPanelAreas = basic['numOfNominalPanelAreas']
+        self.tapNo = np.array(basic['tapNo'])
+        self.tapIdx = np.array(basic['tapIdx'])
+        self.tapName = np.array(basic['tapName'])
+        self.tapCoord = np.array(basic['tapCoord'])
 
+        if derived is not None:
+            self.tapTribs = derived['tapTribs']
+            self.panels = derived['panels']
+            self.panelAreas = derived['panelAreas']
+            self.tapWghtPerPanel = derived['tapWghtPerPanel']
+            self.tapIdxPerPanel = derived['tapIdxPerPanel']
+            self.error_in_panels = derived['error_in_panels']
+            self.error_in_zones = derived['error_in_zones']
+        else:
+            self.Update()
+
+    def writeToFile(self,file_basic, file_derived=None):
+        getDerived = file_derived is not None
+        basic, derived = self.to_dict(getDerived=getDerived)
+
+        with open(file_basic, 'w') as f:
+            json.dump(basic,f, indent=4, separators=(',', ':'))
+        
+        if file_derived is not None:
+            with open(file_derived, 'w') as f:
+                json.dump(derived,f, indent=4, separators=(',', ':'))
+    
+    def readFromFile(self,file_basic, file_derived=None):
+        with open(file_basic, 'r') as f:
+            basic = json.load(f)
+        
+        if file_derived is not None:
+            with open(file_derived, 'r') as f:
+                derived = json.load(f)
+        else:
+            derived = None
+
+        self.from_dict(basic, derived=derived)
+
+    """--------------------------------- Plotters -------------------------------------"""
+    def plot(self, figFile=None,xLimits=None,figSize=[15,5], showAxis=False, dotSize=3,
+             overlayTaps=False, overlayTribs=False, overlayPanels=False, overlayZones=False, useSubplotForDifferentNominalAreas=True, nSubPlotCols=3):
+
+        if overlayPanels:
+            if useSubplotForDifferentNominalAreas:
+                plt.figure(figsize=figSize)
+            for a,area in enumerate(self.nominalPanelAreas):
+                if useSubplotForDifferentNominalAreas:
+                    nRows = int(np.ceil((len(self.nominalPanelAreas))/nSubPlotCols))
+                    plt.subplot(nRows, nSubPlotCols, a+1)
+                else:
+                    plt.figure(figsize=figSize)
+                xy = np.array(self.vertices)
+                plt.plot(xy[:,0], xy[:,1], '-k', lw=2)
+                if overlayTaps:
+                    plt.plot(self.tapCoord[:,0],self.tapCoord[:,1],'.k',markersize=dotSize)
+                if overlayTribs:
+                    for trib in self.tapTribs.geoms:
+                        x,y = trib.exterior.xy
+                        plt.plot(x,y,':r',lw=0.5)
+                for z,zone in enumerate(self.zoneDict.values()):
+                    for p in self.panels[z][a]:
+                        x,y = p.exterior.xy
+                        plt.plot(x,y,'-b',lw=0.5)
+                    pass
+                if overlayZones:
+                    for zDict in self.zoneDict:
+                        xy = self.zoneDict[zDict][2]
+                        plt.plot(xy[:,0], xy[:,1], '--k', lw=2)
+                plt.axis('equal')
+                if not showAxis:
+                    ax = plt.gca()
+                    ax.xaxis.set_visible(False)
+                    ax.yaxis.set_visible(False)
+                    ax.set_frame_on(False)
+                if not useSubplotForDifferentNominalAreas:
+                    plt.show()
+            if useSubplotForDifferentNominalAreas:
+                plt.show()
+        else:
+            plt.figure(figsize=figSize)
+            xy = np.array(self.vertices)
+            plt.plot(xy[:,0], xy[:,1], '-k', lw=2)
+            if overlayTaps:
+                plt.plot(self.tapCoord[:,0],self.tapCoord[:,1],'.k',markersize=dotSize)
+            if overlayTribs:
+                for trib in self.tapTribs.geoms:
+                    x,y = trib.exterior.xy
+                    plt.plot(x,y,':r',lw=0.5)
+            if overlayZones:
+                for zDict in self.zoneDict:
+                    xy = self.zoneDict[zDict][2]
+                    plt.plot(xy[:,0], xy[:,1], '--k', lw=2)
+            plt.axis('equal')
+            if not showAxis:
+                ax = plt.gca()
+                ax.xaxis.set_visible(False)
+                ax.yaxis.set_visible(False)
+                ax.set_frame_on(False)
+            plt.show()
 
 class Faces:
-    def __init__(self,members=[]):
+    def __init__(self,
+                    members=[],
+                    file_basic=None,
+                    file_derived=None,
+                    ):
         self._currentIndex = 0
         self.members = members
-    
+
+        if file_basic is not None and file_derived is not None:
+            self.readFromFile(file_basic=file_basic,file_derived=file_derived)
+        elif file_basic is not None:
+            self.readFromFile(file_basic=file_basic)
+        
     def _numOfMembers(self):
         if self.members is None:
             return 0
@@ -468,7 +612,90 @@ class Faces:
             member = self.members[self._currentIndex]
             self._currentIndex += 1
             return member
-        raise StopIteration
+        else:
+            self._currentIndex = 0
+            raise StopIteration
+
+    def __getitem__(self, key):
+        return self.members[key]
+    
+    def __setitem__(self, key, value):
+        self.members[key] = value
+
+    def zoneDict(self):
+        allZones = {}
+        i = 0
+        for fc in self.members:
+            for val in fc.zoneDict.values():
+                isNewVal = True
+                for acceptedZone in allZones.values():
+                    if val[0] == acceptedZone[0] and val[1] == acceptedZone[1]:
+                        isNewVal = False
+                        break
+                if isNewVal:
+                    x = list(val)[0:2]
+                    x.append([])
+                    allZones[i] = x
+                    i += 1
+        return allZones
+
+    def Update(self):
+        for fc in self.members:
+            fc.Update()
+
+    def tapWghtAndIdxPerPanel(self):
+        if self._numOfMembers() == 0:
+            return None, None, None
+        mainZoneDict = self.zoneDict()
+
+        Weights = list([[]]*len(mainZoneDict))   # [nZones][nPanels][nTapsPerPanel_i]
+        tapIdxs = list([[]]*len(mainZoneDict))   # [nZones][nPanels][nTapsPerPanel_i]
+        panelAreas = list([[]]*len(mainZoneDict))     # [nZones][nPanels]
+
+        for fc in self.members:
+            for z, zonei in enumerate(fc.zoneDict.values()):
+                zone = list(zonei)[0:2]
+                zone.append([])
+                idxZ = list(mainZoneDict.values()).index(zone) # index of the current zone in the main zoneDict
+                for a,area in enumerate(fc.nominalPanelAreas):
+                    Weights[idxZ].append(fc.tapWghtPerPanel[z][a])     # [nZones][nAreas][nPanels][nTapsPerPanel]
+                    tapIdxs[idxZ].append(fc.tapIdxPerPanel[z][a]) 
+                    panelAreas[idxZ].append(fc.panelAreas[z][a]) 
+        
+        return panelAreas, Weights, tapIdxs
+
+    def writeToFile(self,file_basic, file_derived=None):
+        getDerived = file_derived is not None
+        basic = {}
+        derived = {}
+        for i,fc in enumerate(self.members):
+            basic[i], derived[i] = fc.to_dict(getDerived=getDerived)
+
+        with open(file_basic, 'w') as f:
+            json.dump(basic,f, indent=4, separators=(',', ':'))
+        
+        if file_derived is not None:
+            with open(file_derived, 'w') as f:
+                json.dump(derived,f, indent=4, separators=(',', ':'))
+
+    def readFromFile(self, file_basic, file_derived=None):
+        with open(file_basic, 'r') as f:
+            basic = json.load(f)
+        
+        if file_derived is not None:
+            with open(file_derived, 'r') as f:
+                derived = json.load(f)
+        else:
+            derived = None
+
+        self.members = []
+        for i, bsc in enumerate(basic):
+            mem = face()
+            if derived is None:
+                mem.from_dict(basic=basic[bsc])
+            else:
+                mem.from_dict(basic=basic[bsc],derived=derived[bsc])
+            self.members.append(mem)
 
 class building:
     def __init__(self,
