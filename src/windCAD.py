@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 from shapely.ops import voronoi_diagram
 from shapely.validation import make_valid
-
+from typing import List
 
 #===============================================================================
 #==================== CONSTANTS & GLOBAL VARIABLES  ============================
@@ -295,9 +295,9 @@ class face:
                 origin=None,
                 basisVectors=None,
                 vertices=None,
-                tapNo=None,
-                tapIdx=None,
-                tapName=None,
+                tapNo: List[int]=None,
+                tapIdx: List[int]=None,
+                tapName: List[str]=None,
                 tapCoord=None,
                 zoneDict=None,
                 nominalPanelAreas=None,
@@ -315,9 +315,9 @@ class face:
         self.zoneDict = zoneDict            # dict of dicts: zone names per each zoning. e.g., [['NBCC-z1', 'NBCC-z2', ... 'NBCC-zM'], ['ASCE-a1', 'ASCE-a2', ... 'ASCE-aQ']]
         self.nominalPanelAreas = nominalPanelAreas  # a vector of nominal areas to generate panels. The panels areas will be close but not necessarily exactly equal to these.
         self.numOfNominalPanelAreas = numOfNominalPanelAreas
-        self.tapNo = tapNo                  # [Ntaps,]
-        self.tapIdx = tapIdx                # [Ntaps,] tap indices in the main matrix of the entire building
-        self.tapName = tapName              # [Ntaps,]
+        self.tapNo: List[int] = tapNo                  # [Ntaps,]
+        self.tapIdx: List[int] = tapIdx                # [Ntaps,] tap indices in the main matrix of the entire building
+        self.tapName: List[str] = tapName              # [Ntaps,]
         self.tapCoord = tapCoord            # [Ntaps,2]   ... from the local face origin
 
         # derived
@@ -423,17 +423,42 @@ class face:
         print(f"Shape of 'panelAreas': {np.shape(np.array(self.panelAreas,dtype=object))}")
         print(f"Shape of 'pnlWeights': {np.shape(np.array(self.tapWghtPerPanel,dtype=object))}")
         print(f"Shape of 'tapIdxByPnl': {np.shape(np.array(self.tapIdxPerPanel,dtype=object))}")
+        print(f"Indecies of nominalPanelArea per each zone with error of unequal area between total sum of panel areas vs. zone: \n\t\t\t{self.error_in_zones}")
+        print(f"Indecies of panels within nominalPanelArea within zone with tap weights that do not sum to 1 : \n\t\t\t{self.error_in_panels}")
+
+    """--------------------------------- Properties -----------------------------------"""
+    @property
+    def NumTaps(self):
+        num = 0 if self.tapNo is None else len(self.tapNo)
+        return num
+
+    @property
+    def NumPanels(self, perArea=True):
+        if self.nominalPanelAreas is None:
+            return 0
+        num = np.int32(np.multiply(self.nominalPanelAreas,0))
+        if self.panels is None:
+            return num
+        for a,_ in enumerate(self.nominalPanelAreas):
+            for z,_ in enumerate(self.panels):
+                num[a] += len(self.panels[z][a])
+        if perArea:
+            return num
+        else:
+            return np.array([np.sum(num),])
+
+    @property
+    def tapCoord3D(self):
+        return transform(self.tapCoord, self.origin, self.basisVectors)
+
+    @property
+    def vertices3D(self):
+        return transform(self.vertices, self.origin, self.basisVectors)
 
     """-------------------------------- Data handlers ---------------------------------"""
     def Update(self):
         self.__generateTributaries()
         self.__generatePanels()
-
-    def tapCoord3D(self):
-        return transform(self.tapCoord, self.origin, self.basisVectors)
-
-    def vertices3D(self):
-        return transform(self.vertices, self.origin, self.basisVectors)
 
     def to_dict(self,getDerived=False):
         basic = {}
@@ -585,20 +610,22 @@ class face:
                 ax.set_frame_on(False)
             plt.show()
 
+
+
 class Faces:
     def __init__(self,
-                    members=[],
+                    members: List[face]=[],
                     file_basic=None,
                     file_derived=None,
                     ):
         self._currentIndex = 0
-        self.members = members
+        self._members: List[face] = members
 
         if file_basic is not None and file_derived is not None:
             self.readFromFile(file_basic=file_basic,file_derived=file_derived)
         elif file_basic is not None:
             self.readFromFile(file_basic=file_basic)
-        
+    
     def _numOfMembers(self):
         if self.members is None:
             return 0
@@ -609,7 +636,7 @@ class Faces:
 
     def __next__(self):
         if self._currentIndex < self._numOfMembers():
-            member = self.members[self._currentIndex]
+            member = self._members[self._currentIndex]
             self._currentIndex += 1
             return member
         else:
@@ -617,11 +644,53 @@ class Faces:
             raise StopIteration
 
     def __getitem__(self, key):
-        return self.members[key]
+        return self._members[key]
     
     def __setitem__(self, key, value):
-        self.members[key] = value
+        self._members[key] = value
 
+    def __str__(self):
+        name = 'Faces: '
+        for f in self.members:
+            name += f.name + ', '
+        return name
+        
+    @property
+    def members(self) -> List[face]:
+        return self._members
+    @members.setter
+    def members(self,value: List[face]) -> None:
+        self._members = value
+
+    @property
+    def tapNo(self) -> List[int]:
+        tapNo = []
+        for f in self.members:
+            tapNo.append(f.tapNo)
+        return tapNo
+
+    @property
+    def tapIdx(self) -> List[int]:
+        tapIdx = []
+        for f in self.members:
+            tapIdx.append(f.tapIdx)
+        return tapIdx
+
+    @property
+    def tapIdx(self) -> List[int]:
+        tapIdx = []
+        for f in self.members:
+            tapIdx.append(f.tapIdx)
+        return tapIdx
+
+    @property
+    def tapName(self) -> List[str]:
+        tapName = []
+        for f in self.members:
+            tapName.append(f.tapName)
+        return tapName
+    
+    @property
     def zoneDict(self):
         allZones = {}
         i = 0
@@ -639,6 +708,32 @@ class Faces:
                     i += 1
         return allZones
 
+    @property
+    def NumZones(self):
+        return len(self.zoneDict)
+
+    @property
+    def NumTaps(self):
+        num = 0
+        for fc in self.members:
+            num += fc.NumTaps
+        return num
+
+    @property
+    def NumPanels(self, perArea=True):
+        if len(self.members) == 0:
+            return 0
+        for i,fc in enumerate(self.members):
+            if i == 0:
+                num = fc.NumPanels(perArea=perArea)
+            else:
+                n = fc.NumPanels(perArea=perArea)
+                if len(n) == len(num):
+                    num = np.add(n,num)
+                else:
+                    num = np.add(n) + sum(num)
+        return num
+
     def Update(self):
         for fc in self.members:
             fc.Update()
@@ -646,7 +741,7 @@ class Faces:
     def tapWghtAndIdxPerPanel(self):
         if self._numOfMembers() == 0:
             return None, None, None
-        mainZoneDict = self.zoneDict()
+        mainZoneDict = self.zoneDict
 
         Weights = list([[]]*len(mainZoneDict))   # [nZones][nPanels][nTapsPerPanel_i]
         tapIdxs = list([[]]*len(mainZoneDict))   # [nZones][nPanels][nTapsPerPanel_i]
@@ -697,8 +792,10 @@ class Faces:
                 mem.from_dict(basic=basic[bsc],derived=derived[bsc])
             self.members.append(mem)
 
-class building:
-    def __init__(self,
+
+
+class building(Faces):
+    def __init__(self, 
                 name=None,
                 H=None,     # average roof height
                 He=None,    # eave height
@@ -706,9 +803,13 @@ class building:
                 B=None,     # shorter plan-inscribing-rectangle width
                 D=None,     # longer plan-inscribing-rectangle width
                 roofSlope=None,
-                faces=None, # list of faces
                 lScl=1.0,   # length scale
-               ):
+                valuesAreScaled=True, # weather or not the dimensions are scaled
+                faces: List[face]=[], 
+                faces_file_basic=None, 
+                faces_file_derived=None,
+                ):
+        super().__init__(faces, faces_file_basic, faces_file_derived)
         self.name = name
         self.H = H
         self.He = He
@@ -716,9 +817,21 @@ class building:
         self.B = B
         self.D = D
         self.roofSlope = roofSlope
-        self.faces = faces
         self.lScl = lScl
+        self.valuesAreScaled = valuesAreScaled
     
     def __str__(self):
-        return self.name
+        return 'Building name: '+self.name+'\n'+super().__str__()
+    
+    @property
+    def faces(self) -> List[face]:
+        return self._members
+    @faces.setter
+    def faces(self,value: List[face]) -> None:
+        self._members = value
+
+    def writeToFile(self, file_basic, file_derived=None) -> None:
+        # write the basic building details to the file 
+        super().writeToFile(file_basic, file_derived)
+        # finally add derived things if any
 

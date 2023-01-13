@@ -8,13 +8,16 @@ Created on Fri Aug 12 18:23:09 2022
 import numpy as np
 import pandas as pd
 import warnings
-from scipy import signal
-from typing import Any, overload
 import shapely.geometry as shp
-from shapely.ops import voronoi_diagram
 
 import windPlotters as wplt
 import windCAD
+
+from shapely.ops import voronoi_diagram
+from typing import List
+from scipy import signal
+from scipy.stats import skew,kurtosis
+
 
 #===============================================================================
 #==================== CONSTANTS & GLOBAL VARIABLES  ============================
@@ -242,6 +245,19 @@ def peak(x,axis=None,method='BLUE'):
         raise NotImplemented()
     pass
 
+def getTH_stats(TH,axis,fields=['mean','std','peak'],peakMethod='BLUE') -> dict:
+    stats = {}
+    if 'mean' in fields:
+        stats['mean'] = np.mean(TH,axis=axis)
+    if 'std' in fields:
+        stats['std'] = np.std(TH)
+    if 'peak' in fields:
+        stats['peakMin'], stats['peakMax'] = peak(TH,axis=axis,method=peakMethod)
+    if 'skewness' in fields:
+        stats['skewness'] = skew(TH, axis=axis)
+    if 'kurtosis' in fields:
+        stats['kurtosis'] = kurtosis(TH, axis=axis)
+    return stats
 
 #===============================================================================
 #================================ CLASSES ======================================
@@ -1425,7 +1441,47 @@ class profile_repeatedTest(profile): # should be mereged into or inherit Profile
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
 
-class bldgCp:
+class bldgCp(windCAD.building):
+    def __init__(self, 
+                bldgName=None, H=None, He=None, Hr=None, B=None, D=None, roofSlope=None, lScl=1, valuesAreScaled=True, 
+                faces: List[windCAD.face] = ..., faces_file_basic=None, faces_file_derived=None,
+                caseName=None,
+                refProfile:profile=None,
+                Zref_input=None,  # for the Cp TH being input below
+                Uref_input=None,  # for the Cp TH being input below
+                samplingFreq=None,
+                airDensity=1.125,
+                AoA=None,
+                CpOfT=None,  # Cp TH referenced to Uref at Zref
+                badTaps=None, # tap numbers to remove
+                reReferenceCpToH=True, # whether or not to re-reference Cp building height
+                pOfT=None,
+                p0ofT=None,
+                CpStats=None,
+                ):
+        super().__init__(bldgName, H, He, Hr, B, D, roofSlope, lScl, valuesAreScaled, faces, faces_file_basic, faces_file_derived)
+
+        self.name = caseName
+        self.refProfile:profile = refProfile
+        self.samplingFreq = samplingFreq
+        self.airDensity = airDensity
+
+        self.Zref = Zref_input
+        self.Uref = Uref_input
+        self.badTaps = badTaps
+        self.AoA:List[float] = AoA          # [N_AoA]
+        self.CpOfT = CpOfT      # [N_AoA,Ntaps,Ntime]
+        self.pOfT = pOfT        # [N_AoA,Ntaps,Ntime]
+        self.p0ofT = p0ofT      # [N_AoA,Ntime]
+        self.CpStats = CpStats          # dict{[N_AoA,Ntaps] * nFlds}
+
+        self.CpStatsAreaAvg = None      # dict{[Nzones][N_AoA,Npanels] * nFlds}
+
+        if reReferenceCpToH:
+            self.__reReferenceCp(Zref=Zref_input,Uref=Uref_input)
+        
+        self.Update()
+
     def __verifyData(self):
         pass
 
@@ -1438,12 +1494,28 @@ class bldgCp:
         self.CpOfT = np.divide(np.subtract(self.pOfT,p0ofT),
                                 0.5*self.airDensity*self.Uh**2)
 
-    def __computeCpStats(self):
-        if self.CpOfT is None:
+    def __computeAreaAveragedCp(self):
+        if self.NumPanels(perArea=False) == 0 or self.CpOfT is None:
             return
-        self.CpMean = np.mean(self.CpOfT,axis=1)
-        self.CpStd = np.std(self.CpOfT,axis=1)
-        self.CpPeakMin, self.CpPeakMax = peak(self.CpOfT,axis=1,method='minmax')       
+        # Weights       [nZones][nPanels][nTapsPerPanel_i]
+        # tapIdxs       [nZones][nPanels][nTapsPerPanel_i]
+        # panelAreas    [nZones][nPanels]
+        # self.CpOfT = CpOfT      # [N_AoA,Ntaps,Ntime]
+
+        panelAreas, Weights, tapIdxs = self.tapWghtAndIdxPerPanel()
+
+        nT = np.shape(self.CpOfT)[-1]
+        nAoA = self.NumAoA
+        self.CpMean_areaAvg = [] # [Nzones][N_AoA,Npanels]
+
+        for z,wght_z,idx_z in enumerate(zip(Weights,tapIdxs)):
+            nP = np.shape(wght_z)[-1]
+            cp = np.zeros([nAoA,nP,nT])
+            for p,wght,idx in enumerate(zip(wght_z,idx_z)):
+                cpTemp = np.multiply(wght, self.CpOfT[:,idx,:])
+                cp[:,p,:] = np.reshape(np.sum(cpTemp,axis=1), [nAoA,1,nT])
+                
+            self.CpMean_areaAvg.append(np.mean(cp,axis=-1))
 
     def __reReferenceCp(self,Zref,Uref):
         if self.refProfile is None or Zref is None or Uref is None:
@@ -1463,57 +1535,27 @@ class bldgCp:
         self.CpPeakMin = self.CpPeakMin*factor if self.CpPeakMin is not None else self.CpPeakMin
         self.Zref = vel.H
         self.Uref = Uref/vRatio
-        
-    def __init__(self,
-                name=None,
-                bldg=None,
-                refProfile=None,
-                Zref_input=None,  # for the Cp TH being input below
-                Uref_input=None,  # for the Cp TH being input below
-                samplingFreq=None,
-                airDensity=1.125,
-                AoA=None,
-                CpOfT=None,  # Cp TH referenced to Uref at Zref
-                reReferenceCpToH=True, # whether or not to re-reference Cp building height
-                pOfT=None,
-                p0ofT=None,
-                CpMean=None,
-                CpStd=None,
-                CpPeakMax=None,
-                CpPeakMin=None,
-                ):
-        
-        self.name = name
-        self.bldg = bldg
-        self.refProfile = refProfile
-        self.samplingFreq = samplingFreq
-        self.airDensity = airDensity
-
-        self.Zref = Zref_input
-        self.Uref = Uref_input
-        self.AoA = AoA
-        self.CpOfT = CpOfT      # [Ntaps,Ntime]
-        self.pOfT = pOfT        # [Ntaps,Ntime]
-        self.p0ofT = p0ofT      # [Ntime,]
-
-        self.CpMean = CpMean    # [Ntaps,]
-        self.CpStd = CpStd          # [Ntaps,]
-        self.CpPeakMax = CpPeakMax    # [Ntaps,]
-        self.CpPeakMin = CpPeakMin    # [Ntaps,]
-
-
-        if reReferenceCpToH:
-            self.__reReferenceCp(Zref=Zref_input,Uref=Uref_input)
-        
-        self.Update()
-
+    
     def __str__(self):
         return self.name
+
+    @property
+    def panelAreas(self):
+        pass
+
+    @property
+    def NumAoA(self) -> int:
+        if self.AoA is None:
+            return 0
+        if np.isscalar(self.AoA):
+            return 1
+        return len(self.AoA)
 
     def Update(self):
         self.__verifyData()
         self.__computeCpTHfrom_p_TH()
-        self.__computeCpStats()
+        self.CpStats = getTH_stats(self.CpOfT,axis=-1)
+        self.__computeAreaAveragedCp()
     
     def write(self):
         pass
