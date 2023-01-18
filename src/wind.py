@@ -9,14 +9,16 @@ import numpy as np
 import pandas as pd
 import warnings
 import shapely.geometry as shp
+import matplotlib.pyplot as plt
 
 import windPlotters as wplt
 import windCAD
 
 from shapely.ops import voronoi_diagram
-from typing import List
+from typing import List,Literal
 from scipy import signal
 from scipy.stats import skew,kurtosis
+from scipy.interpolate import interp1d
 
 
 #===============================================================================
@@ -38,6 +40,8 @@ unitsNone = {
         'M':None
         }
 
+cpStatTypes = ['mean','std','peak','peakMin','peakMax','skewness','kurtosis']
+scalableCpStats = ['mean','std','peakMin','peakMax']
 
 #===============================================================================
 #=============================== FUNCTIONS =====================================
@@ -236,7 +240,9 @@ def fitESDUgivenIuRef(
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
 
-def peak(x,axis=None,method='BLUE'):
+def peak(x,axis=None,
+        method: Literal['minmax','BLUE']='BLUE',
+        ):
     if method == 'BLUE':
         raise NotImplemented()
     elif method == 'minmax':
@@ -245,14 +251,23 @@ def peak(x,axis=None,method='BLUE'):
         raise NotImplemented()
     pass
 
-def getTH_stats(TH,axis,fields=['mean','std','peak'],peakMethod='BLUE') -> dict:
+def getTH_stats(TH,axis=0,
+                fields: Literal['mean','std','peak','peakMin','peakMax','skewness','kurtosis'] = ['mean','std','peak'],
+                peakMethod: Literal['minmax','BLUE']='BLUE',
+                ) -> dict:
+    if not all(x in cpStatTypes for x in fields):
+        warnings.warn("Not all elements given as fields are valid. Choose from: "+str(cpStatTypes))
     stats = {}
     if 'mean' in fields:
         stats['mean'] = np.mean(TH,axis=axis)
     if 'std' in fields:
-        stats['std'] = np.std(TH)
+        stats['std'] = np.std(TH,axis=axis)
     if 'peak' in fields:
         stats['peakMin'], stats['peakMax'] = peak(TH,axis=axis,method=peakMethod)
+    if 'peakMin' in fields:
+        stats['peakMin'], _ = peak(TH,axis=axis,method=peakMethod)
+    if 'peakMax' in fields:
+        _, stats['peakMax'] = peak(TH,axis=axis,method=peakMethod)
     if 'skewness' in fields:
         stats['skewness'] = skew(TH, axis=axis)
     if 'kurtosis' in fields:
@@ -1440,11 +1455,12 @@ class profile_repeatedTest(profile): # should be mereged into or inherit Profile
 
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
-
 class bldgCp(windCAD.building):
     def __init__(self, 
+                # Inputs for the base class
                 bldgName=None, H=None, He=None, Hr=None, B=None, D=None, roofSlope=None, lScl=1, valuesAreScaled=True, 
-                faces: List[windCAD.face] = ..., faces_file_basic=None, faces_file_derived=None,
+                faces: List[windCAD.face] = [], faces_file_basic=None, faces_file_derived=None,
+                # Inputs for the derived class
                 caseName=None,
                 refProfile:profile=None,
                 Zref_input=None,  # for the Cp TH being input below
@@ -1454,12 +1470,14 @@ class bldgCp(windCAD.building):
                 AoA=None,
                 CpOfT=None,  # Cp TH referenced to Uref at Zref
                 badTaps=None, # tap numbers to remove
-                reReferenceCpToH=True, # whether or not to re-reference Cp building height
+                reReferenceCpToH=True, # whether or not to re-reference Cp to building height velocity
                 pOfT=None,
                 p0ofT=None,
                 CpStats=None,
+                peakMethod='BLUE',
                 ):
-        super().__init__(bldgName, H, He, Hr, B, D, roofSlope, lScl, valuesAreScaled, faces, faces_file_basic, faces_file_derived)
+        super().__init__(name=bldgName, H=H, He=He, Hr=Hr, B=B, D=D, roofSlope=roofSlope, lScl=lScl, valuesAreScaled=valuesAreScaled, faces=faces,
+                        faces_file_basic=faces_file_basic, faces_file_derived=faces_file_derived)
 
         self.name = caseName
         self.refProfile:profile = refProfile
@@ -1469,16 +1487,17 @@ class bldgCp(windCAD.building):
         self.Zref = Zref_input
         self.Uref = Uref_input
         self.badTaps = badTaps
-        self.AoA:List[float] = AoA          # [N_AoA]
+        self.AoA = [AoA,] if np.isscalar(AoA) else AoA          # [N_AoA]
         self.CpOfT = CpOfT      # [N_AoA,Ntaps,Ntime]
         self.pOfT = pOfT        # [N_AoA,Ntaps,Ntime]
         self.p0ofT = p0ofT      # [N_AoA,Ntime]
         self.CpStats = CpStats          # dict{[N_AoA,Ntaps] * nFlds}
+        self.peakMethod = peakMethod
 
         self.CpStatsAreaAvg = None      # dict{[Nzones][N_AoA,Npanels] * nFlds}
 
         if reReferenceCpToH:
-            self.__reReferenceCp(Zref=Zref_input,Uref=Uref_input)
+            self.__reReferenceCp()
         
         self.Update()
 
@@ -1488,6 +1507,8 @@ class bldgCp(windCAD.building):
     def __computeCpTHfrom_p_TH(self):
         if self.CpOfT is not None:
             return
+        if self.pOfT is None and self.p0ofT is None:
+            return
         p0ofT = 0.0 if self.p0ofT is None else self.p0ofT
         if not np.isscalar(p0ofT) and not len(p0ofT) == np.shape(self.pOfT)[1]:
             raise Exception(f"The p and p0 time series for Cp calculation do not match in time steps. Shapes of p0ofT : {np.shape(p0ofT)}, pOfT : {np.shape(self.pOfT)}")
@@ -1495,47 +1516,46 @@ class bldgCp(windCAD.building):
                                 0.5*self.airDensity*self.Uh**2)
 
     def __computeAreaAveragedCp(self):
-        if self.NumPanels(perArea=False) == 0 or self.CpOfT is None:
-            return
-        # Weights       [nZones][nPanels][nTapsPerPanel_i]
-        # tapIdxs       [nZones][nPanels][nTapsPerPanel_i]
-        # panelAreas    [nZones][nPanels]
-        # self.CpOfT = CpOfT      # [N_AoA,Ntaps,Ntime]
-
-        panelAreas, Weights, tapIdxs = self.tapWghtAndIdxPerPanel()
-
-        nT = np.shape(self.CpOfT)[-1]
-        nAoA = self.NumAoA
-        self.CpMean_areaAvg = [] # [Nzones][N_AoA,Npanels]
-
-        for z,wght_z,idx_z in enumerate(zip(Weights,tapIdxs)):
-            nP = np.shape(wght_z)[-1]
-            cp = np.zeros([nAoA,nP,nT])
-            for p,wght,idx in enumerate(zip(wght_z,idx_z)):
-                cpTemp = np.multiply(wght, self.CpOfT[:,idx,:])
-                cp[:,p,:] = np.reshape(np.sum(cpTemp,axis=1), [nAoA,1,nT])
-                
-            self.CpMean_areaAvg.append(np.mean(cp,axis=-1))
-
-    def __reReferenceCp(self,Zref,Uref):
-        if self.refProfile is None or Zref is None or Uref is None:
-            return
-        if self.CpOfT is None and self.CpMean is None and self.CpStd is None and self.CpPeakMax is None and self.CpPeakMin is None:
+        if self.NumPanels == 0 or self.CpOfT is None:
             return
         
-        from scipy.interpolate import interp1d
+        axT = len(np.shape(self.CpOfT))-1
+        nT = np.shape(self.CpOfT)[-1]
+        nAoA = self.NumAoA
+        self.CpStatsAreaAvg = [] # [Nzones][N_AoA,Npanels]
+
+        for z,(wght_z,idx_z) in enumerate(zip(self.tapWeightsPerPanel,self.tapIdxsPerPanel)):
+            for p,(wght,idx) in enumerate(zip(wght_z,idx_z)):
+                cpTemp = np.multiply(np.reshape(wght,(-1,1)), self.CpOfT[:,idx,:])
+                cpTemp = np.reshape(np.sum(cpTemp,axis=1), [nAoA,1,nT])
+                if p == 0:
+                    avgCp = getTH_stats(cpTemp,axis=axT,peakMethod=self.peakMethod)
+                else:
+                    temp = getTH_stats(cpTemp,axis=axT,peakMethod=self.peakMethod)
+                    for fld in temp:
+                        avgCp[fld] = np.concatenate((avgCp[fld],temp[fld]),axis=1)
+
+            self.CpStatsAreaAvg.append(avgCp)
+
+    def __reReferenceCp(self):
+        if self.refProfile is None or self.Zref is None or self.Uref is None or self.AoA is None:
+            return
+        if self.CpOfT is None and self.CpStats is None:
+            return
+        
         vel = self.refProfile
         UofZ = interp1d(vel.Z, vel.U)
-        vRatio = UofZ(Zref) / vel.Uh
+        vRatio = UofZ(self.Zref) / vel.Uh
         factor = (vRatio)**2
-        self.CpOfT = self.CpOfT*factor if self.CpOfT is not None else self.CpOfT
-        self.CpMean = self.CpMean*factor if self.CpMean is not None else self.CpMean
-        self.CpStd = self.CpStd*factor if self.CpStd is not None else self.CpStd
-        self.CpPeakMax = self.CpPeakMax*factor if self.CpPeakMax is not None else self.CpPeakMax
-        self.CpPeakMin = self.CpPeakMin*factor if self.CpPeakMin is not None else self.CpPeakMin
         self.Zref = vel.H
-        self.Uref = Uref/vRatio
-    
+        self.Uref = self.Uref * (1/vRatio)
+        if self.CpOfT is not None:
+            self.CpOfT = self.CpOfT*factor
+        if self.CpStats is not None:
+            for fld in self.CpStats:
+                if fld in scalableCpStats:
+                    self.CpStats[fld] = self.CpStats[fld]*factor
+
     def __str__(self):
         return self.name
 
@@ -1554,10 +1574,32 @@ class bldgCp(windCAD.building):
     def Update(self):
         self.__verifyData()
         self.__computeCpTHfrom_p_TH()
-        self.CpStats = getTH_stats(self.CpOfT,axis=-1)
+        if self.CpOfT is not None:
+            self.CpStats = getTH_stats(self.CpOfT,axis=len(np.shape(self.CpOfT))-1,peakMethod=self.peakMethod)
         self.__computeAreaAveragedCp()
     
     def write(self):
         pass
     
+    """--------------------------------- Plotters -------------------------------------"""
+    def plotField(self, fieldName, dxnIdx=0, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure(figsize=figSize)
+            ax = fig.add_subplot()
+        c = self.plotTapField(ax=ax, field=self.CpStats[fieldName][dxnIdx,:], fldRange=fldRange, nLvl=nLvl, cmap=cmap)
+        if newFig:
+            self.plotEdges(ax=ax)
+
+            from matplotlib.colorbar import make_axes
+            cax, kw = make_axes(fig.gca())
+            title = fieldName if title is None else title
+            cbar = fig.colorbar(c[0],title=title, cax=cax, **kw)
+            fldRange = [min(self.CpStats[fieldName][dxnIdx,:]), max(self.CpStats[fieldName][dxnIdx,:])] if fldRange is None else fldRange
+            cbar.set_clim(fldRange[0],fldRange[1])
+            ax.axis('equal')
+            ax.axis('off')
+        return c
+
 
