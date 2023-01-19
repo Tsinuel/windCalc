@@ -1515,7 +1515,7 @@ class bldgCp(windCAD.building):
         self.CpOfT = np.divide(np.subtract(self.pOfT,p0ofT),
                                 0.5*self.airDensity*self.Uh**2)
 
-    def __computeAreaAveragedCp(self):
+    def __computeAreaAveragedCp_____depricated(self):
         if self.NumPanels == 0 or self.CpOfT is None:
             return
         
@@ -1536,6 +1536,33 @@ class bldgCp(windCAD.building):
                         avgCp[fld] = np.concatenate((avgCp[fld],temp[fld]),axis=1)
 
             self.CpStatsAreaAvg.append(avgCp)
+
+    def __computeAreaAveragedCp(self):
+        if self.NumPanels == 0 or self.CpOfT is None:
+            return
+        
+        axT = len(np.shape(self.CpOfT))-1
+        nT = np.shape(self.CpOfT)[-1]
+        nAoA = self.NumAoA
+        self.CpStatsAreaAvg = [] # [Nfaces][Nzones][Narea][N_AoA,Npanels]
+
+        for _, fc in enumerate(self.faces):
+            avgCp_f = []
+            for _,(wght_z,idx_z) in enumerate(zip(fc.tapWghtPerPanel,fc.tapIdxPerPanel)):
+                avgCp_z = []
+                for _, (wght_a,idx_a) in enumerate(zip(wght_z,idx_z)):
+                    for p,(wght,idx) in enumerate(zip(wght_a,idx_a)):
+                        cpTemp = np.multiply(np.reshape(wght,(-1,1)), self.CpOfT[:,idx,:])
+                        cpTemp = np.reshape(np.sum(cpTemp,axis=1), [nAoA,1,nT])
+                        if p == 0:
+                            avgCp = getTH_stats(cpTemp,axis=axT,peakMethod=self.peakMethod)
+                        else:
+                            temp = getTH_stats(cpTemp,axis=axT,peakMethod=self.peakMethod)
+                            for fld in temp:
+                                avgCp[fld] = np.concatenate((avgCp[fld],temp[fld]),axis=1)
+                    avgCp_z.append(avgCp)
+                avgCp_f.append(avgCp_z)
+            self.CpStatsAreaAvg.append(avgCp_f)
 
     def __reReferenceCp(self):
         if self.refProfile is None or self.Zref is None or self.Uref is None or self.AoA is None:
@@ -1582,24 +1609,36 @@ class bldgCp(windCAD.building):
         pass
     
     """--------------------------------- Plotters -------------------------------------"""
-    def plotField(self, fieldName, dxnIdx=0, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
+    def plotTapCpStats(self, fieldName, dxnIdx=0, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure(figsize=figSize)
             ax = fig.add_subplot()
-        c = self.plotTapField(ax=ax, field=self.CpStats[fieldName][dxnIdx,:], fldRange=fldRange, nLvl=nLvl, cmap=cmap)
+        self.plotTapField(ax=ax, field=self.CpStats[fieldName][dxnIdx,:], fldRange=fldRange, nLvl=nLvl, cmap=cmap)
         if newFig:
             self.plotEdges(ax=ax)
 
-            from matplotlib.colorbar import make_axes
-            cax, kw = make_axes(fig.gca())
-            title = fieldName if title is None else title
-            cbar = fig.colorbar(c[0],title=title, cax=cax, **kw)
-            fldRange = [min(self.CpStats[fieldName][dxnIdx,:]), max(self.CpStats[fieldName][dxnIdx,:])] if fldRange is None else fldRange
-            cbar.set_clim(fldRange[0],fldRange[1])
+            # from matplotlib.colorbar import make_axes
+            # cax, kw = make_axes(fig.gca())
+            # title = fieldName if title is None else title
+            # cbar = fig.colorbar(c[0],title=title, cax=cax, **kw)
+            # fldRange = [min(self.CpStats[fieldName][dxnIdx,:]), max(self.CpStats[fieldName][dxnIdx,:])] if fldRange is None else fldRange
+            # cbar.set_clim(fldRange[0],fldRange[1])
             ax.axis('equal')
             ax.axis('off')
-        return c
+        return
 
+    def plotPanelCpStats(self, fieldName, dxnIdx=0, aIdx=0, showValueText=False, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure(figsize=figSize)
+            ax = fig.add_subplot()
+        self.plotPanelField(self.CpStatsAreaAvg, fieldName, dIdx=dxnIdx, aIdx=aIdx, showValueText=showValueText, fldRange=fldRange, ax=ax, nLvl=nLvl, cmap=cmap)
+        if newFig:
+            self.plotEdges(ax=ax)
+            ax.axis('equal')
+            ax.axis('off')
+        return
 

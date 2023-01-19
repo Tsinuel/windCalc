@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 from shapely.ops import voronoi_diagram
 from shapely.validation import make_valid
-from typing import List
+from typing import List, Tuple, Dict
 from scipy.interpolate import griddata
 
 #===============================================================================
@@ -159,7 +159,7 @@ def trimmedVoronoi(bound,coords):
     
     return tribs
 
-def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False):
+def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False) -> Tuple[shp.MultiPolygon, List[float]]:
     if debug:
         print(f"Region: shape {region.shape}, {region}\n")
         print(f"NominalArea = {area}")
@@ -190,12 +190,12 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False):
         plt.plot(x,y,'-b',lw=3)
         plt.axis('equal')
 
-    panels = []
+    panels1 = []
     goodPts = []
     for g in regions.geoms:
         newRig = getIntersection(bound,g)
         if newRig is not None:
-            panels.append(newRig)
+            panels1.append(newRig)
         else:
             continue
         # x,y = newRig.exterior.xy
@@ -224,12 +224,12 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False):
             continue
         areas.append(newRig.area)
         x,y = newRig.exterior.xy
-        panels.append(newRig)
+        # panels.append(newRig)
         
         if debug:
             summedArea += newRig.area
             plt.fill(x,y,'r',alpha=0.5)
-            plt.plot(x,y,'-r',alpha=0.2,lw=0.5)
+            plt.plot(x,y,'-k',alpha=0.5,lw=0.5)
 
     if len(panels) == 0:
         panels.append(bound)
@@ -240,15 +240,15 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False):
         plt.show()
 
     # print(f"Shape: {len(panels)}")
-    panels = np.asarray(panels,dtype=object)
+    panels = shp.MultiPolygon(panels)
     return panels, areas
 
-def calculateTapWeightsPerPanel(panels,tapsAll,tapIdxAll, wghtTolerance=0.0000001, showLog=True):    
+def calculateTapWeightsPerPanel(panels:shp.MultiPolygon,tapsAll,tapIdxAll, wghtTolerance=0.0000001, showLog=True):    
     weights = ()
     tapIdxs = ()
     overlaps = ()
     errIdxs = []
-    for p,pnl in enumerate(panels):
+    for p,pnl in enumerate(panels.geoms):
         A = pnl.area
         w = []
         idx = []
@@ -326,7 +326,7 @@ class face:
 
         # derived
         self.tapTribs: shp.MultiPolygon = None
-        self.panels = None
+        self.panels : shp.MultiPolygon = None
         self.panelAreas = None
         self.tapWghtPerPanel = None     # [N_zones][N_area][N_panels][N_taps]
         self.tapIdxPerPanel = None
@@ -373,7 +373,7 @@ class face:
         if self.tapTribs is None or self.zoneDict is None:
             return
 
-        self.panels = ()    # [nZones][nAreas][nPanels]
+        self.panels : shp.MultiPolygon = ()    # [nZones][nAreas][nPanels]
         self.panelAreas = ()    # [nZones][nAreas][nPanels]
         self.tapWghtPerPanel = ()    # [nZones][nAreas][nPanels][nTapsPerPanel]
         self.tapIdxPerPanel = ()   # [nZones][nAreas][nPanels][nTapsPerPanel]
@@ -410,7 +410,7 @@ class face:
 
                 errorInArea = 100*(zonePlygn.area - sum(areas))/zonePlygn.area
                 print(f"\t\t\tArea check: \t Zone area = {zonePlygn.area}, \t sum of all panel areas = {sum(areas)}, \t Error = {errorInArea}%")
-                print(f"\t\tGenerated number of panels: {len(pnls)}")
+                print(f"\t\tGenerated number of panels: {len(pnls.geoms)}")
                 
                 if abs(errorInArea) > 1.0:
                     err_zn_z += (a,)
@@ -580,11 +580,10 @@ class face:
         ax.plot(xy[:,0], xy[:,1], 
                 ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
         if showName:
-            ax.text(np.mean(xy[:,0]), np.mean(xy[:,1]), self.name, 
-                    ha='center', va='center', color=col)
+            ax.text(np.mean([min(xy[:,0]), max(xy[:,0])]), np.mean([min(xy[:,1]), max(xy[:,1])]), self.name, 
+                    ha='center', va='center', color=col, backgroundcolor=[1,1,1,0.3],)
         if newFig:
             ax.axis('equal')
-            fig.show()
 
     def plotTaps(self, ax=None, col='k', dotSz=3, lw=2, ls='None', mrkr='.'):
         newFig = False
@@ -597,7 +596,6 @@ class face:
                 ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
         if newFig:
             ax.axis('equal')
-            fig.show()
     
     def plotTribs(self, ax=None, col='r', dotSz=3, lw=0.5, ls='-.', mrkr='None'):
         newFig = False
@@ -611,7 +609,6 @@ class face:
                     ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
         if newFig:
             ax.axis('equal')
-            fig.show()
         
     def plotZones(self, ax=None, col='b', dotSz=3, lw=1.5, ls='--', mrkr='None'):
         newFig = False
@@ -625,7 +622,6 @@ class face:
                     ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
         if newFig:
             ax.axis('equal')
-            fig.show()
 
     def plotPanels(self, aIdx=0, ax=None, col='g', dotSz=3, lw=0.5, ls='-', mrkr='None'):
         newFig = False
@@ -633,14 +629,14 @@ class face:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        for z,_ in enumerate(self.zoneDict.values()):
-            for p in self.panels[z][aIdx]:
-                xy = transform(np.transpose(p.exterior.xy), self.origin_plt, self.basisVectors_plt) 
+        for z,_ in enumerate(self.zoneDict):
+            print(f"z: {z}, aIdx: {aIdx}")
+            for p in self.panels[z][aIdx].geoms:
+                xy = transform(np.transpose(p.exterior.xy), self.origin_plt, self.basisVectors_plt)
                 ax.plot(xy[:,0], xy[:,1], 
                     ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
         if newFig:
             ax.axis('equal')
-            fig.show()
 
     def plotTapField(self, field, dx=None, ax=None, fldRange=None, nLvl=100, cmap='RdBu'):
         newFig = False
@@ -675,33 +671,31 @@ class face:
             plt.colorbar()
             ax.axis('equal')
             ax.axis('off')
-            fig.show()
+            
         return contour
 
-    def plotPanelField(self, field, ax=None, fldRange=None, nLvl=100, cmap='RdBu'):
+    def plotPanelField(self, field, fldName, dIdx=0, aIdx=0, showValueText=False, strFmt="{:.3g}", fldRange=None, ax=None, nLvl=100, cmap='RdBu'):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        xy = np.array(self.tapCoordPlt)
-        xO, yO = xy[:,0], xy[:,1]
-        fld = field[self.tapIdx]
-        
-        if fldRange is None:
-            levels = np.linspace(min(field), max(field), nLvl)
-        else:
-            levels = np.linspace(fldRange[0], fldRange[1], nLvl)
-        
-        
-        contour = ax.contourf(X, Y, Z,
-                levels=levels, cmap=cmap)
+
+        for z,_ in enumerate(self.zoneDict):
+            for p,pnl in enumerate(self.panels[z][aIdx].geoms):
+                xy = transform(np.transpose(pnl.exterior.xy), self.origin_plt, self.basisVectors_plt)
+                val = field[z][aIdx][fldName][dIdx, p]
+                cmap = plt.get_cmap(cmap)
+                ax.fill(xy[:,0], xy[:,1], color=cmap(val))
+                if showValueText:
+                    ax.text(np.mean([min(xy[:,0]), max(xy[:,0])]), np.mean([min(xy[:,1]), max(xy[:,1])]), strFmt.format(val),
+                            ha='center', va='center', backgroundcolor=[1,1,1,0.3])
         if newFig:
             plt.colorbar()
             ax.axis('equal')
             ax.axis('off')
-            fig.show()
-        return contour
+            
+        return
 
     def plot(self, figFile=None,xLimits=None,figSize=[15,5], showAxis=False, dotSize=3,
              overlayTaps=False, overlayTribs=False, overlayPanels=False, overlayZones=False, useSubplotForDifferentNominalAreas=True, nSubPlotCols=3):
@@ -884,6 +878,20 @@ class Faces:
         return num
 
     @property
+    def error_in_panels(self):
+        val = []
+        for fc in self._members:
+            val.append(fc.error_in_panels)
+        return val
+
+    @property
+    def error_in_zones(self):
+        val = []
+        for fc in self._members:
+            val.append(fc.error_in_zones)
+        return val
+
+    @property
     def NumPanelsPerArea(self):
         if len(self.members) == 0:
             return 0
@@ -939,6 +947,20 @@ class Faces:
                     pAreas[idxZ].extend(fc.panelAreas[z][a]) 
         return pAreas
 
+    @property
+    def panelIdxRanges(self):
+        # mainZoneDict = self.zoneDict
+        # s = []   # [nZones][nPanels][nTapsPerPanel_i]
+        # for fc in self.members:
+        #     for z, zonei in enumerate(fc.zoneDict.values()):
+        #         zone = list(zonei)[0:2]
+        #         zone.append([])
+        #         idxZ = list(mainZoneDict.values()).index(zone) # index of the current zone in the main zoneDict
+        #         for a,_ in enumerate(fc.nominalPanelAreas):
+        #             Weights[idxZ].extend(fc.tapWghtPerPanel[z][a])     # [nZones][nAreas][nPanels][nTapsPerPanel]
+        return None
+        pass
+
     """-------------------------------- Data handlers ---------------------------------"""
     def Update(self):
         for fc in self.members:
@@ -988,7 +1010,6 @@ class Faces:
             fc.plotEdges(ax=ax, showName=showName, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
         if newFig:
             ax.axis('equal')
-            fig.show()
 
     def plotTaps(self, ax=None, col='k', dotSz=3, lw=2, ls='None', mrkr='.'):
         newFig = False
@@ -1000,7 +1021,6 @@ class Faces:
             fc.plotTaps(ax=ax, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
         if newFig:
             ax.axis('equal')
-            fig.show()
 
     def plotTribs(self, ax=None, col='r', dotSz=3, lw=0.5, ls='-.', mrkr='None'):
         newFig = False
@@ -1012,7 +1032,6 @@ class Faces:
             fc.plotTribs(ax=ax, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
         if newFig:
             ax.axis('equal')
-            fig.show()
 
     def plotZones(self, ax=None, col='b', dotSz=3, lw=1.5, ls='--', mrkr='None'):
         newFig = False
@@ -1024,7 +1043,6 @@ class Faces:
             fc.plotZones(ax=ax, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
         if newFig:
             ax.axis('equal')
-            fig.show()
 
     def plotPanels(self, ax=None, aIdx=0, col='g', dotSz=3, lw=0.5, ls='-', mrkr='None'):
         newFig = False
@@ -1036,7 +1054,6 @@ class Faces:
             fc.plotPanels(ax=ax, aIdx=aIdx, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
         if newFig:
             ax.axis('equal')
-            fig.show()
 
     def plotTapField(self, field, ax=None, dx=None, fldRange=None, nLvl=100, cmap='RdBu'):
         newFig = False
@@ -1052,8 +1069,21 @@ class Faces:
             plt.colorbar()
             ax.axis('equal')
             ax.axis('off')
-            fig.show()
-        return contours
+        return
+
+    def plotPanelField(self, field, fldName, dIdx=0, aIdx=0, showValueText=False, fldRange=None, ax=None, nLvl=100, cmap='RdBu'):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot()
+        for f,fc in enumerate(self._members):
+            fc.plotPanelField(field[f], fldName, dIdx=dIdx, aIdx=aIdx, showValueText=showValueText, fldRange=fldRange, ax=ax, nLvl=nLvl, cmap=cmap)
+        if newFig:
+            plt.colorbar()
+            ax.axis('equal')
+            ax.axis('off')
+        pass
 
 
 class building(Faces):
