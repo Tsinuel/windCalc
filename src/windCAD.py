@@ -473,7 +473,7 @@ class face:
             return num
         for a,_ in enumerate(self.nominalPanelAreas):
             for z,_ in enumerate(self.panels):
-                num[a] += len(self.panels[z][a])
+                num[a] += len(self.panels[z][a].geoms)
         return num
 
     """-------------------------------- Data handlers ---------------------------------"""
@@ -488,7 +488,7 @@ class face:
         basic['note'] = self.note
         basic['origin'] = self.origin
         basic['basisVectors'] = self.basisVectors
-        basic['vertices'] = self.vertices
+        basic['vertices'] = self.vertices.tolist()
         basic['zoneDict'] = self.zoneDict
         if basic['zoneDict'] is not None:
             for val in basic['zoneDict']:
@@ -523,7 +523,7 @@ class face:
         self.note = basic['note']
         self.origin = basic['origin']
         self.basisVectors = basic['basisVectors']
-        self.vertices = basic['vertices']
+        self.vertices = np.array(basic['vertices'])
         self.zoneDict = basic['zoneDict']
         if self.zoneDict is not None:
             for val in self.zoneDict:
@@ -585,7 +585,7 @@ class face:
         if newFig:
             ax.axis('equal')
 
-    def plotTaps(self, ax=None, col='k', dotSz=3, lw=2, ls='None', mrkr='.'):
+    def plotTaps(self, ax=None, showTapNo=False, fontsize='small', col='k', dotSz=3, lw=2, ls='None', mrkr='.'):
         newFig = False
         if ax is None:
             newFig = True
@@ -594,6 +594,11 @@ class face:
         xy = np.array(self.tapCoordPlt)
         ax.plot(xy[:,0], xy[:,1], 
                 ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
+        if showTapNo:
+            for t,tpNo in enumerate(self.tapNo):
+                ax.text(xy[t,0], xy[t,1], str(tpNo),
+                        ha='left', va='top', rotation=45, fontsize=fontsize, color=col, backgroundcolor=[1,1,1,0.3],)
+            pass
         if newFig:
             ax.axis('equal')
     
@@ -630,7 +635,6 @@ class face:
             fig = plt.figure()
             ax = fig.add_subplot()
         for z,_ in enumerate(self.zoneDict):
-            print(f"z: {z}, aIdx: {aIdx}")
             for p in self.panels[z][aIdx].geoms:
                 xy = transform(np.transpose(p.exterior.xy), self.origin_plt, self.basisVectors_plt)
                 ax.plot(xy[:,0], xy[:,1], 
@@ -665,14 +669,12 @@ class face:
             levels = np.linspace(min(field), max(field), nLvl)
         else:
             levels = np.linspace(fldRange[0], fldRange[1], nLvl)
-        contour = ax.contourf(X, Y, Z,
+        ax.contourf(X, Y, Z,
                 levels=levels, cmap=cmap)
         if newFig:
             plt.colorbar()
             ax.axis('equal')
             ax.axis('off')
-            
-        return contour
 
     def plotPanelField(self, field, fldName, dIdx=0, aIdx=0, showValueText=False, strFmt="{:.3g}", fldRange=None, ax=None, nLvl=100, cmap='RdBu'):
         newFig = False
@@ -680,13 +682,21 @@ class face:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
+        if fldRange is None:
+            for z,_ in enumerate(self.zoneDict):
+                val = field[z][aIdx][fldName][dIdx, :]
+                if z == 0:
+                    fldRange = [min(val), max(val)]
+                else:
+                    fldRange = [min([min(val), fldRange[0]]), max([max(val), fldRange[1]])]
 
         for z,_ in enumerate(self.zoneDict):
             for p,pnl in enumerate(self.panels[z][aIdx].geoms):
                 xy = transform(np.transpose(pnl.exterior.xy), self.origin_plt, self.basisVectors_plt)
                 val = field[z][aIdx][fldName][dIdx, p]
+                valNorm = (val - fldRange[0])/(fldRange[1]-fldRange[0])
                 cmap = plt.get_cmap(cmap)
-                ax.fill(xy[:,0], xy[:,1], color=cmap(val))
+                ax.fill(xy[:,0], xy[:,1], color=cmap(valNorm))
                 if showValueText:
                     ax.text(np.mean([min(xy[:,0]), max(xy[:,0])]), np.mean([min(xy[:,1]), max(xy[:,1])]), strFmt.format(val),
                             ha='center', va='center', backgroundcolor=[1,1,1,0.3])
@@ -936,16 +946,19 @@ class Faces:
     def panelAreas(self):
         if self._numOfMembers() == 0:
             return None
-        mainZoneDict = self.zoneDict
-        pAreas = list([[]]*len(mainZoneDict))     # [nZones][nPanels]
-        for fc in self.members:
-            for z, zonei in enumerate(fc.zoneDict.values()):
-                zone = list(zonei)[0:2]
-                zone.append([])
-                idxZ = list(mainZoneDict.values()).index(zone) # index of the current zone in the main zoneDict
+        zNames = []
+        for z, zn in enumerate(self.zoneDict):
+            zNames.append(self.zoneDict[zn][0]+'_'+self.zoneDict[zn][1])
+        pnlAreas = self.zoneDict
+        for zm, zone_m in enumerate(pnlAreas):
+            pnlAreas[zone_m][2] = []
+
+        for f,fc in enumerate(self.faces):
+            for z,zone in enumerate(fc.zoneDict):
+                zIdx = zNames.index(fc.zoneDict[zone][0]+'_'+fc.zoneDict[zone][1])
                 for a,_ in enumerate(fc.nominalPanelAreas):
-                    pAreas[idxZ].extend(fc.panelAreas[z][a]) 
-        return pAreas
+                    pnlAreas[zIdx][2].extend(fc.panelAreas[z][a])
+        return pnlAreas
 
     @property
     def panelIdxRanges(self):
@@ -1011,14 +1024,14 @@ class Faces:
         if newFig:
             ax.axis('equal')
 
-    def plotTaps(self, ax=None, col='k', dotSz=3, lw=2, ls='None', mrkr='.'):
+    def plotTaps(self, ax=None, showTapNo=False, fontsize='small', col='k', dotSz=3, lw=2, ls='None', mrkr='.'):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         for fc in self._members:
-            fc.plotTaps(ax=ax, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
+            fc.plotTaps(ax=ax, showTapNo=showTapNo, fontsize=fontsize, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
         if newFig:
             ax.axis('equal')
 
@@ -1071,19 +1084,18 @@ class Faces:
             ax.axis('off')
         return
 
-    def plotPanelField(self, field, fldName, dIdx=0, aIdx=0, showValueText=False, fldRange=None, ax=None, nLvl=100, cmap='RdBu'):
+    def plotPanelField(self, field, fldName, dIdx=0, aIdx=0, showValueText=False, strFmt="{:.3g}", fldRange=None, ax=None, nLvl=100, cmap='RdBu'):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         for f,fc in enumerate(self._members):
-            fc.plotPanelField(field[f], fldName, dIdx=dIdx, aIdx=aIdx, showValueText=showValueText, fldRange=fldRange, ax=ax, nLvl=nLvl, cmap=cmap)
+            fc.plotPanelField(field[f], fldName, dIdx=dIdx, aIdx=aIdx, showValueText=showValueText, strFmt=strFmt, fldRange=fldRange, ax=ax, nLvl=nLvl, cmap=cmap)
         if newFig:
             plt.colorbar()
             ax.axis('equal')
             ax.axis('off')
-        pass
 
 
 class building(Faces):

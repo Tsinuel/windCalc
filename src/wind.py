@@ -15,7 +15,7 @@ import windPlotters as wplt
 import windCAD
 
 from shapely.ops import voronoi_diagram
-from typing import List,Literal
+from typing import List,Literal,Dict,Tuple,Any
 from scipy import signal
 from scipy.stats import skew,kurtosis
 from scipy.interpolate import interp1d
@@ -1498,7 +1498,7 @@ class bldgCp(windCAD.building):
 
         if reReferenceCpToH:
             self.__reReferenceCp()
-        
+
         self.Update()
 
     def __verifyData(self):
@@ -1510,10 +1510,10 @@ class bldgCp(windCAD.building):
         if self.pOfT is None and self.p0ofT is None:
             return
         p0ofT = 0.0 if self.p0ofT is None else self.p0ofT
-        if not np.isscalar(p0ofT) and not len(p0ofT) == np.shape(self.pOfT)[1]:
+        if not np.isscalar(p0ofT) and not np.shape(p0ofT)[-1] == np.shape(self.pOfT)[-1]:
             raise Exception(f"The p and p0 time series for Cp calculation do not match in time steps. Shapes of p0ofT : {np.shape(p0ofT)}, pOfT : {np.shape(self.pOfT)}")
         self.CpOfT = np.divide(np.subtract(self.pOfT,p0ofT),
-                                0.5*self.airDensity*self.Uh**2)
+                                0.5*self.airDensity*self.Uref**2)
 
     def __computeAreaAveragedCp_____depricated(self):
         if self.NumPanels == 0 or self.CpOfT is None:
@@ -1587,16 +1587,61 @@ class bldgCp(windCAD.building):
         return self.name
 
     @property
-    def panelAreas(self):
-        pass
-
-    @property
     def NumAoA(self) -> int:
         if self.AoA is None:
             return 0
         if np.isscalar(self.AoA):
             return 1
         return len(self.AoA)
+
+    @property
+    def CpStatsAreaAvgByZone(self):
+        # [Nfaces][Nzones][Narea][Nflds][N_AoA,Npanels]
+        zNames = []
+        for z, zn in enumerate(self.zoneDict):
+            zNames.append(self.zoneDict[zn][0]+'_'+self.zoneDict[zn][1])
+        CpAavg = self.zoneDict
+        for zm, zone_m in enumerate(CpAavg):
+            CpAavg[zone_m][2] = {}
+            for _, fld in enumerate(self.CpStatsAreaAvg[0][zm][0]):
+                CpAavg[zone_m][2][fld] = None
+
+        for f,fc in enumerate(self.faces):
+            for z,zone in enumerate(fc.zoneDict):
+                zIdx = zNames.index(fc.zoneDict[zone][0]+'_'+fc.zoneDict[zone][1])
+                for a,_ in enumerate(fc.nominalPanelAreas):
+                    for _, fld in enumerate(self.CpStatsAreaAvg[f][z][a]):
+                        if CpAavg[zIdx][2][fld] is None:
+                            CpAavg[zIdx][2][fld] = {}
+                            CpAavg[zIdx][2][fld] = self.CpStatsAreaAvg[f][z][a][fld]
+                        else:
+                            CpAavg[zIdx][2][fld] = np.concatenate((CpAavg[zIdx][2][fld], self.CpStatsAreaAvg[f][z][a][fld]), axis=1)
+        return CpAavg  # [Nzones][Nflds][N_AoA,Npanels]
+
+    @property
+    def CpStatsAreaAvgEnvByZone(self):
+        # [Nfaces][Nzones][Narea][Nflds][N_AoA,Npanels]
+        raise NotImplemented()
+        zNames = []
+        for z, zn in enumerate(self.zoneDict):
+            zNames.append(self.zoneDict[zn][0]+'_'+self.zoneDict[zn][1])
+        CpAavg = self.zoneDict
+        for zm, zone_m in enumerate(CpAavg):
+            CpAavg[zone_m][2] = {}
+            for _, fld in enumerate(self.CpStatsAreaAvg[0][zm][0]):
+                CpAavg[zone_m][2][fld] = None
+
+        for f,fc in enumerate(self.faces):
+            for z,zone in enumerate(fc.zoneDict):
+                zIdx = zNames.index(fc.zoneDict[zone][0]+'_'+fc.zoneDict[zone][1])
+                for a,_ in enumerate(fc.nominalPanelAreas):
+                    for _, fld in enumerate(self.CpStatsAreaAvg[f][z][a]):
+                        if CpAavg[zIdx][2][fld] is None:
+                            CpAavg[zIdx][2][fld] = {}
+                            CpAavg[zIdx][2][fld] = self.CpStatsAreaAvg[f][z][a][fld]
+                        else:
+                            CpAavg[zIdx][2][fld] = np.concatenate((CpAavg[zIdx][2][fld], self.CpStatsAreaAvg[f][z][a][fld]), axis=1)
+        return CpAavg  # [Nzones][Nflds][N_AoA,Npanels]
 
     def Update(self):
         self.__verifyData()
@@ -1629,13 +1674,13 @@ class bldgCp(windCAD.building):
             ax.axis('off')
         return
 
-    def plotPanelCpStats(self, fieldName, dxnIdx=0, aIdx=0, showValueText=False, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
+    def plotPanelCpStats(self, fieldName, dxnIdx=0, aIdx=0, showValueText=False, strFmt="{:.3g}", figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure(figsize=figSize)
             ax = fig.add_subplot()
-        self.plotPanelField(self.CpStatsAreaAvg, fieldName, dIdx=dxnIdx, aIdx=aIdx, showValueText=showValueText, fldRange=fldRange, ax=ax, nLvl=nLvl, cmap=cmap)
+        self.plotPanelField(self.CpStatsAreaAvg, fieldName, dIdx=dxnIdx, aIdx=aIdx, showValueText=showValueText, strFmt=strFmt, fldRange=fldRange, ax=ax, nLvl=nLvl, cmap=cmap)
         if newFig:
             self.plotEdges(ax=ax)
             ax.axis('equal')
