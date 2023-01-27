@@ -10,6 +10,7 @@ import pandas as pd
 import warnings
 import shapely.geometry as shp
 import matplotlib.pyplot as plt
+# import matplotlib
 
 import windPlotters as wplt
 import windCAD
@@ -42,6 +43,10 @@ unitsNone = {
 
 cpStatTypes = ['mean','std','peak','peakMin','peakMax','skewness','kurtosis']
 scalableCpStats = ['mean','std','peakMin','peakMax']
+
+# matplotlib.rcParams['text.usetex'] = False
+# import matplotlib.font_manager
+# matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
 
 #===============================================================================
 #=============================== FUNCTIONS =====================================
@@ -1654,7 +1659,52 @@ class bldgCp(windCAD.building):
         pass
     
     """--------------------------------- Plotters -------------------------------------"""
-    def plotTapCpStats(self, fieldName, dxnIdx=0, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
+    def plotTapCpStatsPerAoA(self, fields=['peakMin','mean','peakMax',],fldRange=[-15,10], 
+                        nCols=7, nRows=10, cols = ['r','k','b','g','m','r','k','b','g','m'],mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], xticks=None,
+                        legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20]):
+
+        nPltPerPage = nCols * nRows
+        nPltTotal = self.NumTaps
+        nPages = int(np.ceil(nPltTotal/nPltPerPage))
+
+        tapIdx = 0
+        for p in range(nPages):
+            fig = plt.figure(figsize=figsize)
+            # fig, axs = plt.subplots(nRows, nCols)
+            for i in range(nPltPerPage):
+                if tapIdx >= nPltTotal:
+                    break
+                ax = plt.subplot(nRows,nCols,i+1)
+                for f,fld in enumerate(fields):
+                    ax.plot(self.AoA, self.CpStats[fld][:,tapIdx], label=fld,
+                            marker=mrkrs[f], color=cols[f], ls='none',mfc=cols[f], ms=4)
+                tapName = '' #'('+self.tapName[tapIdx]+')' if self.tapName is not None and self.tapName[tapIdx] is not '' else ''
+                tag = str(self.tapNo[tapIdx]) + tapName
+                ax.annotate(tag, xy=(0,0), xycoords='axes fraction',xytext=(0.05, 0.05), textcoords='axes fraction',
+                            fontsize=12, ha='left', va='bottom', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.7))
+                ax.set_ylim(fldRange)
+                if xticks is not None:
+                    ax.xaxis.set_ticks(xticks)
+                ax.tick_params(axis=u'both', which=u'both',direction='in')
+                
+                ax.grid(which='both')
+                
+                if i == 0:
+                    ax.set_xlabel(r'AoA')
+                    ax.set_ylabel(r'$C_p$')
+                    ax.xaxis.tick_top()
+                    ax.xaxis.set_label_position('top')
+                else:
+                    ax.xaxis.set_ticklabels([])
+                    ax.yaxis.set_ticklabels([])
+                tapIdx += 1
+            
+            handles, labels = ax.get_legend_handles_labels()
+            fig.legend(handles, fields, loc='upper center',ncol=len(fields), bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
+            plt.annotate(f"Page {p+1} of {nPages}", xy=pageNo_xy, xycoords='figure fraction', ha='center', va='bottom')
+            plt.show()
+
+    def plotTapCpStatContour(self, fieldName, dxnIdx=0, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
         newFig = False
         if ax is None:
             newFig = True
@@ -1674,7 +1724,7 @@ class bldgCp(windCAD.building):
             ax.axis('off')
         return
 
-    def plotPanelCpStats(self, fieldName, dxnIdx=0, aIdx=0, showValueText=False, strFmt="{:.3g}", figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
+    def plotPanelCpStatContour(self, fieldName, dxnIdx=0, aIdx=0, showValueText=False, strFmt="{:.3g}", figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
         newFig = False
         if ax is None:
             newFig = True

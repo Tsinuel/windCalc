@@ -169,15 +169,23 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False) -> Tuple[shp
     yMin, yMax = min(region[:,1]), max(region[:,1])
     Dx = xMax-xMin
     Dy = yMax-yMin
-    N = max(int(np.round(Dx/np.sqrt(area),0)), 1)
+    d = np.sqrt(area)
+    N = int(np.ceil(Dx/d))
     dx = Dx/N
-    M = max(int(np.round(Dy/np.sqrt(area),0)), 1)
+    M = int(np.ceil(Dy/d))
     dy = Dy/M
 
-    x = np.linspace(xMin+dx/2,xMax-dx/2,N-1) if N > 2 else (xMax-xMin)/2.0
-    y = np.linspace(yMin+dy/2,yMax-dy/2,M-1) if M > 2 else (yMax-yMin)/2.0
+    x = np.linspace(xMin+dx/2,xMax-dx/2,N)
+    y = np.linspace(yMin+dy/2,yMax-dy/2,M)
     X,Y = np.meshgrid(x,y)
     XY = np.concatenate((np.reshape(X,[-1,1]), np.reshape(Y,[-1,1])),axis=1)
+    isSinglePoint = len(X) == 1 and len(Y) == 1
+    if debug:
+        print(f"x Range: {xMin} to {xMax} \t\t y Range: {yMin} to {yMax}")
+        print(f"dx = {dx}, dy = {dy}")
+        print(f"Point grid: {N} X {M}")
+        print(f"Grid \t\tx: {x}\n\t\ty: {y} ")
+        print(f"Grid mesh shape: {np.shape(X)}")
 
     # generate the panels with the regular points. Take a note of the panels with area less than minAreaFactor*targetPanelArea for merging
     points = shp.MultiPoint(XY)
@@ -198,12 +206,13 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False) -> Tuple[shp
             panels1.append(newRig)
         else:
             continue
-        # x,y = newRig.exterior.xy
-        # plt.plot(x,y,'-r',lw=0.5)
-        
         if newRig.area > minAreaFactor*area:
             center = newRig.centroid
             goodPts.append(center.xy)
+        if debug:
+            x,y = newRig.exterior.xy
+            # plt.fill(x,y,'b',alpha=0.3)
+            # plt.plot(x,y,'-b',alpha=1,lw=0.5)
     goodPts = np.reshape(np.asarray(goodPts,dtype=float),[-1,2])
 
     # regenerate the panels without those that had areas less than minAreaFactor*targetPanelArea
@@ -214,9 +223,8 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False) -> Tuple[shp
         plt.plot(goodPts[:,0],goodPts[:,1],'.k')
 
     panels = []
-    summedArea = 0
     areas = []
-    for g in regions.geoms:
+    for i,g in enumerate(regions.geoms):
         newRig = getIntersection(bound,g)
         if newRig is not None:
             panels.append(newRig)
@@ -224,22 +232,24 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False) -> Tuple[shp
             continue
         areas.append(newRig.area)
         x,y = newRig.exterior.xy
-        # panels.append(newRig)
-        
         if debug:
-            summedArea += newRig.area
             plt.fill(x,y,'r',alpha=0.5)
-            plt.plot(x,y,'-k',alpha=0.5,lw=0.5)
+            plt.plot(x,y,'--k',alpha=1,lw=1)
+            plt.text(np.mean(x),np.mean(y),str(i))
 
-    if len(panels) == 0:
+    if len(panels) == 0 or isSinglePoint:
         panels.append(bound)
+        areas = [bound.area,]
+        if debug:
+            x,y = bound.exterior.xy
+            plt.fill(x,y,'r',alpha=0.5)
+            plt.plot(x,y,'--k',alpha=1,lw=1)
 
     if debug:
-        print(f"Zone area = {bound.area}, summed area = {summedArea}")
+        print(f"Zone area = {bound.area}, summed area = {np.sum(areas)}")
         plt.axis('equal')
         plt.show()
 
-    # print(f"Shape: {len(panels)}")
     panels = shp.MultiPolygon(panels)
     return panels, areas
 
@@ -374,13 +384,13 @@ class face:
             return
 
         self.panels : shp.MultiPolygon = ()    # [nZones][nAreas][nPanels]
-        self.panelAreas = ()    # [nZones][nAreas][nPanels]
+        # self.panelAreas = ()    # [nZones][nAreas][nPanels]
         self.tapWghtPerPanel = ()    # [nZones][nAreas][nPanels][nTapsPerPanel]
         self.tapIdxPerPanel = ()   # [nZones][nAreas][nPanels][nTapsPerPanel]
         self.error_in_panels = ()
         self.error_in_zones = ()
         for z,zn in enumerate(self.zoneDict):
-            print(f"\tWorking on: {self.zoneDict[zn][0]}-{self.zoneDict[zn][1]}")
+            # print(f"\tWorking on: {self.zoneDict[zn][0]}-{self.zoneDict[zn][1]}")
             zoneBoundary = self.zoneDict[zn][2]
             panels_z = ()
             panelA_z = ()
@@ -389,8 +399,8 @@ class face:
             err_pnl_z = ()
             err_zn_z = ()
             for a,area in enumerate(self.nominalPanelAreas):
-                print(f"\t\tWorking on nominal area: {area}")
-                print(f"zoneBoundary: {zoneBoundary}, area: {area}")
+                # print(f"\t\tWorking on nominal area: {area}")
+                # print(f"zoneBoundary: {zoneBoundary}, area: {area}")
                 pnls,areas = meshRegionWithPanels(zoneBoundary,area,debug=False)
 
                 tapsInSubzone = []
@@ -400,7 +410,7 @@ class face:
                     if intersects(tap,zonePlygn):
                         tapsInSubzone.append(tap)
                         idxInSubzone.append(i)
-                wght, Idx, overlaps, errIdxs = calculateTapWeightsPerPanel(pnls,tapsInSubzone,idxInSubzone)
+                wght, Idx, overlaps, errIdxs = calculateTapWeightsPerPanel(pnls,tapsInSubzone,idxInSubzone,showLog=False)
                 
                 panels_z += (pnls,)
                 panelA_z += (areas,)
@@ -409,20 +419,30 @@ class face:
                 err_pnl_z += (errIdxs,)
 
                 errorInArea = 100*(zonePlygn.area - sum(areas))/zonePlygn.area
-                print(f"\t\t\tArea check: \t Zone area = {zonePlygn.area}, \t sum of all panel areas = {sum(areas)}, \t Error = {errorInArea}%")
-                print(f"\t\tGenerated number of panels: {len(pnls.geoms)}")
+                # print(f"\t\t\tArea check: \t Zone area = {zonePlygn.area}, \t sum of all panel areas = {sum(areas)}, \t Error = {errorInArea}%")
+                # print(f"\t\tGenerated number of panels: {len(pnls.geoms)}")
                 
                 if abs(errorInArea) > 1.0:
                     err_zn_z += (a,)
                     warnings.warn(f"The difference between Zone area and the sum of its panel areas exceeds the tolerance level.")
                 
             self.panels += (panels_z,)
-            self.panelAreas += (panelA_z,)
+            # self.panelAreas += (panelA_z,)
             self.tapWghtPerPanel += (pnlWeights_z,)
             self.tapIdxPerPanel += (tapIdxByPnl_z,)
             self.error_in_panels += (err_pnl_z,)
             self.error_in_zones += (err_zn_z,)
 
+        self.panelAreas = []
+        for _, panels_z in enumerate(self.panels):
+            pnlArea_z = []
+            for _, panels_a in enumerate(panels_z):
+                pnlArea_a = []
+                for _, pnl in enumerate(panels_a.geoms):
+                    pnlArea_a.append(pnl.area)
+                pnlArea_z.append(pnlArea_a)
+            self.panelAreas.append(pnlArea_z)
+        
         print(f"Shape of 'panels': {np.shape(np.array(self.panels,dtype=object))}")
         print(f"Shape of 'panelAreas': {np.shape(np.array(self.panelAreas,dtype=object))}")
         print(f"Shape of 'pnlWeights': {np.shape(np.array(self.tapWghtPerPanel,dtype=object))}")
@@ -461,7 +481,7 @@ class face:
             return num
         for a,_ in enumerate(self.nominalPanelAreas):
             for z,_ in enumerate(self.panels):
-                num[a] += len(self.panels[z][a])
+                num[a] += len(self.panels[z][a].geoms)
         return np.sum(num)
 
     @property
@@ -475,6 +495,23 @@ class face:
             for z,_ in enumerate(self.panels):
                 num[a] += len(self.panels[z][a].geoms)
         return num
+
+    @property
+    def panelAreas__redacted(self):
+        return None
+        if self.nominalPanelAreas is None or self.panels is None:
+            return None
+        
+        panelAreas = []
+        for _, panels_z in enumerate(self.panels):
+            pnlArea_z = []
+            for _, panels_a in enumerate(panels_z):
+                pnlArea_a = []
+                for _, pnl in enumerate(panels_a.geoms):
+                    pnlArea_a.append(pnl.area)
+                pnlArea_z.append(pnlArea_a)
+            panelAreas.append(pnlArea_z)
+        return panelAreas
 
     """-------------------------------- Data handlers ---------------------------------"""
     def Update(self):
