@@ -1480,6 +1480,7 @@ class bldgCp(windCAD.building):
                 p0ofT=None,
                 CpStats=None,
                 peakMethod='BLUE',
+                tempTHfile=None,
                 ):
         super().__init__(name=bldgName, H=H, He=He, Hr=Hr, B=B, D=D, roofSlope=roofSlope, lScl=lScl, valuesAreScaled=valuesAreScaled, faces=faces,
                         faces_file_basic=faces_file_basic, faces_file_derived=faces_file_derived)
@@ -1498,13 +1499,16 @@ class bldgCp(windCAD.building):
         self.p0ofT = p0ofT      # [N_AoA,Ntime]
         self.CpStats = CpStats          # dict{[N_AoA,Ntaps] * nFlds}
         self.peakMethod = peakMethod
-
+        self.__tempTHfile = tempTHfile
+        
         self.CpStatsAreaAvg = None      # dict{[Nzones][N_AoA,Npanels] * nFlds}
 
         if reReferenceCpToH:
             self.__reReferenceCp()
 
         self.Update()
+
+        self.__storeTH_in_file = tempTHfile is not None
 
     def __verifyData(self):
         pass
@@ -1591,6 +1595,13 @@ class bldgCp(windCAD.building):
     def __str__(self):
         return self.name
 
+    # @property
+    # def CpOfT(self):
+    #     return self.__CpOfT
+    # @CpOfT.setter
+    # def CpOfT(self,value):
+    #     self.__CpOfT = value
+
     @property
     def NumAoA(self) -> int:
         if self.AoA is None:
@@ -1626,7 +1637,6 @@ class bldgCp(windCAD.building):
     @property
     def CpStatsAreaAvgEnvByZone(self):
         # [Nfaces][Nzones][Narea][Nflds][N_AoA,Npanels]
-        raise NotImplemented()
         zNames = []
         for z, zn in enumerate(self.zoneDict):
             zNames.append(self.zoneDict[zn][0]+'_'+self.zoneDict[zn][1])
