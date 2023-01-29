@@ -247,7 +247,9 @@ def fitESDUgivenIuRef(
 
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
-def peak_gumbel(x, axis:int=None, fit_method: Literal['BLUE','Gringorton','LeastSquare']='BLUE', N=10, prob_non_excd=0.5704, dur=None, detailedOutput=False):
+def peak_gumbel(x, axis:int=None, 
+            fit_method: Literal['BLUE','Gringorton','LeastSquare']='BLUE', 
+            N=10, prob_non_excd=0.5704, dur=None, detailedOutput=False):
     x = np.array(x, dtype=float)
     ndim = x.ndim
     xShp = x.shape
@@ -1508,6 +1510,7 @@ class bldgCp(windCAD.building):
                 refProfile:profile=None,
                 Zref_input=None,  # for the Cp TH being input below
                 Uref_input=None,  # for the Cp TH being input below
+                Uref_FS=None,     # Full-scale reference velocity for scaling purposes
                 samplingFreq=None,
                 airDensity=1.125,
                 AoA=None,
@@ -1518,7 +1521,7 @@ class bldgCp(windCAD.building):
                 p0ofT=None,
                 CpStats=None,
                 peakMethod='gumbel_BLUE',
-                tempTHfile=None,
+                keepTH=True,
                 ):
         super().__init__(name=bldgName, H=H, He=He, Hr=Hr, B=B, D=D, roofSlope=roofSlope, lScl=lScl, valuesAreScaled=valuesAreScaled, faces=faces,
                         faces_file_basic=faces_file_basic, faces_file_derived=faces_file_derived)
@@ -1530,6 +1533,7 @@ class bldgCp(windCAD.building):
 
         self.Zref = Zref_input
         self.Uref = Uref_input
+        self.Uref_FS = Uref_FS
         self.badTaps = badTaps
         self.AoA = [AoA,] if np.isscalar(AoA) else AoA          # [N_AoA]
         self.CpOfT = CpOfT      # [N_AoA,Ntaps,Ntime]
@@ -1537,16 +1541,19 @@ class bldgCp(windCAD.building):
         self.p0ofT = p0ofT      # [N_AoA,Ntime]
         self.CpStats = CpStats          # dict{[N_AoA,Ntaps] * nFlds}
         self.peakMethod = peakMethod
-        self.__tempTHfile = tempTHfile
         
         self.CpStatsAreaAvg = None      # dict{[Nzones][N_AoA,Npanels] * nFlds}
 
         if reReferenceCpToH:
             self.__reReferenceCp()
-
+        if self.Uref_FS is not None and self.Uref is not None and self.lScl is not None:
+            self.vScl = self.Uref/self.Uref_FS
+            self.tScl = self.lScl/self.vScl
+        else:
+            self.vScl = self.tScl = None
         self.Update()
-
-        self.__storeTH_in_file = tempTHfile is not None
+        if not keepTH:
+            self.CpOfT = self.pOfT = self.p0ofT = None
 
     def __verifyData(self):
         pass
@@ -1632,13 +1639,6 @@ class bldgCp(windCAD.building):
 
     def __str__(self):
         return self.name
-
-    # @property
-    # def CpOfT(self):
-    #     return self.__CpOfT
-    # @CpOfT.setter
-    # def CpOfT(self,value):
-    #     self.__CpOfT = value
 
     @property
     def NumAoA(self) -> int:
