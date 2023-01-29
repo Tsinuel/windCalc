@@ -10,7 +10,7 @@ import pandas as pd
 import warnings
 import shapely.geometry as shp
 import matplotlib.pyplot as plt
-# import matplotlib
+import json
 
 import windPlotters as wplt
 import windCAD
@@ -43,6 +43,9 @@ unitsNone = {
 
 cpStatTypes = ['mean','std','peak','peakMin','peakMax','skewness','kurtosis']
 scalableCpStats = ['mean','std','peakMin','peakMax']
+
+with open(r'D:\OneDrive - The University of Western Ontario\Documents\PhD\Thesis\CodeRepositories\windCalc\src\refData\bluecoeff.json', 'r') as f:
+    BLUE_COEFFS = json.load(f)
 
 # matplotlib.rcParams['text.usetex'] = False
 # import matplotlib.font_manager
@@ -244,21 +247,51 @@ def fitESDUgivenIuRef(
 
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
+def peak_gumbel(x, axis:int=None, fit_method: Literal['BLUE','Gringorton','LeastSquare']='BLUE', N=10, prob_non_excd=0.5704, dur=None, detailedOutput=False):
+    x = np.array(x, dtype=float)
+    ndim = x.ndim
+    xShp = x.shape
+
+    # Extract N min/max values
+    if ndim == 1:
+        x = np.array_split(x, N)
+    else:
+        x = np.split(x, N, axis=axis)
+    x_min = [np.min(xi,axis=axis) for xi in x]
+    x_max = [np.max(xi,axis=axis) for xi in x]
+
+    # Sort
+    x_max = np.sort(x_max, axis=axis)
+    x_min = np.flip(np.sort(x_min, axis=axis),axis=axis)
+
+    dur = N if dur is None else dur
+
+    # Get Gumbel coefficients
+    if fit_method == 'BLUE':
+        if N < 4 or N > 100:
+            raise NotImplemented()
+        ai, bi = BLUE_COEFFS['ai'][N], BLUE_COEFFS['bi'][N]
+    else: # This can be extended to other fitting methods to get ai and bi
+        raise NotImplemented()
+
+    if detailedOutput:
+        return peakMin, peakMax, x_min, x_max
+    else:
+        return peakMin, peakMax
 
 def peak(x,axis=None,
-        method: Literal['minmax','BLUE']='BLUE',
+        method: Literal['minmax','gumbel_BLUE']='gumbel_BLUE', gumbel_N=10, prob_non_excd=0.5704
         ):
-    if method == 'BLUE':
-        raise NotImplemented()
+    if method == 'gumbel_BLUE':
+        return peak_gumbel(x,axis=axis,fit_method='BLUE',N=gumbel_N, prob_non_excd=prob_non_excd)
     elif method == 'minmax':
         return np.amin(x,axis=axis), np.amax(x,axis=axis)
     else:
         raise NotImplemented()
-    pass
 
 def getTH_stats(TH,axis=0,
                 fields: Literal['mean','std','peak','peakMin','peakMax','skewness','kurtosis'] = ['mean','std','peak'],
-                peakMethod: Literal['minmax','BLUE']='BLUE',
+                peakMethod: Literal['minmax','gumbel_BLUE']='gumbel_BLUE',
                 ) -> dict:
     if not all(x in cpStatTypes for x in fields):
         warnings.warn("Not all elements given as fields are valid. Choose from: "+str(cpStatTypes))
@@ -290,15 +323,17 @@ class ESDU74:
     def __init__(self,
                     phi=30,
                     z0=0.03,
-                    Z=np.sort(np.append(np.logspace(np.log10(0.5),np.log10(300),99),10)), 
-                    Zref=10,
-                    Uref=10,
+                    Z=np.sort(np.append(np.logspace(np.log10(0.5),np.log10(300.0),99),10)), 
+                    Zref=10.0,
+                    Uref=10.0,
                     ):
         self.phi = phi # latitude in degrees
         self.z0 = z0
         self.Z = Z
         self.Zref = Zref
         self.Uref = Uref
+        if not self.Zref in self.Z:
+            self.Z = np.sort(np.append(self.Z, self.Zref))
 
     def __str__(self):
         return 'ESDU-74 (z0 = '+str(self.z0)+'m)'
@@ -497,6 +532,9 @@ class ESDU85:
         self.Z = Z
         self.Zref = Zref
         self.Uref = Uref
+        
+        if not self.Zref in self.Z:
+            self.Z = np.sort(np.append(self.Z, self.Zref))
 
     def __str__(self):
         return 'ESDU-85 (z0 = '+str(self.z0)+'m)'
@@ -1479,7 +1517,7 @@ class bldgCp(windCAD.building):
                 pOfT=None,
                 p0ofT=None,
                 CpStats=None,
-                peakMethod='BLUE',
+                peakMethod='gumbel_BLUE',
                 tempTHfile=None,
                 ):
         super().__init__(name=bldgName, H=H, He=He, Hr=Hr, B=B, D=D, roofSlope=roofSlope, lScl=lScl, valuesAreScaled=valuesAreScaled, faces=faces,

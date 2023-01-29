@@ -57,7 +57,7 @@ def extractTapDataFromVTK(vtkFile,tapCoords):
     p = vtk_to_numpy(polydata.GetCellData().GetArray(0))
     return np.reshape(p[idx],[-1,1])
 
-def extractTapDataFromCSV(fileDir,tapCoords,writeToFile=True):
+def extractTapDataFromCSV(fileDir,tapCoords,writeToFile=True,showLog=True):
     import glob
     from scipy.spatial import KDTree
 
@@ -68,10 +68,14 @@ def extractTapDataFromCSV(fileDir,tapCoords,writeToFile=True):
     newPts = pts[idx,:]
 
     files = glob.glob(os.path.join(fileDir, "p_*.csv"))
+    times = [int(filename.split('_')[1].split('.')[0]) for filename in os.listdir(fileDir) if filename.startswith("p_")]
+    files = sorted(list(zip(files, np.asarray(times).astype(int))), key=lambda x: x[1])
+    files = [x[0] for x in files]
 
     first = True
     for f in files:
-        print("Reading: "+f+"   ...")
+        if showLog:
+            print("Reading: "+f+"   ...")
         data = pd.read_csv(f)
         if first:
             p = np.reshape(data.to_numpy()[idx],[-1,1])
