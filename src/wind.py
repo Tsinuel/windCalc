@@ -1539,11 +1539,12 @@ class bldgCp(windCAD.building):
         self.CpOfT = CpOfT      # [N_AoA,Ntaps,Ntime]
         self.pOfT = pOfT        # [N_AoA,Ntaps,Ntime]
         self.p0ofT = p0ofT      # [N_AoA,Ntime]
-        self.CpStats = CpStats          # dict{[N_AoA,Ntaps] * nFlds}
+        self.CpStats = CpStats          # dict{nFlds:[N_AoA,Ntaps]}
         self.peakMethod = peakMethod
         
-        self.CpStatsAreaAvg = None      # dict{[Nzones][N_AoA,Npanels] * nFlds}
+        self.CpStatsAreaAvg = None      # dict{nFlds:[Nzones][N_AoA,Npanels]}
 
+        self.__handleBadTaps()
         if reReferenceCpToH:
             self.__reReferenceCp()
         if self.Uref_FS is not None and self.Uref is not None and self.lScl is not None:
@@ -1558,6 +1559,20 @@ class bldgCp(windCAD.building):
     def __verifyData(self):
         pass
 
+    def __handleBadTaps(self):
+        if self.badTaps is None:
+            return
+        tapNo = np.array(self.tapNo_all)
+        badIdx = np.where(np.in1d(tapNo, self.badTaps))[0]
+
+        if self.CpOfT is not None:
+            self.CpOfT = np.delete(self.CpOfT, badIdx, axis=1)
+        if self.pOfT is not None:
+            self.pOfT = np.delete(self.pOfT, badIdx, axis=1)
+        if self.CpStats is not None:
+            for fld in self.CpStats:
+                self.CpStats[fld] = np.delete(self.CpStats[fld], badIdx, axis=1)
+
     def __computeCpTHfrom_p_TH(self):
         if self.CpOfT is not None:
             return
@@ -1566,6 +1581,7 @@ class bldgCp(windCAD.building):
         p0ofT = 0.0 if self.p0ofT is None else self.p0ofT
         if not np.isscalar(p0ofT) and not np.shape(p0ofT)[-1] == np.shape(self.pOfT)[-1]:
             raise Exception(f"The p and p0 time series for Cp calculation do not match in time steps. Shapes of p0ofT : {np.shape(p0ofT)}, pOfT : {np.shape(self.pOfT)}")
+        pOfT = np.empty(np.shape(self.pOfT))
         self.CpOfT = np.divide(np.subtract(self.pOfT,p0ofT),
                                 0.5*self.airDensity*self.Uref**2)
 
@@ -1749,7 +1765,8 @@ class bldgCp(windCAD.building):
             
             handles, labels = ax.get_legend_handles_labels()
             fig.legend(handles, fields, loc='upper center',ncol=len(fields), bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
-            plt.annotate(f"Page {p+1} of {nPages}", xy=pageNo_xy, xycoords='figure fraction', ha='center', va='bottom')
+            plt.annotate(f"Page {p+1} of {nPages}", xy=pageNo_xy, xycoords='figure fraction', ha='right', va='bottom')
+            plt.annotate(self.name, xy=pageNo_xy, xycoords='figure fraction', ha='left', va='bottom')
             plt.show()
 
     def plotTapCpStatContour(self, fieldName, dxnIdx=0, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):

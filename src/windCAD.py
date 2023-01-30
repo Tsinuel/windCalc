@@ -310,6 +310,8 @@ class face:
                 tapNo: List[int]=None,
                 tapIdx: List[int]=None,
                 tapName: List[str]=None,
+                badTaps=None,
+                allBldgTaps=None,
                 tapCoord=None,
                 zoneDict=None,
                 nominalPanelAreas=None,
@@ -329,11 +331,15 @@ class face:
         self.zoneDict = zoneDict            # dict of dicts: zone names per each zoning. e.g., [['NBCC-z1', 'NBCC-z2', ... 'NBCC-zM'], ['ASCE-a1', 'ASCE-a2', ... 'ASCE-aQ']]
         self.nominalPanelAreas = nominalPanelAreas  # a vector of nominal areas to generate panels. The panels areas will be close but not necessarily exactly equal to these.
         self.numOfNominalPanelAreas = numOfNominalPanelAreas
+
+        # Tap things
         self.tapNo: List[int] = tapNo                  # [Ntaps,]
+        self.tapNo_all = self.tapNo                    # includes the bad taps
         self.tapIdx: List[int] = tapIdx                # [Ntaps,] tap indices in the main matrix of the entire building
         self.tapName: List[str] = tapName              # [Ntaps,]
+        self.badTaps: List[int] = badTaps
         self.tapCoord = tapCoord            # [Ntaps,2]   ... from the local face origin
-
+        
         # derived
         self.tapTribs: shp.MultiPolygon = None
         self.panels : shp.MultiPolygon = None
@@ -343,8 +349,8 @@ class face:
         self.error_in_panels = None
         self.error_in_zones = None
 
-
         # fill derived
+        self.__handleBadTaps(allBldgTaps)
         if file_basic is None:
             self.Update()
         elif file_derived is None:
@@ -354,6 +360,27 @@ class face:
             
     def __str__(self):
         return self.name
+
+    def __handleBadTaps(self,allBldgTaps):
+        if self.badTaps is None:
+            return
+        if self.tapNo is None:
+            warnings.warn("List of bad taps is provided for a face without defined tap numbers. Define the taps or the bad taps will be ignored.")
+            return
+        if allBldgTaps is None:
+            warnings.warn("If bad taps are provided, the full building tap list has to be provided as well so the updated indices can be determined.")
+            return
+        
+        badIdx = np.where(np.in1d(self.tapNo, self.badTaps))[0]
+        self.tapNo = np.delete(self.tapNo, badIdx)
+        if self.tapIdx is not None:
+            allBadIdx = np.where(np.in1d(self.tapNo, self.badTaps))[0]
+            bldgTaps = np.delete(allBldgTaps, allBadIdx)
+            self.tapIdx = np.where(np.isin(bldgTaps, self.tapNo))[0]
+        if self.tapName is not None:
+            self.tapName = np.delete(self.tapName, badIdx)
+        if self.tapCoord is not None:
+            self.tapCoord = np.delete(self.tapCoord, badIdx, axis=0)
 
     def __generateTributaries(self):
         if self.vertices is None or self.tapCoord is None:
@@ -863,6 +890,13 @@ class Faces:
         tapNo = []
         for f in self.members:
             tapNo.extend(f.tapNo)
+        return tapNo
+
+    @property
+    def tapNo_all(self) -> List[int]:
+        tapNo = []
+        for f in self.members:
+            tapNo.extend(f.tapNo_all)
         return tapNo
 
     @property
