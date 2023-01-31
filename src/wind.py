@@ -1664,53 +1664,69 @@ class bldgCp(windCAD.building):
             return 1
         return len(self.AoA)
 
-    @property
-    def CpStatsAreaAvgByZone(self):
+    def CpStatsAreaAvgCollected(self, mixNominalAreas=False, 
+                        envelope:Literal['max','min','none']='none', 
+                        extremesPerNominalArea:Literal['max','min','none']='none'):
         # [Nfaces][Nzones][Narea][Nflds][N_AoA,Npanels]
         zNames = []
         for z, zn in enumerate(self.zoneDict):
             zNames.append(self.zoneDict[zn][0]+'_'+self.zoneDict[zn][1])
         CpAavg = self.zoneDict
         for zm, zone_m in enumerate(CpAavg):
-            CpAavg[zone_m][2] = {}
-            for _, fld in enumerate(self.CpStatsAreaAvg[0][zm][0]):
-                CpAavg[zone_m][2][fld] = None
+            if mixNominalAreas:
+                CpAavg[zone_m][2] = {}
+                for _, fld in enumerate(self.CpStatsAreaAvg[0][zm][0]):
+                    CpAavg[zone_m][2][fld] = None                
+            else:
+                CpAavg[zone_m][2] = []
+                for a, _ in enumerate(self.faces[0].nominalPanelAreas):
+                    CpAavg[zone_m][2].append({})
+                    for _, fld in enumerate(self.CpStatsAreaAvg[0][zm][0]):
+                        CpAavg[zone_m][2][a][fld] = None
+
+        def envelopeFld(fld): # assumes all fields have the AoA as the first index
+            if envelope == 'max':
+                return np.max(fld,axis=0,keepdims=True) 
+            elif envelope == 'min':
+                return np.min(fld,axis=0,keepdims=True)
+            elif envelope == 'none':
+                return fld
+
+        def extremePerArea(fld):
+            if extremesPerNominalArea == 'max':
+                return np.max(fld,axis=1,keepdims=True) 
+            elif extremesPerNominalArea == 'min':
+                return np.min(fld,axis=1,keepdims=True)
+            elif extremesPerNominalArea == 'none':
+                return fld
 
         for f,fc in enumerate(self.faces):
             for z,zone in enumerate(fc.zoneDict):
                 zIdx = zNames.index(fc.zoneDict[zone][0]+'_'+fc.zoneDict[zone][1])
                 for a,_ in enumerate(fc.nominalPanelAreas):
                     for _, fld in enumerate(self.CpStatsAreaAvg[f][z][a]):
-                        if CpAavg[zIdx][2][fld] is None:
-                            CpAavg[zIdx][2][fld] = {}
-                            CpAavg[zIdx][2][fld] = self.CpStatsAreaAvg[f][z][a][fld]
+                        if mixNominalAreas:
+                            if CpAavg[zIdx][2][fld] is None:
+                                CpAavg[zIdx][2][fld] = {}
+                                CpAavg[zIdx][2][fld] = envelopeFld(self.CpStatsAreaAvg[f][z][a][fld])
+                            else:
+                                CpAavg[zIdx][2][fld] = np.concatenate((CpAavg[zIdx][2][fld], envelopeFld(self.CpStatsAreaAvg[f][z][a][fld])), axis=1)
                         else:
-                            CpAavg[zIdx][2][fld] = np.concatenate((CpAavg[zIdx][2][fld], self.CpStatsAreaAvg[f][z][a][fld]), axis=1)
-        return CpAavg  # [Nzones][Nflds][N_AoA,Npanels]
-
-    @property
-    def CpStatsAreaAvgEnvByZone(self):
-        # [Nfaces][Nzones][Narea][Nflds][N_AoA,Npanels]
-        zNames = []
-        for z, zn in enumerate(self.zoneDict):
-            zNames.append(self.zoneDict[zn][0]+'_'+self.zoneDict[zn][1])
-        CpAavg = self.zoneDict
-        for zm, zone_m in enumerate(CpAavg):
-            CpAavg[zone_m][2] = {}
-            for _, fld in enumerate(self.CpStatsAreaAvg[0][zm][0]):
-                CpAavg[zone_m][2][fld] = None
-
-        for f,fc in enumerate(self.faces):
-            for z,zone in enumerate(fc.zoneDict):
-                zIdx = zNames.index(fc.zoneDict[zone][0]+'_'+fc.zoneDict[zone][1])
-                for a,_ in enumerate(fc.nominalPanelAreas):
-                    for _, fld in enumerate(self.CpStatsAreaAvg[f][z][a]):
-                        if CpAavg[zIdx][2][fld] is None:
-                            CpAavg[zIdx][2][fld] = {}
-                            CpAavg[zIdx][2][fld] = self.CpStatsAreaAvg[f][z][a][fld]
-                        else:
-                            CpAavg[zIdx][2][fld] = np.concatenate((CpAavg[zIdx][2][fld], self.CpStatsAreaAvg[f][z][a][fld]), axis=1)
-        return CpAavg  # [Nzones][Nflds][N_AoA,Npanels]
+                            if CpAavg[zIdx][2][a][fld] is None:
+                                CpAavg[zIdx][2][a][fld] = {}
+                                CpAavg[zIdx][2][a][fld] = envelopeFld(self.CpStatsAreaAvg[f][z][a][fld])
+                            else:
+                                CpAavg[zIdx][2][a][fld] = np.concatenate((CpAavg[zIdx][2][a][fld], envelopeFld(self.CpStatsAreaAvg[f][z][a][fld]) ), axis=1)
+        if not extremesPerNominalArea == 'none' and not mixNominalAreas:
+            __CpAavg = CpAavg
+            CpAavg = self.zoneDict
+            for zm, zone_m in enumerate(CpAavg):
+                CpAavg[zone_m][2] = {}
+                for _, fld in enumerate(self.CpStatsAreaAvg[0][zm][0]):
+                    CpAavg[zone_m][2][fld] = np.zeros_like(self.faces[0].nominalPanelAreas)
+                    for a, _ in enumerate(self.faces[0].nominalPanelAreas):
+                        CpAavg[zone_m][2][fld][a] = np.squeeze(extremePerArea(__CpAavg[zone_m][2][a][fld]))
+        return CpAavg
 
     def Update(self):
         self.__verifyData()
@@ -1769,13 +1785,13 @@ class bldgCp(windCAD.building):
             plt.annotate(self.name, xy=pageNo_xy, xycoords='figure fraction', ha='left', va='bottom')
             plt.show()
 
-    def plotTapCpStatContour(self, fieldName, dxnIdx=0, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
+    def plotTapCpStatContour(self, fieldName, dxnIdx=0, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both'):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure(figsize=figSize)
             ax = fig.add_subplot()
-        self.plotTapField(ax=ax, field=self.CpStats[fieldName][dxnIdx,:], fldRange=fldRange, nLvl=nLvl, cmap=cmap)
+        self.plotTapField(ax=ax, field=self.CpStats[fieldName][dxnIdx,:], fldRange=fldRange, nLvl=nLvl, cmap=cmap, extend=extend)
         if newFig:
             self.plotEdges(ax=ax)
 

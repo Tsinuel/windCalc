@@ -706,7 +706,7 @@ class face:
         if newFig:
             ax.axis('equal')
 
-    def plotTapField(self, field, dx=None, ax=None, fldRange=None, nLvl=100, cmap='RdBu'):
+    def plotTapField(self, field, dx=None, ax=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both'):
         newFig = False
         if ax is None:
             newFig = True
@@ -734,7 +734,7 @@ class face:
         else:
             levels = np.linspace(fldRange[0], fldRange[1], nLvl)
         ax.contourf(X, Y, Z,
-                levels=levels, cmap=cmap)
+                levels=levels, cmap=cmap, extend=extend)
         if newFig:
             plt.colorbar()
             ax.axis('equal')
@@ -1139,7 +1139,7 @@ class Faces:
         if newFig:
             ax.axis('equal')
 
-    def plotTapField(self, field, ax=None, dx=None, fldRange=None, nLvl=100, cmap='RdBu'):
+    def plotTapField(self, field, ax=None, dx=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both'):
         newFig = False
         if ax is None:
             newFig = True
@@ -1147,7 +1147,7 @@ class Faces:
             ax = fig.add_subplot()
         contours = []
         for fc in self._members:
-            c = fc.plotTapField(ax=ax, field=field, dx=dx, fldRange=fldRange, nLvl=nLvl, cmap=cmap)
+            c = fc.plotTapField(ax=ax, field=field, dx=dx, fldRange=fldRange, nLvl=nLvl, cmap=cmap, extend=extend)
             contours.append(c)
         if newFig:
             plt.colorbar()
