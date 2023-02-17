@@ -12,6 +12,7 @@ import warnings
 import shapely.geometry as shp
 import json
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 from shapely.ops import voronoi_diagram
 from shapely.validation import make_valid
@@ -540,6 +541,23 @@ class face:
             panelAreas.append(pnlArea_z)
         return panelAreas
 
+    @property
+    def zoneDictUniqe(self):
+        allZones = {}
+        i = 0
+        for val in self.zoneDict.values():
+            isNewVal = True
+            for acceptedZone in allZones.values():
+                if val[0] == acceptedZone[0] and val[1] == acceptedZone[1]:
+                    isNewVal = False
+                    break
+            if isNewVal:
+                x = list(val)[0:2]
+                x.append([])
+                allZones[i] = x
+                i += 1
+        return allZones
+
     """-------------------------------- Data handlers ---------------------------------"""
     def Update(self):
         self.__generateTributaries()
@@ -679,7 +697,10 @@ class face:
         if newFig:
             ax.axis('equal')
         
-    def plotZones(self, ax=None, col='b', dotSz=3, lw=1.5, ls='--', mrkr='None'):
+    def plotZones(self, ax=None, col='b', dotSz=3, lw=1.5, ls='--', mrkr='None', zoneCol=None):
+        zoneDictUniqe = self.zoneDictUniqe
+        if zoneCol:
+            zoneCol = sns.color_palette('husl', n_colors=5)
         newFig = False
         if ax is None:
             newFig = True

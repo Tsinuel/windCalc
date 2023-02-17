@@ -439,6 +439,7 @@ def __readProbe_singleT(file,field):
         for line in f:
             line = line.replace('(','')
             line = line.replace(')','')
+            line = line.replace(',',' ')
             if line.startswith('#'):
                 if line.startswith('# Probe'):
                     line = line.split()

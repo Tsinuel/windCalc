@@ -1216,7 +1216,7 @@ class profile:
         self.__updateUh()
 
     """--------------------------------- Plotters -------------------------------------"""
-    def plotProfiles(self,figFile=None,xLimits=None,figSize=[15,5]):
+    def plotProfiles(self,figFile=None,xLimits=None,yLimits='auto',figSize=[15,5]):
         Z = (self.Z,)
         val = (np.transpose(np.stack((self.U, self.Iu, self.Iv, self.Iw))),)
         xlabels = (r"U",r"I_u",r"I_v",r"I_w")
@@ -1230,7 +1230,7 @@ class profile:
                         xLabels=xlabels, # ("str1", "str2", ... "str_m")
                         yLabel=zlabel,
                         xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                        # yLimits=[0,0.5], # [zMin, zMax]
+                        yLimits=yLimits, # [zMin, zMax]
                         figSize=figSize,
                         nCols=4
                         )
