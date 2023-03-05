@@ -10,6 +10,7 @@ import pandas as pd
 import warnings
 import shapely.geometry as shp
 import matplotlib.pyplot as plt
+import matplotlib.lines as lines
 import json
 
 import windPlotters as wplt
@@ -25,6 +26,9 @@ from scipy.interpolate import interp1d
 #===============================================================================
 #==================== CONSTANTS & GLOBAL VARIABLES  ============================
 #===============================================================================
+fps2mps = 0.3048
+mm2m = 0.001
+
 unitsCommonSI = {
         'L':'m',
         'T':'s',
@@ -319,6 +323,852 @@ def getTH_stats(TH,axis=0,
 #===============================================================================
 
 #------------------------------- WIND FIELD ------------------------------------
+class spectra:
+    UofT = VofT = WofT = None
+
+    """---------------------------------- Internals -----------------------------------"""
+    def __calculateSpectra(self):
+        if self.UofT is not None:
+            self.n, self.Suu = psd(self.UofT, self.samplingFreq, nAvg=self.nSpectAvg)
+            self.U = np.mean(self.UofT)
+            self.Iu = np.std(self.UofT)/self.U
+            self.xLu = integLengthScale(self.UofT, 1/self.samplingFreq)
+        if self.VofT is not None:
+            n, self.Svv = psd(self.VofT, self.samplingFreq, nAvg=self.nSpectAvg)
+            self.Iv = np.std(self.VofT)/self.U
+            self.xLv = integLengthScale(self.VofT, 1/self.samplingFreq,meanU=self.U)
+            if self.n is None:
+                self.n = n
+            elif not len(n) == len(self.n):
+                raise Exception("UofT and VofT have different no. of time steps. The number of time steps in all UofT, VofT, and WofT must match for spectra calculation.")
+                
+        if self.WofT is not None:
+            n, self.Sww = psd(self.WofT, self.samplingFreq, nAvg=self.nSpectAvg)
+            self.Iw = np.std(self.WofT)/self.U
+            self.xLw = integLengthScale(self.WofT, 1/self.samplingFreq,meanU=self.U)
+            if self.n is None:
+                self.n = n
+            elif not len(n) == len(self.n):
+                raise Exception("WofT has different no. of time steps from UofT and VofT. All three must have the same number of time steps for spectra calculation.")
+        
+    def __init__(self, name=None, UofT=None, VofT=None, WofT=None, samplingFreq=None, 
+                 n=None, Suu=None, Svv=None, Sww=None, nSpectAvg=8,
+                 Z=None, U=None, Iu=None, Iv=None, Iw=None):
+        
+        self.name = name
+        self.samplingFreq = samplingFreq
+        self.n = n
+        self.Suu = Suu
+        self.Svv = Svv
+        self.Sww = Sww
+        self.nSpectAvg = nSpectAvg
+        
+        self.Z = Z
+        self.U = U
+        self.Iu = Iu
+        self.Iv = Iv
+        self.Iw = Iw
+        
+        self.UofT = UofT
+        self.VofT = VofT
+        self.WofT = WofT
+
+        self.Update()
+
+    def __str__(self):
+        return self.name
+    
+    """--------------------------------- Normalizers ----------------------------------"""
+    def rf(self,n='auto',normZ='Z'):
+        if n == 'auto':
+            n = self.n
+        if normZ == 'Z':
+            normZ = self.Z
+        elif normZ == 'xLi':
+            normZ = self.xLu
+        elif not type(normZ) == int or float:
+            raise Exception("Unknown normalization height type. Choose from {'Z', 'xLi'} or specify a number.")
+        if n is None or self.U is None or normZ is None:
+            return None
+        else:
+            return n * normZ/self.U
+
+    def rSuu(self,normU:Literal['U','sigUi']='U'):
+        if normU == 'U':
+            normU = self.U
+        elif normU == 'sigUi':
+            normU = self.Iu * self.U
+        if self.n is None or self.Suu is None or normU is None:
+            return None
+        else:
+            return np.multiply(self.n,self.Suu)/(normU**2)
+
+    def rSvv(self,normU:Literal['U','sigUi']='U'):
+        if normU == 'U':
+            normU = self.U
+        elif normU == 'sigUi':
+            normU = self.Iv * self.U
+        if self.n is None or self.Svv is None or normU is None:
+            return None
+        else:
+            return np.multiply(self.n,self.Svv)/(normU**2)
+
+    def rSww(self,normU:Literal['U','sigUi']='U'):
+        if normU == 'U':
+            normU = self.U
+        elif normU == 'sigUi':
+            normU = self.Iw * self.U
+        if self.n is None or self.Sww is None or normU is None:
+            return None
+        else:
+            return np.multiply(self.n,self.Sww)/(normU**2)
+    
+    """-------------------------------- Data handlers ---------------------------------"""
+    def Update(self):
+        self.__calculateSpectra()
+
+    def writeSpecsToFile(self):
+        pass
+
+    def writeDataToFile(self):
+        pass
+
+    """--------------------------------- Fittings -------------------------------------"""
+    def Suu_vonK(self,n=None,normalized=False,normU='U'):
+        if n is None:
+            n = self.n
+        Suu = vonKarmanSuu(n=n,U=self.U,Iu=self.Iu,xLu=self.xLu)
+        if normalized:
+            if normU == 'U':
+                normU = self.U
+            elif normU == 'sigUi':
+                normU = self.Iu * self.U
+            return np.multiply(n,Suu)/(normU**2)
+        else:
+            return Suu
+
+    def Svv_vonK(self,n=None,normalized=False,normU='U'):
+        if n is None:
+            n = self.n
+        Svv = vonKarmanSvv(n=n,U=self.U,Iv=self.Iv,xLv=self.xLv)
+        if normalized:
+            if normU == 'U':
+                normU = self.U
+            elif normU == 'sigUi':
+                normU = self.Iv * self.U            
+            return np.multiply(n,Svv)/(normU**2)
+        else:
+            return Svv
+
+    def Sww_vonK(self,n=None,normalized=False,normU='U'):
+        if n is None:
+            n = self.n
+        Sww = vonKarmanSww(n=n,U=self.U,Iw=self.Iw,xLw=self.xLw)
+        if normalized:
+            if normU == 'U':
+                normU = self.U
+            elif normU == 'sigUi':
+                normU = self.Iw * self.U            
+            return np.multiply(n,Sww)/(normU**2)
+        else:
+            return Sww
+
+    def Suu_ESDU74(self):
+        pass
+
+    def Svv_ESDU74(self):
+        pass
+
+    def Sww_ESDU74(self):
+        pass
+
+    def Suu_ESDU85(self):
+        pass
+
+    def Svv_ESDU85(self):
+        pass
+
+    def Sww_ESDU85(self):
+        pass
+
+    """--------------------------------- Plotters -------------------------------------"""
+    def plotSpectra(self, 
+                    figFile=None, 
+                    xLimits=None, 
+                    yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
+                    figSize=[15,5], 
+                    normalize=True,
+                    normZ='Z',
+                    normU='U',
+                    plotType='loglog',
+                    overlayVonK=False,
+                    avoidZeroFreq=True
+                    ):
+        if normalize:
+            n = (self.rf(normZ=normZ),)
+            Suu = (self.rSuu(normU=normU),)
+            Svv = (self.rSvv(normU=normU),)
+            Sww = (self.rSww(normU=normU),)
+            if normU == 'U':
+                ylabels = (r"$nS_{uu}/U_{ref}^2$",r"$nS_{vv}/U_{ref}^2$",r"$nS_{ww}/U_{ref}^2$")
+            elif normU == 'sigUi':
+                ylabels = (r"$nS_{uu}/\sigma_u^2$",r"$nS_{vv}/\sigma_v^2$",r"$nS_{ww}/\sigma_w^2$")
+            if normZ == 'Z':
+                xlabel = r"$n Z_{ref}/U$"
+            elif normZ == 'xLi':
+                xlabel = r"$n ^xL_u/U$"
+            drawXlineAt_rf1 = True
+        else:
+            n = (self.n,)
+            Suu = (self.Suu,)
+            Svv = (self.Svv,)
+            Sww = (self.Sww,)
+            ylabels = (r"$S_{uu}$",r"$S_{vv}$",r"$S_{ww}$")
+            xlabel = r"$n [Hz]$"
+            drawXlineAt_rf1 = False
+        names = (self.name,)
+        if overlayVonK:
+            names += ('vonK-'+self.name,)
+            n += (n[0],)
+            Suu += (self.Suu_vonK(self.n,normalized=normalize,normU=normU),)
+            Svv += (self.Svv_vonK(self.n,normalized=normalize,normU=normU),)
+            Sww += (self.Sww_vonK(self.n,normalized=normalize,normU=normU),)
+
+        wplt.plotSpectra(
+                        freq=n, # ([n1,], [n2,], ... [nN,])
+                        Suu=Suu, # ([n1,], [n2,], ... [nN,])
+                        Svv=Svv, # ([n1,], [n2,], ... [nN,])
+                        Sww=Sww, # ([n1,], [n2,], ... [nN,])
+                        dataLabels=names, # ("str1", "str2", ... "strN")
+                        pltFile=figFile, # "/path/to/plot/file.pdf"
+                        xLabel=xlabel,
+                        yLabels=ylabels, # ("str1", "str2", ... "str_m")
+                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                        yLimits=yLimits, # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
+                        figSize=figSize,
+                        plotType=plotType,
+                        drawXlineAt_rf1=drawXlineAt_rf1,
+                        avoidZeroFreq=avoidZeroFreq
+                        )
+
+class profile:
+    
+    """---------------------------------- Internals -----------------------------------"""
+    def __verifyData(self):
+        pass
+
+    def __updateUh(self):
+        if self.N_pts == 0:
+            self.iH = None
+            self.Uh = self.IuH = self.IvH = self.IwH = None
+            return
+        if self.interpolateToH:
+            self.iH = None
+            if self.U is not None:
+                self.Uh = np.interp(self.H, self.Z, self.U)
+            if self.Iu is not None:
+                self.IuH = np.interp(self.H, self.Z, self.Iu)
+            if self.Iv is not None:
+                self.IvH = np.interp(self.H, self.Z, self.Iv)
+            if self.Iw is not None:
+                self.IwH = np.interp(self.H, self.Z, self.Iw)
+        else: # nearest value
+            self.iH = (np.abs(self.Z - self.H)).argmin()
+            if self.U is not None:
+                self.Uh = self.U[self.iH]
+            if self.Iu is not None:
+                self.IuH = self.Iu[self.iH]
+            if self.Iv is not None:
+                self.IvH = self.Iv[self.iH]
+            if self.Iw is not None:
+                self.IwH = self.Iw[self.iH]
+
+    def __computeFromTH(self):
+        atLeastOneTHfound = False
+        if self.UofT is not None:
+            N_T = np.shape(self.UofT)[1]
+            if self.Z is None:
+                raise Exception("Z values not found while UofT is given.")
+            self.U = np.mean(self.UofT,axis=1)
+            self.Iu = np.std(self.UofT,axis=1)/self.U
+            self.xLu = np.zeros(self.N_pts)
+            for i in range(self.N_pts):
+                self.xLu[i] = integLengthScale(self.UofT[i,:], self.dt)
+            atLeastOneTHfound = True
+            
+        if self.VofT is not None:
+            N_T = np.shape(self.VofT)[1]
+            if self.U is None or self.Z is None:
+                raise Exception("Either Z or U(z) does not exist to calculate V stats.")
+            self.V = np.mean(self.VofT,axis=1)
+            self.Iv = np.std(self.VofT,axis=1)/self.U
+            self.xLv = np.zeros(self.N_pts)
+            for i in range(self.N_pts):
+                self.xLv[i] = integLengthScale(self.VofT[i,:], self.dt, meanU=self.U[i])
+            atLeastOneTHfound = True
+
+        if self.WofT is not None:
+            N_T = np.shape(self.WofT)[1]
+            if self.U is None or self.Z is None:
+                raise Exception("Either Z or U(z) does not exist to calculate W stats.")
+            self.W = np.mean(self.WofT,axis=1)
+            self.Iw = np.std(self.WofT,axis=1)/self.U
+            self.xLw = np.zeros(self.N_pts)
+            for i in range(self.N_pts):
+                self.xLw[i] = integLengthScale(self.WofT[i,:], self.dt, meanU=self.U[i])
+            atLeastOneTHfound = True
+        
+        if self.t is None and self.dt is not None and atLeastOneTHfound:
+            self.t = np.linspace(0,(N_T-1)*self.dt,num=N_T)
+        if self.dt is None and self.t is not None and atLeastOneTHfound:
+            self.dt = np.mean(np.diff(self.t))
+
+        self.__updateUh()
+        self.__computeSpectra()
+    
+    def __computeSpectra(self):
+        if self.SpectH is not None:
+            return
+        if self.iH is None:
+            self.SpectH = None
+            return
+        uOfT = vOfT = wOfT = None
+        if self.UofT is not None:
+            uOfT = self.UofT[self.iH,:]
+        if self.VofT is not None:
+            vOfT = self.UofT[self.iH,:]
+        if self.WofT is not None:
+            wOfT = self.UofT[self.iH,:]
+        
+        self.SpectH = spectra(name=self.name, UofT=uOfT, VofT=vOfT, WofT=wOfT, samplingFreq=self.samplingFreq, Z=self.H, nSpectAvg=self.nSpectAvg)
+
+    def __init__(self,
+                name="profile", 
+                profType=None, # {"continuous","discrete","scatter"}
+                Z=None, H=None, dt=None, t=None,
+                U=None, V=None, W=None, 
+                UofT=None, VofT=None, WofT=None,
+                Iu=None, Iv=None, Iw=None, 
+                xLu=None, xLv=None, xLw=None,
+                SpectH=None, nSpectAvg=8,
+                fileName=None,
+                interpolateToH=False, units=unitsNone):
+        self.name = name
+        self.profType = profType
+        self.Z = Z  # [N_pts]
+        self.U = U  # [N_pts]
+        self.V = V  # [N_pts]
+        self.W = W  # [N_pts]
+        
+        self.H = H
+        
+        self.dt = dt
+        self.samplingFreq = None if dt is None else 1/dt
+        self.t = t
+        self.UofT = UofT  # [N_pts x nTime]
+        self.VofT = VofT  # [N_pts x nTime]
+        self.WofT = WofT  # [N_pts x nTime]
+        
+        self.Iu = Iu  # [N_pts]
+        self.Iv = Iv  # [N_pts]
+        self.Iw = Iw  # [N_pts]
+        
+        self.xLu = xLu  # [N_pts]
+        self.xLv = xLv  # [N_pts]
+        self.xLw = xLw  # [N_pts]
+        
+        self.SpectH = SpectH
+        self.nSpectAvg = nSpectAvg
+        
+        self.origFileName = fileName
+        self.interpolateToH = interpolateToH
+        self.units = units
+
+        self.N_pts = 0 if Z is None else len(Z)
+        self.Uh = None
+        self.IuH = None
+        self.IvH = None
+        self.IwH = None
+        self.iH = None
+        
+        self.Update()
+
+    def __str__(self):
+        return self.name
+
+    """----------------------------------- Properties ---------------------------------"""
+
+    @property
+    def T(self):
+        dur = None
+        if self.t is not None and self.dt is not None:
+            dur = self.dt * self.t[-1]
+        return dur
+
+    @property
+    def Tstar(self):
+        dur = self.T
+        durStar = None
+        if dur is not None and self.H is not None and self.Uh is not None:
+            durStar = dur * self.Uh / self.H
+        return durStar
+    
+    """---------------------------------- Normalizers ---------------------------------"""
+    @property
+    def ZbyH(self):
+        if self.H is None or self.Z is None:
+            return None
+        return self.Z/self.H
+
+    @property
+    def UbyUh(self):
+        if self.Uh is None or self.U is None:
+            return None
+        return self.U/self.Uh
+
+    def xLuByH(self,H=None):
+        if H is None:
+            H = self.H
+        if H is None or self.Z is None:
+            return None
+        else:
+            return self.xLu/H
+
+    def xLvByH(self,H=None):
+        if H is None:
+            H = self.H
+        if H is None or self.Z is None:
+            return None
+        else:
+            return self.xLv/H
+
+    def xLwByH(self,H=None):
+        if H is None:
+            H = self.H
+        if H is None or self.Z is None:
+            return None
+        else:
+            return self.xLw/H
+
+    def normalize(self):
+        pass
+
+    """-------------------------------- Data handlers ---------------------------------"""
+    def Update(self):
+        self.__verifyData()
+        if self.Z is not None:
+            self.N_pts = len(self.Z)
+        self.__computeFromTH()
+        
+        if self.origFileName is not None:
+            self.readFromFile(self.origFileName)
+        self.__updateUh()
+
+    def writeToFile(self,outDir,
+                    nameSuffix='',
+                    writeTH=False, writeTimeWithTH=False, writeZwithTH=False,
+                    writeProfiles=True,writeSpectra=False):
+        if writeTH:
+            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_U-TH"
+            np.save(fileName,self.UofT)
+            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_V-TH"
+            np.save(fileName,self.VofT)
+            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_W-TH"
+            np.save(fileName,self.WofT)
+            
+        if writeProfiles:
+            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_profiles.csv"
+            M = np.reshape(self.Z,[-1,1])
+            header = "Z"
+            flds = ["U","Iu","Iv","Iw","xLu","xLv","xLw"]
+            for fld in flds:
+                ffld = getattr(self,fld)
+                if (ffld is not None) and not (ffld.size == 0):
+                    M = np.concatenate((M,np.reshape(ffld,[-1,1])), axis=1)
+                    header += ", "+fld
+            np.savetxt(fileName, M, 
+               delimiter=',',header=header,comments='')
+            
+        if writeSpectra:
+            pass
+    
+    def write(self,outDir):
+
+        pass
+
+    def readFromFile(self,fileName,getHfromU_Uh=False):
+        data = pd.read_csv(fileName)
+        self.Z = data.Z
+        self.U = data.U
+        self.Iu = data.Iu
+        self.Iv = data.Iv
+        self.Iw = data.Iw
+        if 'U_Uh' in data.columns and self.H is None:
+            idx = (np.abs(data.U_Uh - 1)).argmin()
+            self.H = self.Z[idx]
+
+        self.N_pts = len(self.Z)
+        self.__updateUh()
+
+    """--------------------------------- Plotters -------------------------------------"""
+    def plotProfiles(self,figFile=None,xLimits=None,yLimits='auto',figSize=[15,5]):
+        Z = (self.Z,)
+        val = (np.transpose(np.stack((self.U, self.Iu, self.Iv, self.Iw))),)
+        xlabels = (r"U",r"I_u",r"I_v",r"I_w")
+        zlabel = 'Z'
+
+        wplt.plotProfiles(
+                        Z, # ([n1,], [n2,], ... [nN,])
+                        val, # ([n1,M], [n2,M], ... [nN,M])
+                        dataLabels=(self.name,), # ("str1", "str2", ... "strN")
+                        pltFile=figFile, # "/path/to/plot/file.pdf"
+                        xLabels=xlabels, # ("str1", "str2", ... "str_m")
+                        yLabel=zlabel,
+                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                        yLimits=yLimits, # [zMin, zMax]
+                        figSize=figSize,
+                        nCols=4
+                        )
+    
+    def plot(self,figFile=None):
+        self.plotProfiles(figFile=figFile)
+        self.plotTimeHistory(figFile=figFile)
+        self.SpectH.plotSpectra(figFile=figFile)
+
+    def plotTimeHistory(self,
+                    figFile=None,
+                    normalizeTime=False,
+                    normalizeVel=False,
+                    dataLabels='auto', # automatically taken from the profile object
+                    xLabel='auto',
+                    yLabels=("U(H,t)","V(H,t)","W(H,t)"), 
+                    xLimits='auto', # [tMin,tMax]
+                    yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
+                    figSize=[15, 5],
+                    alwaysShowFig=False
+                    ):
+        if all((self.UofT is None, self.VofT is None, self.WofT is None)):
+            raise Exception("At least one of UofT, VofT, or WofT has to be provided to plot time history.")
+        if all((self.dt is None, self.t is None)):
+            raise Exception("Either dt or t has to be provided to plot time history.")
+        
+        if self.UofT is not None:
+            N_T = np.shape(self.UofT)[1]
+            U = self.UofT[self.iH,:]/self.Uh if normalizeVel else self.UofT[self.iH,:]
+        if self.VofT is not None:
+            N_T = np.shape(self.VofT)[1]
+            V = self.VofT[self.iH,:]/self.Uh if normalizeVel else self.VofT[self.iH,:] 
+        if self.WofT is not None:
+            N_T = np.shape(self.WofT)[1]
+            W = self.WofT[self.iH,:]/self.Uh if normalizeVel else self.WofT[self.iH,:] 
+        
+        if self.t is None:
+            self.t = np.linspace(0,(N_T-1)*self.dt,num=N_T)
+        if self.dt is None:
+            self.dt = np.mean(np.diff(self.t))
+        t = self.t * self.Uh / self.H if normalizeTime else self.t
+
+        if xLabel == 'auto':
+            xLabel = r't^*' if normalizeTime else 't [s]'
+        if yLabels == 'auto':
+            yLabels = ("U(t)/Uh","V(t)/Uh","W(t)/Uh") if normalizeVel else ("U(t)","V(t)","W(t)")
+        name = self.name if dataLabels == 'auto' else dataLabels
+        
+        wplt.plotVelTimeHistories(
+                                T=(t,),
+                                U=(U,),
+                                V=(V,),
+                                W=(W,),
+                                dataLabels=(name,),
+                                pltFile=figFile,
+                                xLabel=xLabel,
+                                yLabels=yLabels,
+                                xLimits=xLimits,
+                                yLimits=yLimits,
+                                figSize=figSize,
+                                alwaysShowFig=alwaysShowFig
+                                )   
+
+class Profiles:
+    def __init__(self, profiles=[]):
+        self._currentIndex = 0
+        self.N = len(profiles)
+        self.profiles:List[profile] = profiles
+
+    def __numOfProfiles(self):
+        if self.profiles is None:
+            return 0
+        return len(self.profiles)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._currentIndex < self.__numOfProfiles():
+            member = self.profiles[self._currentIndex]
+            self._currentIndex += 1
+            return member
+        self._currentIndex = 0
+        raise StopIteration
+
+    def plot(self, fig=None, prof_ax=None, spect_ax=None, zLim=None, col=None, 
+             linestyle_U=None, linestyle_Iu=None, marker_U=None, marker_Iu=None, linestyle_Spect=None, marker_Spect=None,
+             Iu_factr=100.0, IuLim=[0,100], Ulim=None, IuLgndLoc='upper left', UlgndLoc='upper right',
+             fontSz_axNum=10, fontSz_axLbl=12, fontSz_lgnd=12,
+             freqLim=None, rSuuLim=None):
+
+        N = len(self.profiles)
+        c = plt.cm.Dark2(np.linspace(0,1,N))
+        ls = ['solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
+              'solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
+              'solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
+              'solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
+              ]
+        mrkr = ['.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', 's', 'p', '*', 'h', 'H', '+', 'x', 'D', 'd', '|', '_',
+                '.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', 's', 'p', '*', 'h', 'H', '+', 'x', 'D', 'd', '|', '_',
+                '.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', 's', 'p', '*', 'h', 'H', '+', 'x', 'D', 'd', '|', '_',
+                ]
+
+        fig=plt.figure(figsize=[8, 6]) if fig is None else fig
+        ax = plt.subplot(1,2,1) if prof_ax is None else prof_ax
+        ax2 = ax.twiny()
+        for i,prof in enumerate(self.profiles):
+            col_i = c[i] if col is None else col[i]
+            ls_U_i = ls[i] if linestyle_U is None else linestyle_U[i]
+            ls_Iu_i = ls[i+N] if linestyle_Iu is None else linestyle_Iu[i]
+            mrkr_U_i = mrkr[i] if marker_U is None else marker_U[i]
+            mrkr_Iu_i = mrkr[i+N] if marker_Iu is None else marker_Iu[i]
+
+            ax.plot(prof.UbyUh, prof.ZbyH, 
+                    ls=ls_U_i, marker=mrkr_U_i, color=col_i, label=r"$U/U_H$ "+prof.name)
+            ax2.plot(prof.Iu*Iu_factr, prof.ZbyH, 
+                    ls=ls_Iu_i, marker=mrkr_Iu_i, color=col_i, label=r"$I_u$ "+prof.name)
+
+        ax2.set_xlabel(r"$I_u$",fontsize=fontSz_axLbl)
+
+        if zLim is not None:
+            ax.set_ylim(zLim)
+            ax2.set_ylim(zLim)
+        if IuLim is not None:
+            ax2.set_xlim(IuLim)
+        if Ulim is not None:
+            ax.set_xlim(Ulim)
+        ax2.legend(loc=IuLgndLoc,fontsize=fontSz_lgnd)
+        ax.set_xlabel(r"$U/U_H$",fontsize=fontSz_axLbl)
+        ax.set_ylabel(r"$Z/H$",fontsize=fontSz_axLbl)
+        ax.legend(loc=UlgndLoc,fontsize=fontSz_lgnd)
+        ax.axhline(y=1.0, color='k',linestyle='--',linewidth=0.5)
+        ax.tick_params(axis='both',direction='in',which='both',top=False,right=True)
+        ax2.tick_params(axis='both',direction='in',which='both',top=True,right=False)
+        ax.tick_params(axis='both', which='major', labelsize=fontSz_axNum)
+        ax2.tick_params(axis='both', which='major', labelsize=fontSz_axNum)
+
+
+        ax = plt.subplot(1,2,2) if spect_ax is None else spect_ax
+        for i,prof in enumerate(self.profiles):
+            col_i = c[i] if col is None else col[i]
+            ls_Spect_i = ls[i] if linestyle_Spect is None else linestyle_Spect[i]
+            mrkr_Spect_i = mrkr[i] if marker_Spect is None else marker_Spect[i]
+            
+            S = prof.SpectH
+            if S is None:
+                continue
+            if S.Suu is None:
+                continue
+            ax.loglog(S.rf(), S.rSuu(normU='sigUi'),
+                       ls=ls_Spect_i, marker=mrkr_Spect_i, color=col_i, label=prof.name)
+        ax.set_xlabel(r"$nH/U_H$",fontsize=fontSz_axLbl)
+        ax.set_ylabel(r"$nS_{uu}/\sigma_u^2$",fontsize=fontSz_axLbl)
+        ax.legend(fontsize=fontSz_lgnd)
+        if freqLim is not None:
+            ax.set_xlim(freqLim)
+        if rSuuLim is not None:
+            ax.set_ylim(rSuuLim)
+        ax.tick_params(axis='both',direction='in',which='both',top=True,right=True)
+        ax.tick_params(axis='both', which='major', labelsize=fontSz_axNum)
+    
+    def plotProfiles(self,figFile=None,xLimits='auto',zLimits='auto',figSize=[14,6],normalize=True):
+        Z = ()
+        val = ()
+        names = ()
+        # maxU = 0
+        if normalize:
+            for i in range(self.N):
+                Z += (self.profiles[i].Z/self.profiles[i].H,)
+                val += (np.transpose(np.stack((self.profiles[i].U/self.profiles[i].Uh, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
+                names += (self.profiles[i].name,)
+                # maxU = max(maxU, max(val[i][:,0]))
+            xlabels = (r"$U/U_{ref}$",r"$I_u$",r"$I_v$",r"$I_w$")
+            zlabel = r"$Z/Z_{ref}$"
+        else:
+            for i in range(self.N):
+                Z += (self.profiles[i].Z,)
+                val += (np.transpose(np.stack((self.profiles[i].U, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
+                names += (self.profiles[i].name,)
+                # maxU = max(maxU, max(val[i][:,0]))
+            xlabels = (r"$U$",r"$I_u$",r"$I_v$",r"$I_w$")
+            zlabel = r"$Z$"
+
+        if xLimits is None:
+            xLimits = [[0, 2],[0,0.4],[0,0.4],[0,0.3]]
+
+        wplt.plotProfiles(
+                        Z, # ([n1,], [n2,], ... [nN,])
+                        val, # ([n1,M], [n2,M], ... [nN,M])
+                        dataLabels=names, # ("str1", "str2", ... "strN")
+                        pltFile=figFile, # "/path/to/plot/file.pdf"
+                        xLabels=xlabels, # ("str1", "str2", ... "str_m")
+                        yLabel=zlabel,
+                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                        yLimits=zLimits, # [zMin, zMax]
+                        figSize=figSize,
+                        nCols=4
+                        )
+    
+    def plotTimeHistory(self,
+                    figFile=None,
+                    xLabel='t [s]',
+                    yLabels=("U(t)","V(t)","W(t)"), 
+                    xLimits='auto', # [tMin,tMax]
+                    yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
+                    figSize=[15, 5],
+                    ):
+        
+        T = U = V = W = names = ()
+        for i in range(self.N):
+            t = self.profiles[i].t
+            dt = self.profiles[i].dt
+            iH = self.profiles[i].iH
+            UofT = self.profiles[i].UofT
+            VofT = self.profiles[i].VofT
+            WofT = self.profiles[i].WofT
+
+            if all((UofT is None, VofT is None, WofT is None)):
+                raise Exception("At least one of UofT, VofT, or WofT has to be provided to plot time history.")
+            if all((dt is None, t is None)):
+                raise Exception("Either dt or t has to be provided to plot time history.")
+            if UofT is not None:
+                N_T = np.shape(UofT)[1]
+                U += (UofT[iH,:],)
+            if VofT is not None:
+                N_T = np.shape(VofT)[1]
+                V += (VofT[iH,:],)
+            if WofT is not None:
+                N_T = np.shape(WofT)[1]
+                W += (WofT[iH,:],)
+            
+            if t is None:
+                t = np.linspace(0,(N_T-1)*dt,num=N_T)
+            if dt is None:
+                dt = np.mean(np.diff(t))
+            T += (t,)
+            names += (self.profiles[i].name,)
+        
+        wplt.plotVelTimeHistories(
+                                T=T,
+                                U=U,
+                                V=V,
+                                W=W,
+                                dataLabels=names,
+                                pltFile=figFile,
+                                xLabel=xLabel,
+                                yLabels=yLabels,
+                                xLimits=xLimits,
+                                yLimits=yLimits,
+                                figSize=figSize
+                                )   
+
+    def plotSpectra(self, 
+                    figFile=None, 
+                    figSize=[15,5], 
+                    normalize=True,
+                    normZ='Z',
+                    normU='U',
+                    plotType='loglog',
+                    xLimits='auto', # [nMin,nMax]
+                    yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
+                    overlayVonK=False, # Either one entry or array equal to N
+                    ):
+        overlayVonK = (overlayVonK,)*self.N if isinstance(overlayVonK,bool) else overlayVonK
+
+        n = Suu = Svv = Sww = names = ()
+        if normalize:
+            for i in range(self.N):
+                if self.profiles[i].SpectH is None:
+                    continue
+                n += (self.profiles[i].SpectH.rf(normZ=normZ),)
+                Suu += (self.profiles[i].SpectH.rSuu(normU=normU),)
+                Svv += (self.profiles[i].SpectH.rSvv(normU=normU),)
+                Sww += (self.profiles[i].SpectH.rSww(normU=normU),)
+                names += (self.profiles[i].SpectH.name,)
+
+            if normU == 'U':
+                ylabels = (r"$nS_{uu}/U_{ref}^2$",r"$nS_{vv}/U_{ref}^2$",r"$nS_{ww}/U_{ref}^2$")
+            elif normU == 'sigUi':
+                ylabels = (r"$nS_{uu}/\sigma_u^2$",r"$nS_{vv}/\sigma_v^2$",r"$nS_{ww}/\sigma_w^2$")
+            if normZ == 'Z':
+                xlabel = r"$n Z_{ref}/U$"
+            elif normZ == 'xLi':
+                xlabel = r"$n ^xL_u/U$"
+            drawXlineAt_rf1 = True
+        else:
+            for i in range(self.N):
+                if self.profiles[i].SpectH is None:
+                    continue
+                n += (self.profiles[i].SpectH.n,)
+                Suu += (self.profiles[i].SpectH.Suu,)
+                Svv += (self.profiles[i].SpectH.Svv,)
+                Sww += (self.profiles[i].SpectH.Sww,)
+                names += (self.profiles[i].SpectH.name,)
+            ylabels = (r"$S_{uu}$",r"$S_{vv}$",r"$S_{ww}$")
+            xlabel = r"$n [Hz]$"
+            drawXlineAt_rf1 = False
+        for i in range(self.N):
+            if overlayVonK[i]:
+                n += (self.profiles[i].SpectH.rf(normZ=normZ),) if normalize else (self.profiles[i].SpectH.n,)
+                Suu += (self.profiles[i].SpectH.Suu_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
+                Svv += (self.profiles[i].SpectH.Svv_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
+                Sww += (self.profiles[i].SpectH.Sww_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
+                names += (self.profiles[i].SpectH.name+'-vonK',)
+
+        wplt.plotSpectra(
+                        freq=n, # ([n1,], [n2,], ... [nN,])
+                        Suu=Suu, # ([n1,], [n2,], ... [nN,])
+                        Svv=Svv, # ([n1,], [n2,], ... [nN,])
+                        Sww=Sww, # ([n1,], [n2,], ... [nN,])
+                        dataLabels=names, # ("str1", "str2", ... "strN")
+                        pltFile=figFile, # "/path/to/plot/file.pdf"
+                        xLabel=xlabel,
+                        yLabels=ylabels, # ("str1", "str2", ... "str_m")
+                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                        yLimits=yLimits, # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
+                        figSize=figSize,
+                        plotType=plotType,
+                        drawXlineAt_rf1=drawXlineAt_rf1
+                        )
+
+class profile_repeatedTest(profile): # should be mereged into or inherit Profiles class
+    def __init__(self, 
+                name="profile", 
+                profType=None, 
+                Z=None, H=None, dt=None, t=None, 
+                U=None, V=None, W=None, 
+                UofT=None, VofT=None, WofT=None, 
+                Iu=None, Iv=None, Iw=None, 
+                xLu=None, xLv=None, xLw=None, 
+                SpectH=None, nSpectAvg=8, 
+                fileName=None, 
+                interpolateToH=False, 
+                units=unitsNone):
+        super().__init__(name, profType, Z, H, dt, 
+                        t, U, V, W, UofT, VofT, WofT, 
+                        Iu, Iv, Iw, xLu, xLv, xLw, 
+                        SpectH, nSpectAvg, fileName, 
+                        interpolateToH, units)
+
+    def plotProfiles(self, figFile=None, xLimits=None, figSize=[15, 5]):
+        return super().plotProfiles(figFile, xLimits, figSize)
+
 class ESDU74:
     __Omega = 72.7e-6            # Angular rate of rotation of the earth in [rad/s].  ESDU 74031 sect. A.1
     __k = 0.4   # von Karman constant
@@ -518,6 +1368,29 @@ class ESDU74:
             tolerance=tolerance
         )[0]
 
+    def toProfileObj(self,name=None,freq=None) -> profile:
+        if name is None:
+            name = 'ESDU74 (z0='+str(self.z0)+'m)'
+
+        Zref = self.Zref
+        n, Suu = self.Suu(n=freq, Z=Zref)
+        _, Svv = self.Svv(n=freq, Z=Zref)
+        _, Sww = self.Sww(n=freq, Z=Zref)
+        spect = spectra(name=name, 
+                        n=n, Suu=Suu, Svv=Svv, Sww=Sww, 
+                        Z=Zref, U=self.U(Zref), Iu=self.Iu(Zref), Iv=self.Iv(Zref), Iw=self.Iw(Zref),
+                        )
+        
+        prof = profile(name=name, 
+                profType="continuous", 
+                Z=self.Z, H=self.Zref,
+                U=self.U(),
+                Iu=self.Iu(), Iv=self.Iv(), Iw=self.Iw(), 
+                xLu=self.xLu(), xLv=self.xLv(), xLw=self.xLw,
+                SpectH=spect,
+                )
+        return prof
+    
 class ESDU85:
     __Omega = 72.9e-6            # Angular rate of rotation of the earth [rad/s] ESDU 82026 ssA1
 
@@ -748,756 +1621,27 @@ class ESDU85:
             tolerance=tolerance
         )[0]
 
-class spectra:
-    UofT = VofT = WofT = None
+    def toProfileObj(self,name=None,freq=None) -> profile:
+        if name is None:
+            name = 'ESDU85 (z0='+str(self.z0)+'m)'
 
-    """---------------------------------- Internals -----------------------------------"""
-    def __calculateSpectra(self):
-        if self.UofT is not None:
-            self.n, self.Suu = psd(self.UofT, self.samplingFreq, nAvg=self.nSpectAvg)
-            self.U = np.mean(self.UofT)
-            self.Iu = np.std(self.UofT)/self.U
-            self.xLu = integLengthScale(self.UofT, 1/self.samplingFreq)
-        if self.VofT is not None:
-            n, self.Svv = psd(self.VofT, self.samplingFreq, nAvg=self.nSpectAvg)
-            self.Iv = np.std(self.VofT)/self.U
-            self.xLv = integLengthScale(self.VofT, 1/self.samplingFreq,meanU=self.U)
-            if self.n is None:
-                self.n = n
-            elif not len(n) == len(self.n):
-                raise Exception("UofT and VofT have different no. of time steps. The number of time steps in all UofT, VofT, and WofT must match for spectra calculation.")
-                
-        if self.WofT is not None:
-            n, self.Sww = psd(self.WofT, self.samplingFreq, nAvg=self.nSpectAvg)
-            self.Iw = np.std(self.WofT)/self.U
-            self.xLw = integLengthScale(self.WofT, 1/self.samplingFreq,meanU=self.U)
-            if self.n is None:
-                self.n = n
-            elif not len(n) == len(self.n):
-                raise Exception("WofT has different no. of time steps from UofT and VofT. All three must have the same number of time steps for spectra calculation.")
-        
-    def __init__(self, name=None, UofT=None, VofT=None, WofT=None, samplingFreq=None, 
-                 n=None, Suu=None, Svv=None, Sww=None, nSpectAvg=8,
-                 Z=None, U=None, Iu=None, Iv=None, Iw=None):
-        
-        self.name = name
-        self.samplingFreq = samplingFreq
-        self.n = n
-        self.Suu = Suu
-        self.Svv = Svv
-        self.Sww = Sww
-        self.nSpectAvg = nSpectAvg
-        
-        self.Z = Z
-        self.U = U
-        self.Iu = Iu
-        self.Iv = Iv
-        self.Iw = Iw
-        
-        self.UofT = UofT
-        self.VofT = VofT
-        self.WofT = WofT
-
-        self.Update()
-
-    def __str__(self):
-        return self.name
-    
-    """--------------------------------- Normalizers ----------------------------------"""
-    def rf(self,n='auto',normZ='Z'):
-        if n == 'auto':
-            n = self.n
-        if normZ == 'Z':
-            normZ = self.Z
-        elif normZ == 'xLi':
-            normZ = self.xLu
-        elif not type(normZ) == int or float:
-            raise Exception("Unknown normalization height type. Choose from {'Z', 'xLi'} or specify a number.")
-        if n is None or self.U is None or normZ is None:
-            return None
-        else:
-            return n * normZ/self.U
-
-    def rSuu(self,normU='U'):
-        if normU == 'U':
-            normU = self.U
-        elif normU == 'sigUi':
-            normU = self.Iu * self.U
-        if self.n is None or self.Suu is None or normU is None:
-            return None
-        else:
-            return np.multiply(self.n,self.Suu)/(normU**2)
-
-    def rSvv(self,normU='U'):
-        if normU == 'U':
-            normU = self.U
-        elif normU == 'sigUi':
-            normU = self.Iv * self.U
-        if self.n is None or self.Svv is None or normU is None:
-            return None
-        else:
-            return np.multiply(self.n,self.Svv)/(normU**2)
-
-    def rSww(self,normU='U'):
-        if normU == 'U':
-            normU = self.U
-        elif normU == 'sigUi':
-            normU = self.Iw * self.U
-        if self.n is None or self.Sww is None or normU is None:
-            return None
-        else:
-            return np.multiply(self.n,self.Sww)/(normU**2)
-    
-    """-------------------------------- Data handlers ---------------------------------"""
-    def Update(self):
-        self.__calculateSpectra()
-
-    def writeSpecsToFile(self):
-        pass
-
-    def writeDataToFile(self):
-        pass
-
-    """--------------------------------- Fittings -------------------------------------"""
-    def Suu_vonK(self,n=None,normalized=False,normU='U'):
-        if n is None:
-            n = self.n
-        Suu = vonKarmanSuu(n=n,U=self.U,Iu=self.Iu,xLu=self.xLu)
-        if normalized:
-            if normU == 'U':
-                normU = self.U
-            elif normU == 'sigUi':
-                normU = self.Iu * self.U
-            return np.multiply(n,Suu)/(normU**2)
-        else:
-            return Suu
-
-    def Svv_vonK(self,n=None,normalized=False,normU='U'):
-        if n is None:
-            n = self.n
-        Svv = vonKarmanSvv(n=n,U=self.U,Iv=self.Iv,xLv=self.xLv)
-        if normalized:
-            if normU == 'U':
-                normU = self.U
-            elif normU == 'sigUi':
-                normU = self.Iv * self.U            
-            return np.multiply(n,Svv)/(normU**2)
-        else:
-            return Svv
-
-    def Sww_vonK(self,n=None,normalized=False,normU='U'):
-        if n is None:
-            n = self.n
-        Sww = vonKarmanSww(n=n,U=self.U,Iw=self.Iw,xLw=self.xLw)
-        if normalized:
-            if normU == 'U':
-                normU = self.U
-            elif normU == 'sigUi':
-                normU = self.Iw * self.U            
-            return np.multiply(n,Sww)/(normU**2)
-        else:
-            return Sww
-
-    def Suu_ESDU74(self):
-        pass
-
-    def Svv_ESDU74(self):
-        pass
-
-    def Sww_ESDU74(self):
-        pass
-
-    def Suu_ESDU85(self):
-        pass
-
-    def Svv_ESDU85(self):
-        pass
-
-    def Sww_ESDU85(self):
-        pass
-
-    """--------------------------------- Plotters -------------------------------------"""
-    def plotSpectra(self, 
-                    figFile=None, 
-                    xLimits=None, 
-                    yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
-                    figSize=[15,5], 
-                    normalize=True,
-                    normZ='Z',
-                    normU='U',
-                    plotType='loglog',
-                    overlayVonK=False,
-                    avoidZeroFreq=True
-                    ):
-        if normalize:
-            n = (self.rf(normZ=normZ),)
-            Suu = (self.rSuu(normU=normU),)
-            Svv = (self.rSvv(normU=normU),)
-            Sww = (self.rSww(normU=normU),)
-            if normU == 'U':
-                ylabels = (r"$nS_{uu}/U_{ref}^2$",r"$nS_{vv}/U_{ref}^2$",r"$nS_{ww}/U_{ref}^2$")
-            elif normU == 'sigUi':
-                ylabels = (r"$nS_{uu}/\sigma_u^2$",r"$nS_{vv}/\sigma_v^2$",r"$nS_{ww}/\sigma_w^2$")
-            if normZ == 'Z':
-                xlabel = r"$n Z_{ref}/U$"
-            elif normZ == 'xLi':
-                xlabel = r"$n ^xL_u/U$"
-            drawXlineAt_rf1 = True
-        else:
-            n = (self.n,)
-            Suu = (self.Suu,)
-            Svv = (self.Svv,)
-            Sww = (self.Sww,)
-            ylabels = (r"$S_{uu}$",r"$S_{vv}$",r"$S_{ww}$")
-            xlabel = r"$n [Hz]$"
-            drawXlineAt_rf1 = False
-        names = (self.name,)
-        if overlayVonK:
-            names += ('vonK-'+self.name,)
-            n += (n[0],)
-            Suu += (self.Suu_vonK(self.n,normalized=normalize,normU=normU),)
-            Svv += (self.Svv_vonK(self.n,normalized=normalize,normU=normU),)
-            Sww += (self.Sww_vonK(self.n,normalized=normalize,normU=normU),)
-
-        wplt.plotSpectra(
-                        freq=n, # ([n1,], [n2,], ... [nN,])
-                        Suu=Suu, # ([n1,], [n2,], ... [nN,])
-                        Svv=Svv, # ([n1,], [n2,], ... [nN,])
-                        Sww=Sww, # ([n1,], [n2,], ... [nN,])
-                        dataLabels=names, # ("str1", "str2", ... "strN")
-                        pltFile=figFile, # "/path/to/plot/file.pdf"
-                        xLabel=xlabel,
-                        yLabels=ylabels, # ("str1", "str2", ... "str_m")
-                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                        yLimits=yLimits, # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
-                        figSize=figSize,
-                        plotType=plotType,
-                        drawXlineAt_rf1=drawXlineAt_rf1,
-                        avoidZeroFreq=avoidZeroFreq
+        Zref = self.Zref
+        n, Suu = self.Suu(n=freq, Z=Zref)
+        _, Svv = self.Svv(n=freq, Z=Zref)
+        _, Sww = self.Sww(n=freq, Z=Zref)
+        spect = spectra(name=name, 
+                        n=n, Suu=Suu, Svv=Svv, Sww=Sww, 
+                        Z=Zref, U=self.U(Zref), Iu=self.Iu(Zref), Iv=self.Iv(Zref), Iw=self.Iw(Zref),
                         )
-
-class profile:
-    
-    interpolateToH = False
-    N_pts = 0
-    Uh = None
-    IuH = None
-    IvH = None
-    IwH = None
-    iH = None
-    dt = None
-    units = unitsNone
-
-    """---------------------------------- Internals -----------------------------------"""
-    def __verifyData(self):
-        pass
-
-    def __updateUh(self):
-        if self.N_pts == 0:
-            self.iH = None
-            self.Uh = self.IuH = self.IvH = self.IwH = None
-            return
-        if self.interpolateToH:
-            self.iH = None
-            self.Uh = np.interp(self.H, self.Z, self.U)
-            self.IuH = np.interp(self.H, self.Z, self.Iu)
-            self.IvH = np.interp(self.H, self.Z, self.Iv)
-            self.IwH = np.interp(self.H, self.Z, self.Iw)
-        else: # nearest value
-            self.iH = (np.abs(self.Z - self.H)).argmin()
-            self.Uh = self.U[self.iH]
-            self.IuH = self.Iu[self.iH]
-            self.IvH = self.Iv[self.iH]
-            self.IwH = self.Iw[self.iH]
-
-    def __computeFromTH(self):
-        atLeastOneTHfound = False
-        if self.UofT is not None:
-            N_T = np.shape(self.UofT)[1]
-            if self.Z is None:
-                raise Exception("Z values not found while UofT is given.")
-            self.U = np.mean(self.UofT,axis=1)
-            self.Iu = np.std(self.UofT,axis=1)/self.U
-            self.xLu = np.zeros(self.N_pts)
-            for i in range(self.N_pts):
-                self.xLu[i] = integLengthScale(self.UofT[i,:], self.dt)
-            atLeastOneTHfound = True
-            
-        if self.VofT is not None:
-            N_T = np.shape(self.VofT)[1]
-            if self.U is None or self.Z is None:
-                raise Exception("Either Z or U(z) does not exist to calculate V stats.")
-            self.V = np.mean(self.VofT,axis=1)
-            self.Iv = np.std(self.VofT,axis=1)/self.U
-            self.xLv = np.zeros(self.N_pts)
-            for i in range(self.N_pts):
-                self.xLv[i] = integLengthScale(self.VofT[i,:], self.dt, meanU=self.U[i])
-            atLeastOneTHfound = True
-
-        if self.WofT is not None:
-            N_T = np.shape(self.WofT)[1]
-            if self.U is None or self.Z is None:
-                raise Exception("Either Z or U(z) does not exist to calculate W stats.")
-            self.W = np.mean(self.WofT,axis=1)
-            self.Iw = np.std(self.WofT,axis=1)/self.U
-            self.xLw = np.zeros(self.N_pts)
-            for i in range(self.N_pts):
-                self.xLw[i] = integLengthScale(self.WofT[i,:], self.dt, meanU=self.U[i])
-            atLeastOneTHfound = True
-        
-        if self.t is None and self.dt is not None and atLeastOneTHfound:
-            self.t = np.linspace(0,(N_T-1)*self.dt,num=N_T)
-        if self.dt is None and self.t is not None and atLeastOneTHfound:
-            self.dt = np.mean(np.diff(self.t))
-
-        self.__updateUh()
-        self.__computeSpectra()
-    
-    def __computeSpectra(self):
-        if self.iH is None:
-            self.SpectH = None
-            return
-        uOfT = vOfT = wOfT = None
-        if self.UofT is not None:
-            uOfT = self.UofT[self.iH,:]
-        if self.VofT is not None:
-            vOfT = self.UofT[self.iH,:]
-        if self.WofT is not None:
-            wOfT = self.UofT[self.iH,:]
-        
-        self.SpectH = spectra(name=self.name, UofT=uOfT, VofT=vOfT, WofT=wOfT, samplingFreq=self.samplingFreq, Z=self.H, nSpectAvg=self.nSpectAvg)
-
-    def __init__(self,
-                name="profile", 
-                profType=None, # {"continuous","discrete","scatter"}
-                Z=None, H=None, dt=None, t=None,
-                U=None, V=None, W=None, 
-                UofT=None, VofT=None, WofT=None,
-                Iu=None, Iv=None, Iw=None, 
-                xLu=None, xLv=None, xLw=None,
-                SpectH=None, nSpectAvg=8,
-                fileName=None,
-                interpolateToH=False, units=unitsNone):
-        self.name = name
-        self.profType = profType
-        self.Z = Z  # [N_pts]
-        self.U = U  # [N_pts]
-        self.V = V  # [N_pts]
-        self.W = W  # [N_pts]
-        
-        self.H = H
-        
-        self.dt = dt
-        self.samplingFreq = None if dt is None else 1/dt
-        self.t = t
-        self.UofT = UofT  # [N_pts x nTime]
-        self.VofT = VofT  # [N_pts x nTime]
-        self.WofT = WofT  # [N_pts x nTime]
-        
-        self.Iu = Iu  # [N_pts]
-        self.Iv = Iv  # [N_pts]
-        self.Iw = Iw  # [N_pts]
-        
-        self.xLu = xLu  # [N_pts]
-        self.xLv = xLv  # [N_pts]
-        self.xLw = xLw  # [N_pts]
-        
-        self.SpectH = SpectH
-        self.nSpectAvg=nSpectAvg
-        
-        self.origFileName = fileName
-        self.interpolateToH = interpolateToH
-        self.units = units
-        
-        self.Update()
-
-    def __str__(self):
-        return self.name
-    
-    """---------------------------------- Normalizers ---------------------------------"""
-    def ZbyH(self,H=None):
-        if H is None:
-            H = self.H
-        if H is None or self.Z is None:
-            return None
-        else:
-            return self.Z/H
-
-    def UbyUh(self,Uh=None):
-        if Uh is None:
-            Uh = self.Uh
-        if Uh is None or self.U is None:
-            return None
-        else:
-            return self.U/Uh
-
-    def xLuByH(self,H=None):
-        if H is None:
-            H = self.H
-        if H is None or self.Z is None:
-            return None
-        else:
-            return self.xLu/H
-
-    def xLvByH(self,H=None):
-        if H is None:
-            H = self.H
-        if H is None or self.Z is None:
-            return None
-        else:
-            return self.xLv/H
-
-    def xLwByH(self,H=None):
-        if H is None:
-            H = self.H
-        if H is None or self.Z is None:
-            return None
-        else:
-            return self.xLw/H
-
-    def normalize(self):
-        pass
-
-    """-------------------------------- Data handlers ---------------------------------"""
-    def Update(self):
-        self.__verifyData()
-        if self.Z is not None:
-            self.N_pts = len(self.Z)
-        self.__computeFromTH()
-        
-        if self.origFileName is not None:
-            self.readFromFile(self.origFileName)
-        self.__updateUh()
-
-    def writeToFile(self,outDir,
-                    nameSuffix='',
-                    writeTH=False, writeTimeWithTH=False, writeZwithTH=False,
-                    writeProfiles=True,writeSpectra=False):
-        if writeTH:
-            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_U-TH"
-            np.save(fileName,self.UofT)
-            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_V-TH"
-            np.save(fileName,self.VofT)
-            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_W-TH"
-            np.save(fileName,self.WofT)
-            
-        if writeProfiles:
-            fileName = outDir + "/" + self.name + "_" + nameSuffix + "_profiles.csv"
-            M = np.reshape(self.Z,[-1,1])
-            header = "Z"
-            flds = ["U","Iu","Iv","Iw","xLu","xLv","xLw"]
-            for fld in flds:
-                ffld = getattr(self,fld)
-                if (ffld is not None) and not (ffld.size == 0):
-                    M = np.concatenate((M,np.reshape(ffld,[-1,1])), axis=1)
-                    header += ", "+fld
-            np.savetxt(fileName, M, 
-               delimiter=',',header=header,comments='')
-            
-        if writeSpectra:
-            pass
-    
-    def write(self,outDir):
-
-        pass
-
-    def readFromFile(self,fileName,getHfromU_Uh=False):
-        data = pd.read_csv(fileName)
-        self.Z = data.Z
-        self.U = data.U
-        self.Iu = data.Iu
-        self.Iv = data.Iv
-        self.Iw = data.Iw
-        if 'U_Uh' in data.columns and self.H is None:
-            idx = (np.abs(data.U_Uh - 1)).argmin()
-            self.H = self.Z[idx]
-
-        self.N_pts = len(self.Z)
-        self.__updateUh()
-
-    """--------------------------------- Plotters -------------------------------------"""
-    def plotProfiles(self,figFile=None,xLimits=None,yLimits='auto',figSize=[15,5]):
-        Z = (self.Z,)
-        val = (np.transpose(np.stack((self.U, self.Iu, self.Iv, self.Iw))),)
-        xlabels = (r"U",r"I_u",r"I_v",r"I_w")
-        zlabel = 'Z'
-
-        wplt.plotProfiles(
-                        Z, # ([n1,], [n2,], ... [nN,])
-                        val, # ([n1,M], [n2,M], ... [nN,M])
-                        dataLabels=(self.name,), # ("str1", "str2", ... "strN")
-                        pltFile=figFile, # "/path/to/plot/file.pdf"
-                        xLabels=xlabels, # ("str1", "str2", ... "str_m")
-                        yLabel=zlabel,
-                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                        yLimits=yLimits, # [zMin, zMax]
-                        figSize=figSize,
-                        nCols=4
-                        )
-    
-    def plot(self,figFile=None):
-        self.plotProfiles(figFile=figFile)
-        self.plotTimeHistory(figFile=figFile)
-        self.SpectH.plotSpectra(figFile=figFile)
-
-    def plotTimeHistory(self,
-                    figFile=None,
-                    normalizeTime=False,
-                    normalizeVel=False,
-                    dataLabels='auto', # automatically taken from the profile object
-                    xLabel='auto',
-                    yLabels=("U(H,t)","V(H,t)","W(H,t)"), 
-                    xLimits='auto', # [tMin,tMax]
-                    yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
-                    figSize=[15, 5],
-                    alwaysShowFig=False
-                    ):
-        if all((self.UofT is None, self.VofT is None, self.WofT is None)):
-            raise Exception("At least one of UofT, VofT, or WofT has to be provided to plot time history.")
-        if all((self.dt is None, self.t is None)):
-            raise Exception("Either dt or t has to be provided to plot time history.")
-        
-        if self.UofT is not None:
-            N_T = np.shape(self.UofT)[1]
-            U = self.UofT[self.iH,:]/self.Uh if normalizeVel else self.UofT[self.iH,:]
-        if self.VofT is not None:
-            N_T = np.shape(self.VofT)[1]
-            V = self.VofT[self.iH,:]/self.Uh if normalizeVel else self.VofT[self.iH,:] 
-        if self.WofT is not None:
-            N_T = np.shape(self.WofT)[1]
-            W = self.WofT[self.iH,:]/self.Uh if normalizeVel else self.WofT[self.iH,:] 
-        
-        if self.t is None:
-            self.t = np.linspace(0,(N_T-1)*self.dt,num=N_T)
-        if self.dt is None:
-            self.dt = np.mean(np.diff(self.t))
-        t = self.t * self.Uh / self.H if normalizeTime else self.t
-
-        if xLabel == 'auto':
-            xLabel = r't^*' if normalizeTime else 't [s]'
-        if yLabels == 'auto':
-            yLabels = ("U(t)/Uh","V(t)/Uh","W(t)/Uh") if normalizeVel else ("U(t)","V(t)","W(t)")
-        name = self.name if dataLabels == 'auto' else dataLabels
-        
-        wplt.plotVelTimeHistories(
-                                T=(t,),
-                                U=(U,),
-                                V=(V,),
-                                W=(W,),
-                                dataLabels=(name,),
-                                pltFile=figFile,
-                                xLabel=xLabel,
-                                yLabels=yLabels,
-                                xLimits=xLimits,
-                                yLimits=yLimits,
-                                figSize=figSize,
-                                alwaysShowFig=alwaysShowFig
-                                )   
-
-class Profiles:
-    def __init__(self, profiles=[]):
-        self._currentIndex = 0
-        self.N = len(profiles)
-        self.profiles = profiles
-
-    def __numOfProfiles(self):
-        if self.profiles is None:
-            return 0
-        return len(self.profiles)
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self._currentIndex < self.__numOfProfiles():
-            member = self.profiles[self._currentIndex]
-            self._currentIndex += 1
-            return member
-        self._currentIndex = 0
-        raise StopIteration
-            
-    def plotProfiles(self,figFile=None,xLimits='auto',zLimits='auto',figSize=[14,6],normalize=True):
-        Z = ()
-        val = ()
-        names = ()
-        # maxU = 0
-        if normalize:
-            for i in range(self.N):
-                Z += (self.profiles[i].Z/self.profiles[i].H,)
-                val += (np.transpose(np.stack((self.profiles[i].U/self.profiles[i].Uh, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
-                names += (self.profiles[i].name,)
-                # maxU = max(maxU, max(val[i][:,0]))
-            xlabels = (r"$U/U_{ref}$",r"$I_u$",r"$I_v$",r"$I_w$")
-            zlabel = r"$Z/Z_{ref}$"
-        else:
-            for i in range(self.N):
-                Z += (self.profiles[i].Z,)
-                val += (np.transpose(np.stack((self.profiles[i].U, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
-                names += (self.profiles[i].name,)
-                # maxU = max(maxU, max(val[i][:,0]))
-            xlabels = (r"$U$",r"$I_u$",r"$I_v$",r"$I_w$")
-            zlabel = r"$Z$"
-
-        if xLimits is None:
-            xLimits = [[0, 2],[0,0.4],[0,0.4],[0,0.3]]
-
-        wplt.plotProfiles(
-                        Z, # ([n1,], [n2,], ... [nN,])
-                        val, # ([n1,M], [n2,M], ... [nN,M])
-                        dataLabels=names, # ("str1", "str2", ... "strN")
-                        pltFile=figFile, # "/path/to/plot/file.pdf"
-                        xLabels=xlabels, # ("str1", "str2", ... "str_m")
-                        yLabel=zlabel,
-                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                        yLimits=zLimits, # [zMin, zMax]
-                        figSize=figSize,
-                        nCols=4
-                        )
-    
-    def plotTimeHistory(self,
-                    figFile=None,
-                    xLabel='t [s]',
-                    yLabels=("U(t)","V(t)","W(t)"), 
-                    xLimits='auto', # [tMin,tMax]
-                    yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
-                    figSize=[15, 5],
-                    ):
-        
-        T = U = V = W = names = ()
-        for i in range(self.N):
-            t = self.profiles[i].t
-            dt = self.profiles[i].dt
-            iH = self.profiles[i].iH
-            UofT = self.profiles[i].UofT
-            VofT = self.profiles[i].VofT
-            WofT = self.profiles[i].WofT
-
-            if all((UofT is None, VofT is None, WofT is None)):
-                raise Exception("At least one of UofT, VofT, or WofT has to be provided to plot time history.")
-            if all((dt is None, t is None)):
-                raise Exception("Either dt or t has to be provided to plot time history.")
-            if UofT is not None:
-                N_T = np.shape(UofT)[1]
-                U += (UofT[iH,:],)
-            if VofT is not None:
-                N_T = np.shape(VofT)[1]
-                V += (VofT[iH,:],)
-            if WofT is not None:
-                N_T = np.shape(WofT)[1]
-                W += (WofT[iH,:],)
-            
-            if t is None:
-                t = np.linspace(0,(N_T-1)*dt,num=N_T)
-            if dt is None:
-                dt = np.mean(np.diff(t))
-            T += (t,)
-            names += (self.profiles[i].name,)
-        
-        wplt.plotVelTimeHistories(
-                                T=T,
-                                U=U,
-                                V=V,
-                                W=W,
-                                dataLabels=names,
-                                pltFile=figFile,
-                                xLabel=xLabel,
-                                yLabels=yLabels,
-                                xLimits=xLimits,
-                                yLimits=yLimits,
-                                figSize=figSize
-                                )   
-
-    def plotSpectra(self, 
-                    figFile=None, 
-                    figSize=[15,5], 
-                    normalize=True,
-                    normZ='Z',
-                    normU='U',
-                    plotType='loglog',
-                    xLimits='auto', # [nMin,nMax]
-                    yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
-                    overlayVonK=False, # Either one entry or array equal to N
-                    ):
-        overlayVonK = (overlayVonK,)*self.N if isinstance(overlayVonK,bool) else overlayVonK
-
-        n = Suu = Svv = Sww = names = ()
-        if normalize:
-            for i in range(self.N):
-                if self.profiles[i].SpectH is None:
-                    continue
-                n += (self.profiles[i].SpectH.rf(normZ=normZ),)
-                Suu += (self.profiles[i].SpectH.rSuu(normU=normU),)
-                Svv += (self.profiles[i].SpectH.rSvv(normU=normU),)
-                Sww += (self.profiles[i].SpectH.rSww(normU=normU),)
-                names += (self.profiles[i].SpectH.name,)
-
-            if normU == 'U':
-                ylabels = (r"$nS_{uu}/U_{ref}^2$",r"$nS_{vv}/U_{ref}^2$",r"$nS_{ww}/U_{ref}^2$")
-            elif normU == 'sigUi':
-                ylabels = (r"$nS_{uu}/\sigma_u^2$",r"$nS_{vv}/\sigma_v^2$",r"$nS_{ww}/\sigma_w^2$")
-            if normZ == 'Z':
-                xlabel = r"$n Z_{ref}/U$"
-            elif normZ == 'xLi':
-                xlabel = r"$n ^xL_u/U$"
-            drawXlineAt_rf1 = True
-        else:
-            for i in range(self.N):
-                if self.profiles[i].SpectH is None:
-                    continue
-                n += (self.profiles[i].SpectH.n,)
-                Suu += (self.profiles[i].SpectH.Suu,)
-                Svv += (self.profiles[i].SpectH.Svv,)
-                Sww += (self.profiles[i].SpectH.Sww,)
-                names += (self.profiles[i].SpectH.name,)
-            ylabels = (r"$S_{uu}$",r"$S_{vv}$",r"$S_{ww}$")
-            xlabel = r"$n [Hz]$"
-            drawXlineAt_rf1 = False
-        for i in range(self.N):
-            if overlayVonK[i]:
-                n += (self.profiles[i].SpectH.rf(normZ=normZ),) if normalize else (self.profiles[i].SpectH.n,)
-                Suu += (self.profiles[i].SpectH.Suu_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
-                Svv += (self.profiles[i].SpectH.Svv_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
-                Sww += (self.profiles[i].SpectH.Sww_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
-                names += (self.profiles[i].SpectH.name+'-vonK',)
-
-        wplt.plotSpectra(
-                        freq=n, # ([n1,], [n2,], ... [nN,])
-                        Suu=Suu, # ([n1,], [n2,], ... [nN,])
-                        Svv=Svv, # ([n1,], [n2,], ... [nN,])
-                        Sww=Sww, # ([n1,], [n2,], ... [nN,])
-                        dataLabels=names, # ("str1", "str2", ... "strN")
-                        pltFile=figFile, # "/path/to/plot/file.pdf"
-                        xLabel=xlabel,
-                        yLabels=ylabels, # ("str1", "str2", ... "str_m")
-                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                        yLimits=yLimits, # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
-                        figSize=figSize,
-                        plotType=plotType,
-                        drawXlineAt_rf1=drawXlineAt_rf1
-                        )
-
-class profile_repeatedTest(profile): # should be mereged into or inherit Profiles class
-    def __init__(self, 
-                name="profile", 
-                profType=None, 
-                Z=None, H=None, dt=None, t=None, 
-                U=None, V=None, W=None, 
-                UofT=None, VofT=None, WofT=None, 
-                Iu=None, Iv=None, Iw=None, 
-                xLu=None, xLv=None, xLw=None, 
-                SpectH=None, nSpectAvg=8, 
-                fileName=None, 
-                interpolateToH=False, 
-                units=unitsNone):
-        super().__init__(name, profType, Z, H, dt, 
-                        t, U, V, W, UofT, VofT, WofT, 
-                        Iu, Iv, Iw, xLu, xLv, xLw, 
-                        SpectH, nSpectAvg, fileName, 
-                        interpolateToH, units)
-
-    def plotProfiles(self, figFile=None, xLimits=None, figSize=[15, 5]):
-        return super().plotProfiles(figFile, xLimits, figSize)
-
+        prof = profile(name=name, 
+                profType="continuous", 
+                Z=self.Z, H=self.Zref,
+                U=self.U(),
+                Iu=self.Iu(), Iv=self.Iv(), Iw=self.Iw(), 
+                xLu=self.xLu(), xLv=self.xLv(), xLw=self.xLw,
+                SpectH=spect,
+                )
+        return prof
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
 class bldgCp(windCAD.building):

@@ -12,7 +12,7 @@ import warnings
 import shapely.geometry as shp
 import json
 import matplotlib.pyplot as plt
-import seaborn as sns
+import matplotlib.colors as mcolors
 
 from shapely.ops import voronoi_diagram
 from shapely.validation import make_valid
@@ -697,10 +697,14 @@ class face:
         if newFig:
             ax.axis('equal')
         
-    def plotZones(self, ax=None, col='b', dotSz=3, lw=1.5, ls='--', mrkr='None', zoneCol=None):
-        zoneDictUniqe = self.zoneDictUniqe
-        if zoneCol:
-            zoneCol = sns.color_palette('husl', n_colors=5)
+    def plotZones(self, ax=None, col='b', dotSz=3, lw=1.5, ls='--', mrkr='None', zoneCol=None, drawEdge=False, fill=True):
+        if zoneCol is None:
+            nCol = len(self.zoneDictUniqe)
+            c = plt.cm.tab20(np.linspace(0,1,nCol))
+            zoneCol = {}
+            for i,z in enumerate(self.zoneDictUniqe):
+                zn = self.zoneDict[z]
+                zoneCol[zn[0]+zn[1]] = c[i]
         newFig = False
         if ax is None:
             newFig = True
@@ -708,8 +712,13 @@ class face:
             ax = fig.add_subplot()
         for zDict in self.zoneDict:
             xy = transform(self.zoneDict[zDict][2], self.origin_plt, self.basisVectors_plt)
-            ax.plot(xy[:,0], xy[:,1], 
-                    ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
+            if drawEdge:
+                ax.plot(xy[:,0], xy[:,1], 
+                        ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
+            if fill:
+                zn = self.zoneDict[zDict]
+                colIdx = zn[0] + zn[1]
+                ax.fill(xy[:,0], xy[:,1], facecolor=zoneCol[colIdx])
         if newFig:
             ax.axis('equal')
 
@@ -1138,14 +1147,21 @@ class Faces:
         if newFig:
             ax.axis('equal')
 
-    def plotZones(self, ax=None, col='b', dotSz=3, lw=1.5, ls='--', mrkr='None'):
+    def plotZones(self, ax=None, col='b', dotSz=3, lw=1.5, ls='--', mrkr='None', zoneCol=None, drawEdge=False, fill=True):
+        if zoneCol is None:
+            nCol = len(self.zoneDict)
+            c = plt.cm.tab20(np.linspace(0,1,nCol))
+            zoneCol = {}
+            for i,z in enumerate(self.zoneDict):
+                zn = self.zoneDict[z]
+                zoneCol[zn[0]+zn[1]] = c[i]
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         for fc in self._members:
-            fc.plotZones(ax=ax, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
+            fc.plotZones(ax=ax, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr, zoneCol=zoneCol, drawEdge=drawEdge, fill=fill)
         if newFig:
             ax.axis('equal')
 

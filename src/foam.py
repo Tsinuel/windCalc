@@ -599,7 +599,8 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
         profiles = wind.Profiles((vel_EXP, vel_LES))
     print("  >> Finished reading probe data.")
     figFile = outDir+vel_LES.name+"_profiles.pdf"
-    profiles.plotProfiles(figFile,normalize=normalize)
+    if exportPlots:
+        profiles.plotProfiles(figFile,normalize=normalize)
 
     # figFile = outDir+probeName+"_spectra.pdf"
     # if vel_EXP.Spect_H is not None:
