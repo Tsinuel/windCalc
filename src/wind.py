@@ -45,8 +45,15 @@ unitsNone = {
         'M':None
         }
 
-cpStatTypes = ['mean','std','peak','peakMin','peakMax','skewness','kurtosis']
+VALID_TH_STAT_FIELDS = ['mean','std','peak','peakMin','peakMax','skewness','kurtosis']
 scalableCpStats = ['mean','std','peakMin','peakMax']
+
+DEFAULT_PEAK_SPECS = {'method':'gumbel',
+                    'fit_method':'BLUE',
+                    'Num_seg':10, 
+                    'Duration':10, 
+                    'prob_non_excd':0.5704,
+                    }
 
 with open(r'D:\OneDrive - The University of Western Ontario\Documents\PhD\Thesis\CodeRepositories\windCalc\src\refData\bluecoeff.json', 'r') as f:
     BLUE_COEFFS = json.load(f)
@@ -177,6 +184,14 @@ def psd(x,fs,nAvg=8):
     f, Pxxf = signal.welch(x[0:N], fs, window=win, noverlap=overlap, nfft=nblock, return_onesided=True)
     return f, Pxxf
 
+def lowpass(x, fs, fc, axis=-1, order = 4, resample=False):
+    Wn = fc / (fs / 2)
+    b, a = signal.butter(order, Wn, 'low')
+    y = signal.filtfilt(b, a, x, axis=axis)
+    if resample:
+        y = signal.resample(y, int(np.shape(y)[axis] * fc / fs), axis=axis)
+    return y
+
 def vonKarmanSuu(n,U,Iu,xLu):
     return np.divide((4*xLu*(Iu**2)*U), np.power((1 + 70.8*np.power(n*xLu/U,2)),5/6))
 
@@ -251,67 +266,111 @@ def fitESDUgivenIuRef(
 
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
-def peak_gumbel(x, axis:int=None, 
-            fit_method: Literal['BLUE','Gringorton','LeastSquare']='BLUE', 
-            N=10, prob_non_excd=0.5704, dur=None, detailedOutput=False):
+def peak_gumbel(x, axis:int=0, 
+                specs: dict=DEFAULT_PEAK_SPECS,
+                detailedOutput=False, debugMode=False):
     x = np.array(x, dtype=float)
     ndim = x.ndim
     xShp = x.shape
+    if xShp[axis] < specs['Num_seg']:
+        raise Exception(f"The time dimension of {xShp[axis]} along axis {axis} is less than number of segments, N of {specs['Num_seg']}. The input shape you gave is: {xShp}")
+    if debugMode:
+        print(f"x: {np.shape(x)}")
 
     # Extract N min/max values
     if ndim == 1:
-        x = np.array_split(x, N)
+        x = np.array_split(x, specs['Num_seg'])
     else:
-        x = np.split(x, N, axis=axis)
-    x_min = [np.min(xi,axis=axis) for xi in x]
-    x_max = [np.max(xi,axis=axis) for xi in x]
+        x = np.split(x, specs['Num_seg'], axis=axis)
+    x = np.moveaxis(x,0,-1)
+    if debugMode:
+        print(f"x: {np.shape(x)}")
+
+    x_min = np.min(x,axis=axis)
+    x_max = np.max(x,axis=axis)
+
+    del x # to save RAM 
 
     # Sort
     x_max = np.sort(x_max, axis=axis)
     x_min = np.flip(np.sort(x_min, axis=axis),axis=axis)
-
-    dur = N if dur is None else dur
+    if debugMode:
+        print(f"x_max: {np.shape(x_max)}")
+        print(f"x_min: {np.shape(x_min)}")
 
     # Get Gumbel coefficients
-    if fit_method == 'BLUE':
-        if N < 4 or N > 100:
+    if specs['fit_method'] == 'BLUE':
+        if specs['Num_seg'] < 4 or specs['Num_seg'] > 100:
             raise NotImplemented()
-        ai, bi = BLUE_COEFFS['ai'][N], BLUE_COEFFS['bi'][N]
-    else: # This can be extended to other fitting methods to get ai and bi
+        ai, bi = np.array(BLUE_COEFFS['ai'][str(specs['Num_seg'])],dtype=float), np.array(BLUE_COEFFS['bi'][str(specs['Num_seg'])],dtype=float)
+    else: # This can be extended to other fitting methods (e.g., Gringorton, Leastsquare, etc.) to get ai and bi
         raise NotImplemented()
+    ext_dim = [np.newaxis]*x_max.ndim
+    ext_dim[axis] = slice(None)
+    ai, bi = ai[tuple(ext_dim)], bi[tuple(ext_dim)]
+    if debugMode:
+        print(f"ai: {np.shape(ai)},  bi: {np.shape(bi)}")
+        print(f"axis: {axis}")
+        print(f"np.multiply(ai,x_max):  {(np.multiply(ai,x_max))}")
+        print(f"np.sum(np.multiply(ai,x_max),axis=axis):  {np.shape(np.sum(np.multiply(ai,x_max),axis=axis))}")
+
+    u_max, b_max = np.sum(np.multiply(ai,x_max),axis=axis), np.sum(np.multiply(bi,x_max),axis=axis)
+    u_min, b_min = np.sum(np.multiply(ai,x_min),axis=axis), np.sum(np.multiply(bi,x_min),axis=axis)
+
+    if debugMode:
+        print(f"u_max: {np.shape(u_max)},  b_max: {np.shape(b_max)}")
+        print(f"u_min: {np.shape(u_min)},  b_min: {np.shape(b_min)}")
+
+    pkMax = u_max - b_max*np.log(-np.log(specs['prob_non_excd']))
+    pkMin = u_min - b_min*np.log(-np.log(specs['prob_non_excd']))
+
+    peakMax = pkMax + b_max*np.log(specs['Duration'])
+    peakMin = pkMin + b_min*np.log(specs['Duration'])
+
+    details = {
+        'ai': ai,
+        'bi': bi,
+        'x_max':x_max,
+        'x_min':x_min,
+        'u_max':u_max,
+        'u_min':u_min,
+        'b_max':b_max,
+        'b_min':b_min,
+    }
 
     if detailedOutput:
-        return peakMin, peakMax, x_min, x_max
+        return peakMin, peakMax, details
     else:
         return peakMin, peakMax
 
-def peak(x,axis=None,
-        method: Literal['minmax','gumbel_BLUE']='gumbel_BLUE', gumbel_N=10, prob_non_excd=0.5704
+def peak(x,axis=0,
+        specs: dict=DEFAULT_PEAK_SPECS,
+        debugMode=False, detailedOutput=False,
         ):
-    if method == 'gumbel_BLUE':
-        return peak_gumbel(x,axis=axis,fit_method='BLUE',N=gumbel_N, prob_non_excd=prob_non_excd)
-    elif method == 'minmax':
+    if specs['method'] == 'gumbel':
+        return peak_gumbel(x,axis=axis,specs=specs,debugMode=debugMode, detailedOutput=detailedOutput)
+    elif specs['method'] == 'minmax':
         return np.amin(x,axis=axis), np.amax(x,axis=axis)
     else:
         raise NotImplemented()
 
 def getTH_stats(TH,axis=0,
                 fields: Literal['mean','std','peak','peakMin','peakMax','skewness','kurtosis'] = ['mean','std','peak'],
-                peakMethod: Literal['minmax','gumbel_BLUE']='gumbel_BLUE',
+                peakSpecs: dict=DEFAULT_PEAK_SPECS,
                 ) -> dict:
-    if not all(x in cpStatTypes for x in fields):
-        warnings.warn("Not all elements given as fields are valid. Choose from: "+str(cpStatTypes))
+    if not all(x in VALID_TH_STAT_FIELDS for x in fields):
+        warnings.warn("Not all elements given as fields are valid. Choose from: "+str(VALID_TH_STAT_FIELDS))
     stats = {}
     if 'mean' in fields:
         stats['mean'] = np.mean(TH,axis=axis)
     if 'std' in fields:
         stats['std'] = np.std(TH,axis=axis)
     if 'peak' in fields:
-        stats['peakMin'], stats['peakMax'] = peak(TH,axis=axis,method=peakMethod)
+        stats['peakMin'], stats['peakMax'] = peak(TH,axis=axis,specs=peakSpecs)
     if 'peakMin' in fields:
-        stats['peakMin'], _ = peak(TH,axis=axis,method=peakMethod)
+        stats['peakMin'], _ = peak(TH,axis=axis,specs=peakSpecs)
     if 'peakMax' in fields:
-        _, stats['peakMax'] = peak(TH,axis=axis,method=peakMethod)
+        _, stats['peakMax'] = peak(TH,axis=axis,specs=peakSpecs)
     if 'skewness' in fields:
         stats['skewness'] = skew(TH, axis=axis)
     if 'kurtosis' in fields:
@@ -652,6 +711,7 @@ class profile:
                 xLu=None, xLv=None, xLw=None,
                 SpectH=None, nSpectAvg=8,
                 fileName=None,
+                keepTH=True,
                 interpolateToH=False, units=unitsNone):
         self.name = name
         self.profType = profType
@@ -692,6 +752,10 @@ class profile:
         self.iH = None
         
         self.Update()
+        if not keepTH:
+            self.UofT = None
+            self.VofT = None
+            self.WofT = None
 
     def __str__(self):
         return self.name
@@ -832,7 +896,6 @@ class profile:
     
     def plot(self,figFile=None):
         self.plotProfiles(figFile=figFile)
-        self.plotTimeHistory(figFile=figFile)
         self.SpectH.plotSpectra(figFile=figFile)
 
     def plotTimeHistory(self,
@@ -1664,7 +1727,7 @@ class bldgCp(windCAD.building):
                 pOfT=None,
                 p0ofT=None,
                 CpStats=None,
-                peakMethod='gumbel_BLUE',
+                peakSpecs=DEFAULT_PEAK_SPECS,
                 keepTH=True,
                 ):
         super().__init__(name=bldgName, H=H, He=He, Hr=Hr, B=B, D=D, roofSlope=roofSlope, lScl=lScl, valuesAreScaled=valuesAreScaled, faces=faces,
@@ -1676,7 +1739,7 @@ class bldgCp(windCAD.building):
         self.airDensity = airDensity
 
         self.Zref = Zref_input
-        self.Uref = Uref_input
+        self.Uref = [Uref_input,] if np.isscalar(Uref_input) else Uref_input
         self.Uref_FS = Uref_FS
         self.badTaps = badTaps
         self.AoA = [AoA,] if np.isscalar(AoA) else AoA          # [N_AoA]
@@ -1684,15 +1747,16 @@ class bldgCp(windCAD.building):
         self.pOfT = pOfT        # [N_AoA,Ntaps,Ntime]
         self.p0ofT = p0ofT      # [N_AoA,Ntime]
         self.CpStats = CpStats          # dict{nFlds:[N_AoA,Ntaps]}
-        self.peakMethod = peakMethod
+        self.peakSpecs = peakSpecs
         
         self.CpStatsAreaAvg = None      # dict{nFlds:[Nzones][N_AoA,Npanels]}
+        self.velRatio = None
 
         self.__handleBadTaps()
         if reReferenceCpToH:
             self.__reReferenceCp()
         if self.Uref_FS is not None and self.Uref is not None and self.lScl is not None:
-            self.vScl = self.Uref/self.Uref_FS
+            self.vScl = np.mean(self.Uref)/self.Uref_FS
             self.tScl = self.lScl/self.vScl
         else:
             self.vScl = self.tScl = None
@@ -1743,9 +1807,9 @@ class bldgCp(windCAD.building):
                 cpTemp = np.multiply(np.reshape(wght,(-1,1)), self.CpOfT[:,idx,:])
                 cpTemp = np.reshape(np.sum(cpTemp,axis=1), [nAoA,1,nT])
                 if p == 0:
-                    avgCp = getTH_stats(cpTemp,axis=axT,peakMethod=self.peakMethod)
+                    avgCp = getTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
                 else:
-                    temp = getTH_stats(cpTemp,axis=axT,peakMethod=self.peakMethod)
+                    temp = getTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
                     for fld in temp:
                         avgCp[fld] = np.concatenate((avgCp[fld],temp[fld]),axis=1)
 
@@ -1769,9 +1833,9 @@ class bldgCp(windCAD.building):
                         cpTemp = np.multiply(np.reshape(wght,(-1,1)), self.CpOfT[:,idx,:])
                         cpTemp = np.reshape(np.sum(cpTemp,axis=1), [nAoA,1,nT])
                         if p == 0:
-                            avgCp = getTH_stats(cpTemp,axis=axT,peakMethod=self.peakMethod)
+                            avgCp = getTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
                         else:
-                            temp = getTH_stats(cpTemp,axis=axT,peakMethod=self.peakMethod)
+                            temp = getTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
                             for fld in temp:
                                 avgCp[fld] = np.concatenate((avgCp[fld],temp[fld]),axis=1)
                     avgCp_z.append(avgCp)
@@ -1786,10 +1850,10 @@ class bldgCp(windCAD.building):
         
         vel = self.refProfile
         UofZ = interp1d(vel.Z, vel.U)
-        vRatio = UofZ(self.Zref) / vel.Uh
-        factor = (vRatio)**2
+        self.velRatio = UofZ(self.Zref) / vel.Uh
+        factor = (self.velRatio)**2
         self.Zref = vel.H
-        self.Uref = self.Uref * (1/vRatio)
+        self.Uref = self.Uref * (1/self.velRatio)
         if self.CpOfT is not None:
             self.CpOfT = self.CpOfT*factor
         if self.CpStats is not None:
@@ -1876,17 +1940,28 @@ class bldgCp(windCAD.building):
         self.__verifyData()
         self.__computeCpTHfrom_p_TH()
         if self.CpOfT is not None:
-            self.CpStats = getTH_stats(self.CpOfT,axis=len(np.shape(self.CpOfT))-1,peakMethod=self.peakMethod)
+            self.CpStats = getTH_stats(self.CpOfT,axis=len(np.shape(self.CpOfT))-1,peakSpecs=self.peakSpecs)
         self.__computeAreaAveragedCp()
     
     def write(self):
         pass
+
+    def checkStatField(self,fld):
+        if self.CpStats is None:
+            raise Exception(f"CpStats is not defined.")
+        if fld in self.CpStats:
+            return True
+        else:
+            raise Exception(f"The field {fld} is not a part of the available stat fields. Available stat fields: {list(self.CpStats.keys())}")
     
     """--------------------------------- Plotters -------------------------------------"""
     def plotTapCpStatsPerAoA(self, fields=['peakMin','mean','peakMax',],fldRange=[-15,10], 
-                        nCols=7, nRows=10, cols = ['r','k','b','g','m','r','k','b','g','m'],mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], xticks=None,
+                        nCols=7, nRows=10, cols = ['r','k','g','b','m','r','k','b','g','m'],mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], 
+                        ls=['-','-','-','-','-','-','-','-','-','-',],
+                        xticks=None, mrkrSize=2,
                         legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20]):
-
+        for fld in fields:
+            self.checkStatField(fld)
         nPltPerPage = nCols * nRows
         nPltTotal = self.NumTaps
         nPages = int(np.ceil(nPltTotal/nPltPerPage))
@@ -1901,7 +1976,8 @@ class bldgCp(windCAD.building):
                 ax = plt.subplot(nRows,nCols,i+1)
                 for f,fld in enumerate(fields):
                     ax.plot(self.AoA, self.CpStats[fld][:,tapIdx], label=fld,
-                            marker=mrkrs[f], color=cols[f], ls='none',mfc=cols[f], ms=4)
+                            marker=mrkrs[f], color=cols[f], ls=ls[f],mfc=cols[f], ms=mrkrSize)
+                ax.hlines([-1,0,1],0,360,colors=['k','k','k'],linestyles=['--','-','--'],lw=0.7)
                 tapName = '' #'('+self.tapName[tapIdx]+')' if self.tapName is not None and self.tapName[tapIdx] is not '' else ''
                 tag = str(self.tapNo[tapIdx]) + tapName
                 ax.annotate(tag, xy=(0,0), xycoords='axes fraction',xytext=(0.05, 0.05), textcoords='axes fraction',
@@ -1930,6 +2006,7 @@ class bldgCp(windCAD.building):
             plt.show()
 
     def plotTapCpStatContour(self, fieldName, dxnIdx=0, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both'):
+        self.checkStatField(fieldName)
         newFig = False
         if ax is None:
             newFig = True
@@ -1950,6 +2027,7 @@ class bldgCp(windCAD.building):
         return
 
     def plotPanelCpStatContour(self, fieldName, dxnIdx=0, aIdx=0, showValueText=False, strFmt="{:.3g}", figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
+        self.checkStatField(fieldName)
         newFig = False
         if ax is None:
             newFig = True
@@ -1962,3 +2040,18 @@ class bldgCp(windCAD.building):
             ax.axis('off')
         return
 
+    def plotAreaAveragedStat(self, field, ax=None, zoneIndex=None, xLim=None, yLim=None,):
+        if ax is None:
+            newFig = True
+            fig = plt.figure(figsize=figSize)
+            ax = fig.add_subplot()
+        pass
+
+class BldgCps():
+    def __init__(self) -> None:
+        self._members = []
+        self.parent = bldgCp()
+        pass
+
+    def fold(self):
+        pass

@@ -14,7 +14,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from datetime import datetime
 
 import wind
-import windLoadCaseProcessors__toBeRemoved as wProc
+# import windLoadCaseProcessors__toBeRemoved as wProc
 import windPlotters as wPlt
 
 __tol_time = 1e-7
@@ -394,18 +394,18 @@ def extractSampleProfileFromInflow(inletDir,outPath,figFile,tMax,H):
     np.savetxt(outPath+"_UofT.csv",velOfT[:,:,0],delimiter=",")
     np.savetxt(outPath+"_VofT.csv",velOfT[:,:,1],delimiter=",")
     np.savetxt(outPath+"_WofT.csv",velOfT[:,:,2],delimiter=",")
-    ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z, 
-                                                                                   velOfT, 
-                                                                                   times[1][1]-times[0][1], 
-                                                                                   H)
+    # ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z, 
+    #                                                                                velOfT, 
+    #                                                                                times[1][1]-times[0][1], 
+    #                                                                                H)
     
-    wPlt.plotProfiles([Z],
-                      [U],
-                      TI=[TI], 
-                      L=[L],
-                      plotNames=(),
-                      pltFile=figFile)
-    
+    # wPlt.plotProfiles([Z],
+    #                   [U],
+    #                   TI=[TI], 
+    #                   L=[L],
+    #                   plotNames=(),
+    #                   pltFile=figFile)
+    pass
 
 #===============================================================================
 #=================  Probe readers and related functions  =======================
@@ -613,6 +613,57 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
 
     return vel_LES #, vel_EXP
     
-    
+def writeProbeDict(file, points, fields=['p','U'], writeControl='adjustableRunTime', writeInterval='$probeWriteTime', includeLines=[], overwrite=False, precision=8, width=10):
+    if os.path.exists(file):
+        if not overwrite:
+            msg = "The file "+file+" already exists."
+            raise Exception(msg)
+        else:
+            msg = "The file "+file+" exists and will be overwritten."
+            warnings.warn(msg)
+    shp = np.shape(points)
+    if not (shp[1] == 3):
+        msg = "The points matrix must have three columns (x,y,z). The current shape is:"+str(shp)
+        raise Exception(msg)
+
+    with open(file,'w') as f:
+        f.write("/*--------------------------------*- C++ -*----------------------------------*\\\n")
+        f.write("  =========                 |                                                   \n")
+        f.write("  \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox             \n")
+        f.write("   \\\\    /   O peration     |                                                   \n")
+        f.write("    \\\\  /    A nd           | Web:      www.OpenFOAM.org                        \n")
+        f.write("     \\\\/     M anipulation  |                                                   \n")
+        f.write("------------------------------------------------------------------------------- \n")
+        f.write("Description                                                                     \n")
+        f.write("    Writes out values of fields from cells nearest to specified locations.      \n")
+        f.write("                                                                                \n")
+        f.write("\\*---------------------------------------------------------------------------*/ \n")
+        f.write("\n")
+        f.write("#includeEtc \"caseDicts/postProcessing/probes/probes.cfg\"\n")
+        for inc in includeLines:
+            f.write(inc+"\n")
+        f.write("\n")
+        f.write("type            probes;\n")
+        f.write("libs            (\"libsampling.so\");\n")
+        f.write("\n")
+        f.write(f"writeControl    {writeControl};\n")
+        f.write(f"writeInterval   {writeInterval};\n")
+        f.write("\n")
+        f.write("fields\n")
+        f.write("(\n")
+        for fld in fields:
+            f.write(f"    {fld}\n")
+        f.write(");\n")
+        f.write("\n")
+        f.write("probeLocations \n")
+        f.write("( \n")
+        for row in points:
+            f.write("({:>{width}.{precision}g} {:>{width}.{precision}g} {:>{width}.{precision}g})\n".format(row[0], row[1], row[2], width=width, precision=precision))
+        f.write("); \n")
+        f.write("\n")
+        f.write("// ************************************************************************* //\n")
+
+
+    pass
     
     

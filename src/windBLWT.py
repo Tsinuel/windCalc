@@ -16,10 +16,14 @@ import wind as wd
 #===============================================================================
 #==================== CONSTANTS & GLOBAL VARIABLES  ============================
 #===============================================================================
-BAROCEL_RANGE_FACTORS = { # Obtained from Anthony @ BLWTL
+# 
+# Obtained from Anthony @ BLWTL
+BAROCEL_RANGE_FACTORS = { 
     "Range":        [1, .3, .1, .03, .01, .003, .001],
     "Range_factor": [94.606, 51.818, 29.917, 16., 9.461, 5.182, 2.992],
 }
+
+XREF_PITOT_QUEUE_TOLERANCE = 0.01 # xref
 
 #===============================================================================
 #=============================== FUNCTIONS =====================================
@@ -86,35 +90,62 @@ def writeSpecFile(file,keyword,value,writeType):
 class BLWTL_HFPI:
     def __init__(self,
                  caseDir:str=None,
+                 userNotes=None,
                  Z_MainPitot=1.48,
-                 pitotChnl_main:int=None,
-                 pitotChnl_xref:int=None,
-                 pitotChnl_20in:int=None,
-                 pitotChnl_Uh:int=None,
+                 analogChannels_idxs:dict=None,
+                 pressureExtraChannels_tapNos:dict=None,
+                 lowpassFreq=None,
                  Ntaps=None,
                  barocelRangeFactor=29.917,
                  ) -> None:
         self.caseDir = caseDir
+        self.userNotes = userNotes
         self.Z_MainPitot = Z_MainPitot
-        self.pitotChnl_main = pitotChnl_main
-        self.pitotChnl_xref = pitotChnl_xref
-        self.pitotChnl_20in = pitotChnl_20in
-        self.pitotChnl_Uh = pitotChnl_Uh
+        if analogChannels_idxs is None:
+            analogChannels_ex = {
+                'main_pitot': 1,
+                'xref_pitot': 3,
+                'sync_switch': 6,
+            }
+            print("analogChannels is not provided. It has the form of:")
+            print(analogChannels_ex)
+        self.analogChannels_idxs = analogChannels_idxs
+        
+        if pressureExtraChannels_tapNos is None:
+            pressureExtraChannels_ex = {
+                'main_pitot_zero': 2909,
+                'main_pitot_queue': 2910,
+                '20inch_pitot_zero': 2907,
+                '20inch_pitot_queue': 2908,
+                'Uh_pitot_zero': 2905,
+                'Uh_pitot_queue': 2906,
+            }
+            print("pressureExtraChannels_tapNos is not provided. It has the form of:")
+            print(pressureExtraChannels_ex)
+        self.pressureExtraChannels_tapNos = pressureExtraChannels_tapNos
+        self.lowpassFreq = lowpassFreq
+
         self.barocelRangeFactor = barocelRangeFactor
         self.Ntaps = Ntaps
 
         self.files_pssd = None
         self.files_pssr = None
         self.AoA = None
-        self.UrefMain_TH = None
         self.WTTDATALOG = None
         self.CpTH = None
+        self.sampleRate_orig = None
         self.sampleRate = None
+        self.testDuration = None
+        self.floorExposure = None
+        self.tapNos = None
+        self.analogChannels = None
+        self.pressureExtraChannels = None
 
         self.Update()
         
     def Update(self):
-        pass
+        self.read()
+        
 
     def read(self):
         self.files_pssr = glob.glob(os.path.join(self.caseDir, '*.pssr'))
@@ -122,22 +153,80 @@ class BLWTL_HFPI:
         self.files_pssd = [os.path.join(self.caseDir, file+'.pssd') for file in file_names]
 
         self.AoA = np.array([])
-        self.sampleRate = np.array([])
+        self.sampleRate_orig = np.array([])
         self.WTTDATALOG = []
         N_AoA = len(self.files_pssd)
 
         for d,(file_pssd,file_pssr) in enumerate(zip(self.files_pssd,self.files_pssr)):
             cp_data,analog,WTTDATALOG = readPSSfile(file_pssr,file_pssd)
+            analog = np.transpose(analog)
+            cp_data = np.transpose(cp_data)
             self.WTTDATALOG.append(WTTDATALOG)
-
+            self.AoA = np.append(self.AoA,float(WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][24][0][0][5][0][0]))
+            sampleFreq = WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][12][0][0]
+            self.sampleRate_orig = np.append(self.sampleRate_orig, sampleFreq)
+            if self.lowpassFreq is not None:
+                cp_data = wd.lowpass(cp_data,fs=sampleFreq,fc=self.lowpassFreq, axis=1, resample=True)
+                analog = wd.lowpass(analog,fs=sampleFreq,fc=self.lowpassFreq, axis=1, resample=True)
             if d == 0:
-                N_t,Ntaps = np.shape(cp_data)
-                self.CpTH = np.zeros((N_AoA,Ntaps,N_t)) # [N_AoA,Ntaps,Ntime]
-                self.UrefMain_TH = np.zeros((N_AoA,N_t))
-            self.CpTH[d,:,:] = np.transpose(cp_data)
-            self.UrefMain_TH[d,:] = self.barocelRangeFactor * np.sqrt(analog[:,self.pitotChnl_main]) * wd.fps2mps
-            self.AoA = np.append(self.AoA,WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][16][0][0])
-            self.sampleRate = np.append(self.sampleRate, WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][12][0][0])
+                Ntaps,N_t = np.shape(cp_data)
+                CpTH = np.zeros((N_AoA,Ntaps,N_t))
+                Nchnl,_ = np.shape(analog)
+                anTH = np.zeros((N_AoA,Nchnl,N_t))
+            CpTH[d,:,:] = cp_data[0:Ntaps,:]
+            anTH[d,:,:] = analog
+        if self.lowpassFreq is None:
+            self.sampleRate = self.sampleRate_orig
+        else:
+            self.sampleRate = np.ones_like(self.sampleRate_orig)*self.lowpassFreq
 
-        self.UrefMain = np.mean(self.UrefMain_TH,axis=1)
-        
+        tapNos = list(WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][3][0])
+        self.barocelRangeFactor = WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][7][0][3]
+        self.testDuration = float(WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][6][0][0])
+        self.floorExposure = WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][7]
+        self.CpTH = CpTH[:,:self.Ntaps,:]
+        self.analogData = anTH
+        self.tapNos = tapNos[:self.Ntaps]
+
+        if self.analogChannels_idxs is not None:
+            self.analogChannels = {}
+            for dId in self.analogChannels_idxs:
+                idx = self.analogChannels_idxs[dId]
+                self.analogChannels[dId] = anTH[:,idx,:]
+
+        if self.pressureExtraChannels_tapNos is not None:
+            self.pressureExtraChannels = {}
+            for dId in self.pressureExtraChannels_tapNos:
+                tNo = self.pressureExtraChannels_tapNos[dId]
+                idx = tapNos.index(tNo)
+                self.pressureExtraChannels[dId] = CpTH[:,idx,:]
+
+    @property
+    def Uref(self):
+        urefTH = self.Uref_TH
+        if urefTH is None:
+            return None
+        return np.mean(urefTH,axis=-1)
+
+    @property
+    def Uref_TH(self):
+        if self.analogChannels is None:
+            return None
+        if not 'main_pitot' in self.analogChannels:
+            return None
+        return np.sqrt(self.analogChannels['main_pitot'])  * self.barocelRangeFactor * wd.fps2mps
+
+    @property
+    def U_XRef(self):
+        uTH = self.U_XRef_TH
+        if uTH is None:
+            return None
+        return np.mean(uTH,axis=-1)
+
+    @property
+    def U_XRef_TH(self):
+        if self.analogChannels is None:
+            return None
+        if not 'xref_pitot' in self.analogChannels:
+            return None
+        return np.sqrt(self.analogChannels['xref_pitot'])  * self.barocelRangeFactor * wd.fps2mps
