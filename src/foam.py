@@ -10,6 +10,8 @@ import warnings
 import pandas as pd
 import scipy.interpolate as scintrp
 import matplotlib.pyplot as plt
+from typing import List,Literal,Dict,Tuple,Any
+
 from matplotlib.backends.backend_pdf import PdfPages
 from datetime import datetime
 
@@ -469,8 +471,8 @@ def __readProbe_singleT(file,field):
    
     return probes, time, data
 
-def readProbe(probeName, postProcDir, field, trimTimeSegs=[[0,0]], trimOverlap=True, 
-              shiftTimeToZero=True, removeOutOfDomainProbes=True):
+def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None, trimOverlap=True, 
+              shiftTimeToZero=True, removeOutOfDomainProbes=True, showLog=True):
     """
     Read probe time-history data from an OpenFOAM case.
 
@@ -523,6 +525,8 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs=[[0,0]], trimOverlap=T
     
     for t in times:
         fileName = probeDir+t[0]+"/"+field
+        if showLog:
+            print(f"           reading {field} from: {fileName}")
         
         (probes,time,d) = __readProbe_singleT(fileName, field)
         
@@ -534,17 +538,38 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs=[[0,0]], trimOverlap=T
             data = np.append(data,d,axis=0)
 
     if trimOverlap:
+        if showLog:
+            print("    Trimming overlapping times.")
         T,idx = np.unique(T,return_index=True)
         data = data[idx,:]
         
-    dt = np.diff(T)
+    dt = np.diff(np.unique(np.sort(T)))
     if max(dt)-min(dt) > __tol_time:
-        warnings.warn("\n\nWARNING! Non-uniform time step detected in '"+probeName+"'.\n\n")
+        msg = f"WARNING! Non-uniform time step detected in '{probeName}'. The highest difference in time step is: {max(dt)-min(dt)}"
+        warnings.warn(msg)
         
+    if trimTimeSegs is not None:
+        if showLog:
+            print(f"   Trimming times: {trimTimeSegs}")
+        idx = []
+        for seg in trimTimeSegs:
+            if not len(seg) == 2:
+                msg = "The length of each 'trimTimeSegs' must be a pair of start and end time to trim out. The probelematic segment is: "+str(seg)
+                raise Exception(msg)
+            if seg[0] > seg[1]:
+                msg = "The first entry of every 'trimTimeSegs' must be less than the second. The probelematic segment is: "+str(seg)
+                raise Exception(msg)
+            s, e = np.argmin(np.abs(T - seg[0])), np.argmin(np.abs(T - seg[1]))
+            idx.extend(range(s,e))
+        T = np.delete(T, idx)
+        data = np.delete(data, idx, axis=0)
+
     if shiftTimeToZero:
         dt = np.mean(dt)
+        if showLog:
+            print(f"    Adopted time step: {dt}")
         T = np.linspace(0, (len(T)-1)*dt, num=len(T))
-        
+
     if removeOutOfDomainProbes:
         if field == 'p':
             removeIdx = np.where(np.prod(abs(data) > __tol_data,axis=0))
@@ -559,9 +584,11 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
                         name=None,
                         normalize=True,
                         writeToDataFile=False,
-                        trimTimeSegs=[[0,0.5]],
+                        trimTimeSegs:List[List[float]]=[[0,0.5]],
+                        shiftTimeToZero=True,
                         H=None,
                         showPlots=False,
+                        showLog=True,
                         exportPlots=True):
     
     caseName = os.path.abspath(caseDir).split(os.sep)[-1]
@@ -574,7 +601,7 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
     print("Target profile read from:\t"+str(targetProfile))
     
     print("  >> Reading probe data ...")
-    probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs)
+    probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
     print("             << Done!")
     
     Z = probes[:,2]
@@ -586,10 +613,10 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
                           WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.unitsCommonSI)
     print("             << Done!")
     
-    print("  >> Writing data to file.")
     if writeToDataFile:
+        print("  >> Writing data to file.")
         vel_LES.writeToFile(outDir=outDir,writeTH=True,writeProfiles=True)
-    print("             << Done!")
+        print("             << Done!")
     
     if targetProfile is None:
         vel_EXP = None
@@ -602,16 +629,7 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
     if exportPlots:
         profiles.plotProfiles(figFile,normalize=normalize)
 
-    # figFile = outDir+probeName+"_spectra.pdf"
-    # if vel_EXP.Spect_H is not None:
-        # profiles = wind.Profiles((vel_LES,))
-        # wind.Profiles((vel_LES,)).plotSpectra(figFile,normalize=normalize)
-    # else:
-    #     profiles.plotSpectra(figFile,normalize=normalize)
-    
-    
-
-    return vel_LES #, vel_EXP
+    return vel_LES
     
 def writeProbeDict(file, points, fields=['p','U'], writeControl='adjustableRunTime', writeInterval='$probeWriteTime', includeLines=[], overwrite=False, precision=8, width=10):
     if os.path.exists(file):

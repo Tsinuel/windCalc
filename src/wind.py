@@ -223,9 +223,9 @@ def fitESDUgivenIuRef(
                     tolerance=0.0001,
                     ):
     if ESDUversion == 'ESDU85':
-        es = ESDU85(z0=z0i[0],Zref=Zref,Z=Zref,Uref=Uref,phi=phi)
+        es = ESDU85(z0=z0i[0],Zref=Zref,Uref=Uref,phi=phi)
     elif ESDUversion == 'ESDU74':
-        es = ESDU74(z0=z0i[0],Zref=Zref,Z=Zref,Uref=Uref,phi=phi)
+        es = ESDU74(z0=z0i[0],Zref=Zref,Uref=Uref,phi=phi)
     else:
         raise Exception("Unknown ESDU version: "+ESDUversion)
 
@@ -233,9 +233,9 @@ def fitESDUgivenIuRef(
     z0_1 = z0i[1]
 
     es.z0 = z0_0
-    Iu_0 = es.Iu()
+    Iu_0 = es.Iu(Z=Zref)
     es.z0 = z0_1
-    Iu_1 = es.Iu()
+    Iu_1 = es.Iu(Z=Zref)
 
     err_0 = IuRef - Iu_0
     err_1 = IuRef - Iu_1
@@ -245,7 +245,7 @@ def fitESDUgivenIuRef(
 
     z0 = (z0_0 + z0_1)/2
     es.z0 = z0
-    Iu = es.Iu()
+    Iu = es.Iu(Z=Zref)
     err = IuRef - Iu
 
     while abs(err) > tolerance:
@@ -253,7 +253,7 @@ def fitESDUgivenIuRef(
         # print("Iu = "+str(Iu))
         z0 = (z0_0 + z0_1)/2
         es.z0 = z0
-        Iu = es.Iu()
+        Iu = es.Iu(Z=Zref)
         err = IuRef - Iu
         if err*err_0 < 0:
             z0_1 = z0
@@ -264,6 +264,13 @@ def fitESDUgivenIuRef(
     z0 = (z0_0 + z0_1)/2
     return z0, es
 
+def fitVelToLogProfile(Z, U, Zref=None, Uref=None, uStar=None, d=0.0):
+    if Zref is None and Uref is None and uStar is None:
+        raise Exception("Either 'uStar' or 'Zref' and 'Uref' are required.")
+    raise NotImplementedError()
+
+def fitVelToPowerLawProfile(Z, U, Zg=None):
+    raise NotImplementedError()
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
 def peak_gumbel(x, axis:int=0, 
@@ -438,7 +445,7 @@ class spectra:
         return self.name
     
     """--------------------------------- Normalizers ----------------------------------"""
-    def rf(self,n='auto',normZ='Z'):
+    def rf(self,n='auto',normZ:Literal['Z','xLi']='Z'):
         if n == 'auto':
             n = self.n
         if normZ == 'Z':
@@ -493,7 +500,7 @@ class spectra:
         pass
 
     """--------------------------------- Fittings -------------------------------------"""
-    def Suu_vonK(self,n=None,normalized=False,normU='U'):
+    def Suu_vonK(self,n=None,normalized=False,normU:Literal['U','sigUi']='U'):
         if n is None:
             n = self.n
         Suu = vonKarmanSuu(n=n,U=self.U,Iu=self.Iu,xLu=self.xLu)
@@ -506,7 +513,7 @@ class spectra:
         else:
             return Suu
 
-    def Svv_vonK(self,n=None,normalized=False,normU='U'):
+    def Svv_vonK(self,n=None,normalized=False,normU:Literal['U','sigUi']='U'):
         if n is None:
             n = self.n
         Svv = vonKarmanSvv(n=n,U=self.U,Iv=self.Iv,xLv=self.xLv)
@@ -519,7 +526,7 @@ class spectra:
         else:
             return Svv
 
-    def Sww_vonK(self,n=None,normalized=False,normU='U'):
+    def Sww_vonK(self,n=None,normalized=False,normU:Literal['U','sigUi']='U'):
         if n is None:
             n = self.n
         Sww = vonKarmanSww(n=n,U=self.U,Iw=self.Iw,xLw=self.xLw)
@@ -557,8 +564,8 @@ class spectra:
                     yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
                     figSize=[15,5], 
                     normalize=True,
-                    normZ='Z',
-                    normU='U',
+                    normZ:Literal['Z','xLi']='Z',
+                    normU:Literal['U','sigUi']='U',
                     plotType='loglog',
                     overlayVonK=False,
                     avoidZeroFreq=True
@@ -1145,8 +1152,8 @@ class Profiles:
                     figFile=None, 
                     figSize=[15,5], 
                     normalize=True,
-                    normZ='Z',
-                    normU='U',
+                    normZ:Literal['Z','xLi']='Z',
+                    normU:Literal['U','sigUi']='U',
                     plotType='loglog',
                     xLimits='auto', # [nMin,nMax]
                     yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
@@ -1369,7 +1376,7 @@ class ESDU74:
         varW = np.power(np.multiply(self.Iw(Z),self.U(Z)),2)
         return n, np.divide(np.multiply(self.Sii(nw,Z),varW), n)
 
-    def rf(self,n,Z=None,normZ='Z'):
+    def rf(self,n,Z=None,normZ:Literal['Z','xLi']='Z'):
         Z = self.Zref if Z is None else Z
         if normZ == 'Z':
             normZ = Z
@@ -1380,7 +1387,7 @@ class ESDU74:
         Uref = self.U(Z=Z)
         return n * normZ/Uref
 
-    def rSuu(self,n=None,normU='U',Z=None,normZ='Z'):
+    def rSuu(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
         Z = self.Zref if Z is None else Z
         if n is None:
             n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLu(Z)))
@@ -1392,7 +1399,7 @@ class ESDU74:
             normU = self.Iu(Z) * self.U(Z)
         return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Suu(n=n,Z=Z)[1])/(normU**2)
 
-    def rSvv(self,n=None,normU='U',Z=None,normZ='Z'):
+    def rSvv(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
         Z = self.Zref if Z is None else Z
         if n is None:
             n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLv(Z)))
@@ -1404,7 +1411,7 @@ class ESDU74:
             normU = self.Iv(Z) * self.U(Z)
         return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Svv(n=n,Z=Z)[1])/(normU**2)
 
-    def rSww(self,n=None,normU='U',Z=None,normZ='Z'):
+    def rSww(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
         Z = self.Zref if Z is None else Z
         if n is None:
             n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLw(Z)))
@@ -1622,7 +1629,7 @@ class ESDU85:
         varW = np.power(np.multiply(self.Iw(Z),self.U(Z)),2)
         return n, np.divide(np.multiply(self.Sii(nw,Z),varW), n)
 
-    def rf(self,n,Z=None,normZ='Z'):
+    def rf(self,n,Z=None,normZ:Literal['Z','xLi']='Z'):
         Z = self.Zref if Z is None else Z
         if normZ == 'Z':
             normZ = Z
@@ -1633,7 +1640,7 @@ class ESDU85:
         Uref = self.U(Z=Z)
         return n * normZ/Uref
 
-    def rSuu(self,n=None,normU='U',Z=None,normZ='Z'):
+    def rSuu(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
         Z = self.Zref if Z is None else Z
         if n is None:
             n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLu(Z)))
@@ -1645,7 +1652,7 @@ class ESDU85:
             normU = self.Iu(Z) * self.U(Z)
         return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Suu(n=n,Z=Z)[1])/(normU**2)
 
-    def rSvv(self,n=None,normU='U',Z=None,normZ='Z'):
+    def rSvv(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
         Z = self.Zref if Z is None else Z
         if n is None:
             n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLv(Z)))
@@ -1657,7 +1664,7 @@ class ESDU85:
             normU = self.Iv(Z) * self.U(Z)
         return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Svv(n=n,Z=Z)[1])/(normU**2)
 
-    def rSww(self,n=None,normU='U',Z=None,normZ='Z'):
+    def rSww(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
         Z = self.Zref if Z is None else Z
         if n is None:
             n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLw(Z)))
@@ -1707,6 +1714,15 @@ class ESDU85:
         return prof
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
+class faceCp(windCAD.face):
+    def __init__(self, 
+                 ID=None, name=None, note=None, origin=None, basisVectors=None, origin_plt=None, basisVectors_plt=None, vertices=None, tapNo: List[int] = None, tapIdx: List[int] = None, tapName: List[str] = None, badTaps=None, allBldgTaps=None, tapCoord=None, zoneDict=None, nominalPanelAreas=None, numOfNominalPanelAreas=5, file_basic=None, file_derived=None):
+        super().__init__(ID, name, note, origin, basisVectors, origin_plt, basisVectors_plt, vertices, tapNo, tapIdx, tapName, badTaps, allBldgTaps, tapCoord, zoneDict, nominalPanelAreas, numOfNominalPanelAreas, file_basic, file_derived)
+
+    @property
+    def Cf_N(self):
+        pass
+
 class bldgCp(windCAD.building):
     def __init__(self, 
                 # Inputs for the base class
