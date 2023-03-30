@@ -7,13 +7,14 @@ Created on Fri Aug 12 18:23:09 2022
 
 import numpy as np
 import pandas as pd
+import os
 import warnings
 import shapely.geometry as shp
 import matplotlib.pyplot as plt
 import matplotlib.lines as lines
 import json
 
-import windPlotters as wplt
+import windPlotting as wplt
 import windCAD
 
 from shapely.ops import voronoi_diagram
@@ -26,41 +27,39 @@ from scipy.interpolate import interp1d
 #===============================================================================
 #==================== CONSTANTS & GLOBAL VARIABLES  ============================
 #===============================================================================
+
 fps2mps = 0.3048
+
 mm2m = 0.001
 
-unitsCommonSI = {
-        'L':'m',
-        'T':'s',
-        'V':'mps',
-        'P':'Pa',
-        'M':'kg'
-        }
+DEFAULT_SI_UNITS = {
+                    'L':'m',
+                    'T':'s',
+                    'V':'mps',
+                    'P':'Pa',
+                    'M':'kg'
+                }
 
-unitsNone = {
-        'L':None,
-        'T':None,
-        'V':None,
-        'P':None,
-        'M':None
-        }
+VALID_CP_TH_STAT_FIELDS = ['mean','std','peak','peakMin','peakMax','skewness','kurtosis']
 
-VALID_TH_STAT_FIELDS = ['mean','std','peak','peakMin','peakMax','skewness','kurtosis']
-scalableCpStats = ['mean','std','peakMin','peakMax']
+VALID_VEL_TH_STAT_FIELDS = ['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']
 
-DEFAULT_PEAK_SPECS = {'method':'gumbel',
-                    'fit_method':'BLUE',
-                    'Num_seg':10, 
-                    'Duration':10, 
-                    'prob_non_excd':0.5704,
+SCALABLE_CP_STATS = ['mean','std','peakMin','peakMax']
+
+DEFAULT_PEAK_SPECS = {
+                        'method':'gumbel',
+                        'fit_method':'BLUE',
+                        'Num_seg':16, 
+                        'Duration':16, 
+                        'prob_non_excd':0.5704,
                     }
 
-with open(r'D:\OneDrive - The University of Western Ontario\Documents\PhD\Thesis\CodeRepositories\windCalc\src\refData\bluecoeff.json', 'r') as f:
-    BLUE_COEFFS = json.load(f)
+PATH_SRC = os.path.dirname(os.path.abspath(__file__))
 
-# matplotlib.rcParams['text.usetex'] = False
-# import matplotlib.font_manager
-# matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
+DEFAULT_RF = np.logspace(-5,3,400)
+
+with open(PATH_SRC+r'/refData/bluecoeff.json', 'r') as f:
+    BLUE_COEFFS = json.load(f)
 
 #===============================================================================
 #=============================== FUNCTIONS =====================================
@@ -321,28 +320,28 @@ def peak_gumbel(x, axis:int=0,
         print(f"np.multiply(ai,x_max):  {(np.multiply(ai,x_max))}")
         print(f"np.sum(np.multiply(ai,x_max),axis=axis):  {np.shape(np.sum(np.multiply(ai,x_max),axis=axis))}")
 
-    u_max, b_max = np.sum(np.multiply(ai,x_max),axis=axis), np.sum(np.multiply(bi,x_max),axis=axis)
-    u_min, b_min = np.sum(np.multiply(ai,x_min),axis=axis), np.sum(np.multiply(bi,x_min),axis=axis)
+    mu_max, sig_max = np.sum(np.multiply(ai,x_max),axis=axis), np.sum(np.multiply(bi,x_max),axis=axis)
+    mu_min, sig_min = np.sum(np.multiply(ai,x_min),axis=axis), np.sum(np.multiply(bi,x_min),axis=axis)
 
     if debugMode:
-        print(f"u_max: {np.shape(u_max)},  b_max: {np.shape(b_max)}")
-        print(f"u_min: {np.shape(u_min)},  b_min: {np.shape(b_min)}")
+        print(f"mu_max: {np.shape(mu_max)},  sig_max: {np.shape(sig_max)}")
+        print(f"mu_min: {np.shape(mu_min)},  sig_min: {np.shape(sig_min)}")
 
-    pkMax = u_max - b_max*np.log(-np.log(specs['prob_non_excd']))
-    pkMin = u_min - b_min*np.log(-np.log(specs['prob_non_excd']))
+    pkMax = mu_max - sig_max*np.log(-np.log(specs['prob_non_excd']))
+    pkMin = mu_min - sig_min*np.log(-np.log(specs['prob_non_excd']))
 
-    peakMax = pkMax + b_max*np.log(specs['Duration'])
-    peakMin = pkMin + b_min*np.log(specs['Duration'])
+    peakMax = pkMax + sig_max*np.log(specs['Duration'])
+    peakMin = pkMin + sig_min*np.log(specs['Duration'])
 
     details = {
         'ai': ai,
         'bi': bi,
         'x_max':x_max,
         'x_min':x_min,
-        'u_max':u_max,
-        'u_min':u_min,
-        'b_max':b_max,
-        'b_min':b_min,
+        'mu_max':mu_max,
+        'mu_min':mu_min,
+        'sig_max':sig_max,
+        'sig_min':sig_min,
     }
 
     if detailedOutput:
@@ -361,12 +360,13 @@ def peak(x,axis=0,
     else:
         raise NotImplemented()
 
-def getTH_stats(TH,axis=0,
+def get_CpTH_stats(TH,axis=0,
                 fields: Literal['mean','std','peak','peakMin','peakMax','skewness','kurtosis'] = ['mean','std','peak'],
                 peakSpecs: dict=DEFAULT_PEAK_SPECS,
                 ) -> dict:
-    if not all(x in VALID_TH_STAT_FIELDS for x in fields):
-        warnings.warn("Not all elements given as fields are valid. Choose from: "+str(VALID_TH_STAT_FIELDS))
+    if not all(x in VALID_CP_TH_STAT_FIELDS for x in fields):
+        msg = "Not all elements given as fields are valid. Choose from: "+str(VALID_CP_TH_STAT_FIELDS)
+        raise Exception(msg)
     stats = {}
     if 'mean' in fields:
         stats['mean'] = np.mean(TH,axis=axis)
@@ -384,6 +384,55 @@ def getTH_stats(TH,axis=0,
         stats['kurtosis'] = kurtosis(TH, axis=axis)
     return stats
 
+def get_velTH_stats(UofT, VofT=None, WofT=None, timeAxis=1, dt=None,
+                    fields: Literal['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']=['U','Iu','Iv','Iw','xLu','xLv','xLw','uw']):
+    if not all(x in VALID_VEL_TH_STAT_FIELDS for x in fields):
+        msg = "Not all elements given as fields are valid. Choose from: "+str(VALID_VEL_TH_STAT_FIELDS)
+        raise Exception(msg)
+    vIsHere = VofT is not None
+    wIsHere = WofT is not None
+    if timeAxis == 0:
+        UofT = np.transpose(UofT)
+        if vIsHere:
+            VofT = np.transpose(VofT)
+        if wIsHere:
+            WofT = np.transpose(WofT)
+        timeAxis = 1
+    if len(UofT) > 2:
+        raise Exception("The velocity time history matrices must be 2D.")
+    if vIsHere and np.shape(UofT) != np.shape(VofT):
+        raise Exception("The shapes of UofT and VofT must match for profile stat calculation.")
+    if wIsHere and np.shape(UofT) != np.shape(WofT):
+        raise Exception("The shapes of UofT and WofT must match for profile stat calculation.")
+    if dt is None and any(['xLu','xLv','xLw'] in fields):
+        warnings.warn("Time step 'dt' of the time histories is not provided while requesting integral length scales. Skipping those stats.")
+        fields.pop()
+    
+    stats = {}
+    if 'U' in fields:
+        U = np.mean(UofT,axis=timeAxis)
+        stats['U'] = U
+    if 'Iu' in fields:
+        stats['Iu'] = np.std(UofT, axis=timeAxis) / U
+    if 'xLu' in fields:
+        L = np.zeros_like(U)
+        for i,u in enumerate(U):
+            L[i] = integLengthScale(UofT[i,:], dt)
+
+    if vIsHere:
+        if 'V' in fields:
+            stats['V'] = np.mean(VofT, axis=timeAxis)
+        if 'Iv' in fields:
+            stats['Iv'] = np.std(VofT, axis=timeAxis) / U
+    
+    if wIsHere:
+        if 'W' in fields:
+            stats['W'] = np.mean(WofT, axis=timeAxis)
+        if 'Iw' in fields:
+            stats['Iw'] = np.std(WofT, axis=timeAxis) / U
+
+    return stats
+
 #===============================================================================
 #================================ CLASSES ======================================
 #===============================================================================
@@ -399,6 +448,7 @@ class spectra:
             self.U = np.mean(self.UofT)
             self.Iu = np.std(self.UofT)/self.U
             self.xLu = integLengthScale(self.UofT, 1/self.samplingFreq)
+
         if self.VofT is not None:
             n, self.Svv = psd(self.VofT, self.samplingFreq, nAvg=self.nSpectAvg)
             self.Iv = np.std(self.VofT)/self.U
@@ -419,7 +469,8 @@ class spectra:
         
     def __init__(self, name=None, UofT=None, VofT=None, WofT=None, samplingFreq=None, 
                  n=None, Suu=None, Svv=None, Sww=None, nSpectAvg=8,
-                 Z=None, U=None, Iu=None, Iv=None, Iw=None):
+                 Z=None, U=None, Iu=None, Iv=None, Iw=None,
+                 xLu=None, xLv=None, xLw=None):
         
         self.name = name
         self.samplingFreq = samplingFreq
@@ -434,6 +485,9 @@ class spectra:
         self.Iu = Iu
         self.Iv = Iv
         self.Iw = Iw
+        self.xLu = xLu
+        self.xLv = xLv
+        self.xLw = xLw
         
         self.UofT = UofT
         self.VofT = VofT
@@ -498,6 +552,61 @@ class spectra:
 
     def writeDataToFile(self):
         pass
+
+    def writeToJSON(self, filename=None):
+        if filename is None:
+            filename = self.name+'.json'
+        if os.path.exists(filename):
+            print("File already exists. Overwrite? (y/n)")
+            if input() == 'y':
+                os.remove(filename)
+            else:
+                return
+        out = {}
+        out['name'] = self.name
+        out['samplingFreq'] = self.samplingFreq
+        out['n'] = self.n
+        out['Suu'] = self.Suu
+        out['Svv'] = self.Svv
+        out['Sww'] = self.Sww
+        out['nSpectAvg'] = self.nSpectAvg
+        out['Z'] = self.Z
+        out['U'] = self.U
+        out['Iu'] = self.Iu
+        out['Iv'] = self.Iv
+        out['Iw'] = self.Iw
+        out['xLu'] = self.xLu
+        out['xLv'] = self.xLv
+        out['xLw'] = self.xLw
+        out['UofT'] = self.UofT
+        out['VofT'] = self.VofT
+        out['WofT'] = self.WofT
+        with open(self.name+'.json', 'w') as outfile:
+            json.dump(out, outfile)
+    
+    def readFromJSON(self, filename=None):
+        if filename is None:
+            filename = self.name+'.json'
+        with open(filename) as json_file:
+            data = json.load(json_file)
+        self.name = data['name']
+        self.samplingFreq = data['samplingFreq']
+        self.n = data['n']
+        self.Suu = data['Suu']
+        self.Svv = data['Svv']
+        self.Sww = data['Sww']
+        self.nSpectAvg = data['nSpectAvg']
+        self.Z = data['Z']
+        self.U = data['U']
+        self.Iu = data['Iu']
+        self.Iv = data['Iv']
+        self.Iw = data['Iw']
+        self.xLu = data['xLu']
+        self.xLv = data['xLv']
+        self.xLw = data['xLw']
+        self.UofT = data['UofT']
+        self.VofT = data['VofT']
+        self.WofT = data['WofT']
 
     """--------------------------------- Fittings -------------------------------------"""
     def Suu_vonK(self,n=None,normalized=False,normU:Literal['U','sigUi']='U'):
@@ -680,8 +789,11 @@ class profile:
             self.W = np.mean(self.WofT,axis=1)
             self.Iw = np.std(self.WofT,axis=1)/self.U
             self.xLw = np.zeros(self.N_pts)
+            self.uw = np.zeros(self.N_pts)
             for i in range(self.N_pts):
                 self.xLw[i] = integLengthScale(self.WofT[i,:], self.dt, meanU=self.U[i])
+                if self.UofT is not None:
+                    self.uw[i] = np.cov(self.UofT[i,:], self.WofT[i,:])[0,1]
             atLeastOneTHfound = True
         
         if self.t is None and self.dt is not None and atLeastOneTHfound:
@@ -702,9 +814,9 @@ class profile:
         if self.UofT is not None:
             uOfT = self.UofT[self.iH,:]
         if self.VofT is not None:
-            vOfT = self.UofT[self.iH,:]
+            vOfT = self.VofT[self.iH,:]
         if self.WofT is not None:
-            wOfT = self.UofT[self.iH,:]
+            wOfT = self.WofT[self.iH,:]
         
         self.SpectH = spectra(name=self.name, UofT=uOfT, VofT=vOfT, WofT=wOfT, samplingFreq=self.samplingFreq, Z=self.H, nSpectAvg=self.nSpectAvg)
 
@@ -719,7 +831,7 @@ class profile:
                 SpectH=None, nSpectAvg=8,
                 fileName=None,
                 keepTH=True,
-                interpolateToH=False, units=unitsNone):
+                interpolateToH=False, units=DEFAULT_SI_UNITS):
         self.name = name
         self.profType = profType
         self.Z = Z  # [N_pts]
@@ -959,6 +1071,14 @@ class profile:
                                 alwaysShowFig=alwaysShowFig
                                 )   
 
+    def plotA_prof(self, fld, ax=None, xLabel=None, yLabel='Z', xlim=None, ylim=None, col='b', mrkr='None', mrkSz=4, ls='-', lw=1, ):
+        if ax is None:
+            fig = plt.figure()
+            ax = plt.subplot()
+        
+        ax.plot(self.Z)
+        pass
+
 class Profiles:
     def __init__(self, profiles=[]):
         self._currentIndex = 0
@@ -982,7 +1102,7 @@ class Profiles:
         raise StopIteration
 
     def plot(self, fig=None, prof_ax=None, spect_ax=None, zLim=None, col=None, 
-             linestyle_U=None, linestyle_Iu=None, marker_U=None, marker_Iu=None, linestyle_Spect=None, marker_Spect=None,
+             linestyle_U=None, linestyle_Iu=None, marker_U=None, marker_Iu=None, mfc_U=None, mfc_Iu=None, linestyle_Spect=None, marker_Spect=None, alpha_Spect=None,
              Iu_factr=100.0, IuLim=[0,100], Ulim=None, IuLgndLoc='upper left', UlgndLoc='upper right',
              fontSz_axNum=10, fontSz_axLbl=12, fontSz_lgnd=12,
              freqLim=None, rSuuLim=None):
@@ -1008,11 +1128,14 @@ class Profiles:
             ls_Iu_i = ls[i+N] if linestyle_Iu is None else linestyle_Iu[i]
             mrkr_U_i = mrkr[i] if marker_U is None else marker_U[i]
             mrkr_Iu_i = mrkr[i+N] if marker_Iu is None else marker_Iu[i]
+            mfc_U_i = col_i if mfc_U is None else mfc_U[i]
+            mfc_Iu_i = 'w' if mfc_Iu is None else mfc_Iu[i]
+            alpha_S_i = 1.0 if alpha_Spect is None else alpha_Spect[i]
 
             ax.plot(prof.UbyUh, prof.ZbyH, 
-                    ls=ls_U_i, marker=mrkr_U_i, color=col_i, label=r"$U/U_H$ "+prof.name)
+                    ls=ls_U_i, marker=mrkr_U_i, markerfacecolor=mfc_U_i, color=col_i, label=r"$U/U_H$ "+prof.name)
             ax2.plot(prof.Iu*Iu_factr, prof.ZbyH, 
-                    ls=ls_Iu_i, marker=mrkr_Iu_i, color=col_i, label=r"$I_u$ "+prof.name)
+                    ls=ls_Iu_i, marker=mrkr_Iu_i, markerfacecolor=mfc_Iu_i, color=col_i, label=r"$I_u$ "+prof.name)
 
         ax2.set_xlabel(r"$I_u$",fontsize=fontSz_axLbl)
 
@@ -1046,7 +1169,7 @@ class Profiles:
             if S.Suu is None:
                 continue
             ax.loglog(S.rf(), S.rSuu(normU='sigUi'),
-                       ls=ls_Spect_i, marker=mrkr_Spect_i, color=col_i, label=prof.name)
+                       ls=ls_Spect_i, marker=mrkr_Spect_i, color=col_i, label=prof.SpectH.name, alpha=alpha_S_i)
         ax.set_xlabel(r"$nH/U_H$",fontsize=fontSz_axLbl)
         ax.set_ylabel(r"$nS_{uu}/\sigma_u^2$",fontsize=fontSz_axLbl)
         ax.legend(fontsize=fontSz_lgnd)
@@ -1056,6 +1179,7 @@ class Profiles:
             ax.set_ylim(rSuuLim)
         ax.tick_params(axis='both',direction='in',which='both',top=True,right=True)
         ax.tick_params(axis='both', which='major', labelsize=fontSz_axNum)
+        return fig
     
     def plotProfiles(self,figFile=None,xLimits='auto',zLimits='auto',figSize=[14,6],normalize=True):
         Z = ()
@@ -1102,6 +1226,7 @@ class Profiles:
                     xLimits='auto', # [tMin,tMax]
                     yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
                     figSize=[15, 5],
+                    overlay=False,
                     ):
         
         T = U = V = W = names = ()
@@ -1229,7 +1354,7 @@ class profile_repeatedTest(profile): # should be mereged into or inherit Profile
                 SpectH=None, nSpectAvg=8, 
                 fileName=None, 
                 interpolateToH=False, 
-                units=unitsNone):
+                units=DEFAULT_SI_UNITS):
         super().__init__(name, profType, Z, H, dt, 
                         t, U, V, W, UofT, VofT, WofT, 
                         Iu, Iv, Iw, xLu, xLv, xLw, 
@@ -1294,7 +1419,8 @@ class ESDU74:
         Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
         return np.multiply(self.uStar()/self.__k, 2.303*np.log10(Z/self.z0) + self.C()*self.f()*Z)    # ESDU 72026, eq. A.2 (only for the lowest 200m)
 
-    def lambda_(self):        # ESDU 74031, eq. A.4b
+    def lambda_(self):
+        # ESDU 74031, eq. A.4b
         if self.z0 <= 0.02:
             return 1.0
         elif self.z0 <= 1.0:
@@ -1337,44 +1463,82 @@ class ESDU74:
         Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
         return 0.35*Z     # ESDU 74031, eq. A.18
 
+    def __rSuu(self,rf=DEFAULT_RF):
+        return np.divide(4*rf,
+                         np.power(1 + 70.8*np.power(rf,2),5/6) )   # ESDU 74031, eq. 8
+
+    def __rSii(self,rf=DEFAULT_RF):
+        return np.divide(np.multiply(4*rf, (1 + 755.2*np.power(rf,2))),
+                         np.power(1 + 283.2*np.power(rf,2), 11/6) ) # ESDU 74031, eq. 9 and 10
+
+    def rSuu(self,rf=DEFAULT_RF,Z=None,normU:Literal['U','sigUi']='U'):
+        Z = self.Zref if Z is None else Z
+        _rSuu = self.__rSuu(rf)
+        std_u = self.Iu(Z) * self.U(Z)
+        if normU == 'U':
+            u = self.U(Z)
+            rSuu = _rSuu * (std_u/u)**2
+        elif normU == 'sigUi':
+            rSuu = _rSuu
+        return rSuu
+
+    def rSvv(self,rf=DEFAULT_RF,Z=None,normU:Literal['U','sigUi']='U'):
+        Z = self.Zref if Z is None else Z
+        _rSvv = self.__rSii(rf)
+        std_v = self.Iv(Z) * self.U(Z)
+        if normU == 'U':
+            u = self.U(Z)
+            rSvv = _rSvv * (std_v/u)**2
+        elif normU == 'sigUi':
+            rSvv = _rSvv
+        return rSvv
+
+    def rSww(self,rf=DEFAULT_RF,Z=None,normU:Literal['U','sigUi']='U'):
+        Z = self.Zref if Z is None else Z
+        _rSww = self.__rSii(rf)
+        std_w = self.Iw(Z) * self.U(Z)
+        if normU == 'U':
+            u = self.U(Z)
+            rSww = _rSww * (std_w/u)**2
+        elif normU == 'sigUi':
+            rSww = _rSww
+        return rSww
+
     def Suu(self,n=None,Z=None):
         Z = self.Zref if Z is None else Z
         if n is None:
-            nu = np.logspace(-3,2,100)
-            n = np.multiply(nu, np.divide(self.U(Z), self.xLu(Z)))
+            rf = DEFAULT_RF
+            n = np.multiply(rf, np.divide(self.U(Z), self.xLu(Z)))
         else:
-            nu = np.multiply(n, np.divide(self.xLu(Z), self.U(Z)))
-        
-        rSuu = np.divide(4*nu,
-                         np.power(1 + 70.8*np.power(nu,2),5/6) )   # ESDU 74031, eq. 8
-
-        varU = np.power(np.multiply(self.Iu(Z),self.U(Z)),2)
-        return n, np.divide(np.multiply(rSuu,varU), n)
-
-    def Sii(self,ni,Z=None):
-        Z = self.Zref if Z is None else Z
-        return np.divide(np.multiply(4*ni, 1 + 755.2*np.power(ni,2)),
-                        np.power(1 + 283.2*np.power(ni,2), 11/6) ) # ESDU 74031, eq. 9 and 10
-        
+            rf = np.multiply(n, np.divide(self.xLu(Z), self.U(Z)))
+        _rSuu = self.__rSii(rf)
+        std_u = self.Iu(Z) * self.U(Z)
+        Suu = np.divide(np.multiply(_rSuu,std_u**2), n)
+        return Suu
+    
     def Svv(self,n=None,Z=None):
         Z = self.Zref if Z is None else Z
         if n is None:
-            nv = np.logspace(-3,2,100)
-            n = np.multiply(nv, np.divide(self.U(Z), self.xLv(Z)))
+            rf = DEFAULT_RF
+            n = np.multiply(rf, np.divide(self.U(Z), self.xLv(Z)))
         else:
-            nv = np.multiply(n, np.divide(self.xLv(Z), self.U(Z)))
-        varV = np.power(np.multiply(self.Iv(Z),self.U(Z)),2)
-        return n, np.divide(np.multiply(self.Sii(nv,Z),varV), n)
-
+            rf = np.multiply(n, np.divide(self.xLv(Z), self.U(Z)))
+        _rSvv = self.__rSii(rf)
+        std_v = self.Iv(Z) * self.U(Z)
+        Svv = np.divide(np.multiply(_rSvv,std_v**2), n)
+        return Svv
+    
     def Sww(self,n=None,Z=None):
         Z = self.Zref if Z is None else Z
         if n is None:
-            nw = np.logspace(-3,2,100)
-            n = np.multiply(nw, np.divide(self.U(Z), self.xLw(Z)))
+            rf = DEFAULT_RF
+            n = np.multiply(rf, np.divide(self.U(Z), self.xLw(Z)))
         else:
-            nw = np.multiply(n, np.divide(self.xLw(Z), self.U(Z)))
-        varW = np.power(np.multiply(self.Iw(Z),self.U(Z)),2)
-        return n, np.divide(np.multiply(self.Sii(nw,Z),varW), n)
+            rf = np.multiply(n, np.divide(self.xLw(Z), self.U(Z)))
+        _rSww = self.__rSii(rf)
+        std_w = self.Iw(Z) * self.U(Z)
+        Sww = np.divide(np.multiply(_rSww,std_w**2), n)
+        return Sww
 
     def rf(self,n,Z=None,normZ:Literal['Z','xLi']='Z'):
         Z = self.Zref if Z is None else Z
@@ -1386,42 +1550,6 @@ class ESDU74:
             raise Exception("Unknown normalization height type. Choose from {'Z', 'xLi'} or specify a number.")
         Uref = self.U(Z=Z)
         return n * normZ/Uref
-
-    def rSuu(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
-        Z = self.Zref if Z is None else Z
-        if n is None:
-            n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLu(Z)))
-        if Z is None:
-            return None
-        if normU == 'U':
-            normU = self.U(Z)
-        elif normU == 'sigUi':
-            normU = self.Iu(Z) * self.U(Z)
-        return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Suu(n=n,Z=Z)[1])/(normU**2)
-
-    def rSvv(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
-        Z = self.Zref if Z is None else Z
-        if n is None:
-            n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLv(Z)))
-        if Z is None:
-            return None
-        if normU == 'U':
-            normU = self.U(Z)
-        elif normU == 'sigUi':
-            normU = self.Iv(Z) * self.U(Z)
-        return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Svv(n=n,Z=Z)[1])/(normU**2)
-
-    def rSww(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
-        Z = self.Zref if Z is None else Z
-        if n is None:
-            n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLw(Z)))
-        if Z is None:
-            return None
-        if normU == 'U':
-            normU = self.U(Z)
-        elif normU == 'sigUi':
-            normU = self.Iw(Z) * self.U(Z)
-        return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Sww(n=n,Z=Z)[1])/(normU**2)
 
     def fitToIuRef(self,
                     IuRef,
@@ -1438,27 +1566,29 @@ class ESDU74:
             tolerance=tolerance
         )[0]
 
-    def toProfileObj(self,name=None,freq=None) -> profile:
+    def toProfileObj(self,name=None,n=None) -> profile:
         if name is None:
             name = 'ESDU74 (z0='+str(self.z0)+'m)'
 
+        if n is None:
+            n = np.multiply(DEFAULT_RF, np.divide(self.Uref, self.Zref))
+
         Zref = self.Zref
-        n, Suu = self.Suu(n=freq, Z=Zref)
-        _, Svv = self.Svv(n=freq, Z=Zref)
-        _, Sww = self.Sww(n=freq, Z=Zref)
+        Suu = self.Suu(n=n, Z=Zref)
+        Svv = self.Svv(n=n, Z=Zref)
+        Sww = self.Sww(n=n, Z=Zref)
         spect = spectra(name=name, 
                         n=n, Suu=Suu, Svv=Svv, Sww=Sww, 
-                        Z=Zref, U=self.U(Zref), Iu=self.Iu(Zref), Iv=self.Iv(Zref), Iw=self.Iw(Zref),
-                        )
+                        Z=Zref, U=self.U(Zref), Iu=self.Iu(Zref), Iv=self.Iv(Zref), Iw=self.Iw(Zref), 
+                        xLu=self.xLu(Zref), xLv=self.xLv(Zref), xLw=self.xLw(Zref) )
         
         prof = profile(name=name, 
                 profType="continuous", 
                 Z=self.Z, H=self.Zref,
                 U=self.U(),
                 Iu=self.Iu(), Iv=self.Iv(), Iw=self.Iw(), 
-                xLu=self.xLu(), xLv=self.xLv(), xLw=self.xLw,
-                SpectH=spect,
-                )
+                xLu=self.xLu(), xLv=self.xLv(), xLw=self.xLw(),
+                SpectH=spect )
         return prof
     
 class ESDU85:
@@ -1501,8 +1631,8 @@ class ESDU85:
 
     def U(self,Z=None):
         Z = self.Z if Z is None else Z
-        # if (Z > 300).any():
-        #     raise Warning("The provided Z vector contains values higher than 300m which is beyond the range provided in ESDU 82026, eq. A1.8.")
+        if (Z > 300).any():
+            raise Warning("The provided Z vector contains values higher than 300m which is beyond the range provided in ESDU 82026, eq. A1.8.")
         if Z is None or self.z0 is None or self.Uref is None or self.Zref is None:
             return None
         else:
@@ -1578,14 +1708,13 @@ class ESDU85:
     def beta2(self,Z=None):
         Z = self.Zref if Z is None else Z
         return 1 - self.beta1(Z)     # ESDU 85020, eq. B5.7
-
-    def Suu(self,n=None,Z=None):
+        
+    def F2(self,ni,Z=None):
         Z = self.Zref if Z is None else Z
-        if n is None:
-            nu = np.logspace(-3,2,100)
-            n = np.multiply(nu, np.divide(self.U(Z), self.xLu(Z)))
-        else:
-            nu = np.multiply(n, np.divide(self.xLu(Z), self.U(Z)))
+        return 1 + 2.88*np.exp(-0.218*np.divide(ni,np.power(self.alpha(Z),-0.9)))   # ESDU 85020, eq. B4.4
+
+    def __rSuu(self,nu=DEFAULT_RF,Z=None):
+        Z = self.Zref if Z is None else Z
         F1 = 1 + 0.455*np.exp(-0.76*np.divide(nu,np.power(self.alpha(Z),-0.8)))   # ESDU 85020, eq. B4.3
         term1 = np.multiply(self.beta1(Z), np.divide(2.987*np.divide(nu,self.alpha(Z)),
                                             np.power(1 + np.power(np.divide(2*np.pi*nu,self.alpha(Z)) ,2) ,5/6) ) 
@@ -1593,14 +1722,9 @@ class ESDU85:
         term2 = np.multiply(self.beta2(Z), np.multiply(np.divide(np.divide(1.294*nu, self.alpha(Z)),
                                                          np.power(1 + np.power(np.divide(np.pi*nu, self.alpha(Z)),2) ,5/6) )  ,F1) )
         rSuu = term1 + term2  # ESDU 85020, eq. B4.1
-        varU = np.power(np.multiply(self.Iu(Z),self.U(Z)),2)
-        return n, np.divide(np.multiply(rSuu,varU), n)
-        
-    def F2(self,ni,Z=None):
-        Z = self.Zref if Z is None else Z
-        return 1 + 2.88*np.exp(-0.218*np.divide(ni,np.power(self.alpha(Z),-0.9)))   # ESDU 85020, eq. B4.4
+        return rSuu
 
-    def Sii(self,ni,Z=None):
+    def __rSii(self,ni,Z=None):
         Z = self.Zref if Z is None else Z
         term1 = np.multiply(self.beta1(Z), np.divide(2.987* np.multiply(1 + (8/3)*np.power(np.divide(4*np.pi*ni,self.alpha(Z)),2), ni/self.alpha(Z)) ,
                                             np.power(1 + np.power(np.divide(4*np.pi*ni,self.alpha(Z)) ,2), 11/6) ) 
@@ -1608,26 +1732,75 @@ class ESDU85:
         term2 = np.multiply(self.beta2(Z), np.multiply(np.divide(np.divide(1.294*ni, self.alpha(Z)),
                                                          np.power(1 + np.power(np.divide(2*np.pi*ni, self.alpha(Z)),2) ,5/6) )  ,self.F2(ni,Z)) )
         return term1 + term2  # ESDU 85020, eq. B4.1
-        
+
+    def rSuu(self,rf=DEFAULT_RF,Z=None,normU:Literal['U','sigUi']='U'):
+        Z = self.Zref if Z is None else Z
+        _rSuu = self.__rSuu(rf)
+        std_u = self.Iu(Z) * self.U(Z)
+        if normU == 'U':
+            u = self.U(Z)
+            rSuu = _rSuu * (std_u/u)**2
+        elif normU == 'sigUi':
+            rSuu = _rSuu
+        return rSuu
+
+    def rSvv(self,rf=DEFAULT_RF,Z=None,normU:Literal['U','sigUi']='U'):
+        Z = self.Zref if Z is None else Z
+        _rSvv = self.__rSii(rf)
+        std_v = self.Iv(Z) * self.U(Z)
+        if normU == 'U':
+            u = self.U(Z)
+            rSvv = _rSvv * (std_v/u)**2
+        elif normU == 'sigUi':
+            rSvv = _rSvv
+        return rSvv
+
+    def rSww(self,rf=DEFAULT_RF,Z=None,normU:Literal['U','sigUi']='U'):
+        Z = self.Zref if Z is None else Z
+        _rSww = self.__rSii(rf)
+        std_w = self.Iw(Z) * self.U(Z)
+        if normU == 'U':
+            u = self.U(Z)
+            rSww = _rSww * (std_w/u)**2
+        elif normU == 'sigUi':
+            rSww = _rSww
+        return rSww
+
+    def Suu(self,n=None,Z=None):
+        Z = self.Zref if Z is None else Z
+        if n is None:
+            rf = DEFAULT_RF
+            n = np.multiply(rf, np.divide(self.U(Z), self.xLu(Z)))
+        else:
+            rf = np.multiply(n, np.divide(self.xLu(Z), self.U(Z)))
+        _rSuu = self.__rSii(rf)
+        std_u = self.Iu(Z) * self.U(Z)
+        Suu = np.divide(np.multiply(_rSuu,std_u**2), n)
+        return Suu
+    
     def Svv(self,n=None,Z=None):
         Z = self.Zref if Z is None else Z
         if n is None:
-            nv = np.logspace(-3,2,100)
-            n = np.multiply(nv, np.divide(self.U(Z), self.xLv(Z)))
+            rf = DEFAULT_RF
+            n = np.multiply(rf, np.divide(self.U(Z), self.xLv(Z)))
         else:
-            nv = np.multiply(n, np.divide(self.xLv(Z), self.U(Z)))
-        varV = np.power(np.multiply(self.Iv(Z),self.U(Z)),2)
-        return n, np.divide(np.multiply(self.Sii(nv,Z),varV), n)
-
+            rf = np.multiply(n, np.divide(self.xLv(Z), self.U(Z)))
+        _rSvv = self.__rSii(rf)
+        std_v = self.Iv(Z) * self.U(Z)
+        Svv = np.divide(np.multiply(_rSvv,std_v**2), n)
+        return Svv
+    
     def Sww(self,n=None,Z=None):
         Z = self.Zref if Z is None else Z
         if n is None:
-            nw = np.logspace(-3,2,100)
-            n = np.multiply(nw, np.divide(self.U(Z), self.xLw(Z)))
+            rf = DEFAULT_RF
+            n = np.multiply(rf, np.divide(self.U(Z), self.xLw(Z)))
         else:
-            nw = np.multiply(n, np.divide(self.xLw(Z), self.U(Z)))
-        varW = np.power(np.multiply(self.Iw(Z),self.U(Z)),2)
-        return n, np.divide(np.multiply(self.Sii(nw,Z),varW), n)
+            rf = np.multiply(n, np.divide(self.xLw(Z), self.U(Z)))
+        _rSww = self.__rSii(rf)
+        std_w = self.Iw(Z) * self.U(Z)
+        Sww = np.divide(np.multiply(_rSww,std_w**2), n)
+        return Sww
 
     def rf(self,n,Z=None,normZ:Literal['Z','xLi']='Z'):
         Z = self.Zref if Z is None else Z
@@ -1639,42 +1812,6 @@ class ESDU85:
             raise Exception("Unknown normalization height type. Choose from {'Z', 'xLi'} or specify a number.")
         Uref = self.U(Z=Z)
         return n * normZ/Uref
-
-    def rSuu(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
-        Z = self.Zref if Z is None else Z
-        if n is None:
-            n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLu(Z)))
-        if Z is None:
-            return None
-        if normU == 'U':
-            normU = self.U(Z)
-        elif normU == 'sigUi':
-            normU = self.Iu(Z) * self.U(Z)
-        return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Suu(n=n,Z=Z)[1])/(normU**2)
-
-    def rSvv(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
-        Z = self.Zref if Z is None else Z
-        if n is None:
-            n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLv(Z)))
-        if Z is None:
-            return None
-        if normU == 'U':
-            normU = self.U(Z)
-        elif normU == 'sigUi':
-            normU = self.Iv(Z) * self.U(Z)
-        return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Svv(n=n,Z=Z)[1])/(normU**2)
-
-    def rSww(self,n=None,normU:Literal['U','sigUi']='U',Z=None,normZ:Literal['Z','xLi']='Z'):
-        Z = self.Zref if Z is None else Z
-        if n is None:
-            n = np.multiply(np.logspace(-3,2,100), np.divide(self.U(Z), self.xLw(Z)))
-        if Z is None:
-            return None
-        if normU == 'U':
-            normU = self.U(Z)
-        elif normU == 'sigUi':
-            normU = self.Iw(Z) * self.U(Z)
-        return self.rf(n,Z=Z,normZ=normZ), np.multiply(n,self.Sww(n=n,Z=Z)[1])/(normU**2)
 
     def fitToIuRef(self,
                     IuRef,
@@ -1691,26 +1828,29 @@ class ESDU85:
             tolerance=tolerance
         )[0]
 
-    def toProfileObj(self,name=None,freq=None) -> profile:
+    def toProfileObj(self,name=None,n=None) -> profile:
         if name is None:
             name = 'ESDU85 (z0='+str(self.z0)+'m)'
 
+        if n is None:
+            n = np.multiply(DEFAULT_RF, np.divide(self.Uref, self.Zref))
+
         Zref = self.Zref
-        n, Suu = self.Suu(n=freq, Z=Zref)
-        _, Svv = self.Svv(n=freq, Z=Zref)
-        _, Sww = self.Sww(n=freq, Z=Zref)
+        Suu = self.Suu(n=n, Z=Zref)
+        Svv = self.Svv(n=n, Z=Zref)
+        Sww = self.Sww(n=n, Z=Zref)
         spect = spectra(name=name, 
                         n=n, Suu=Suu, Svv=Svv, Sww=Sww, 
-                        Z=Zref, U=self.U(Zref), Iu=self.Iu(Zref), Iv=self.Iv(Zref), Iw=self.Iw(Zref),
-                        )
+                        Z=Zref, U=self.U(Zref), Iu=self.Iu(Zref), Iv=self.Iv(Zref), Iw=self.Iw(Zref), 
+                        xLu=self.xLu(Zref), xLv=self.xLv(Zref), xLw=self.xLw(Zref) )
+        
         prof = profile(name=name, 
                 profType="continuous", 
                 Z=self.Z, H=self.Zref,
                 U=self.U(),
                 Iu=self.Iu(), Iv=self.Iv(), Iw=self.Iw(), 
-                xLu=self.xLu(), xLv=self.xLv(), xLw=self.xLw,
-                SpectH=spect,
-                )
+                xLu=self.xLu(), xLv=self.xLv(), xLw=self.xLw(),
+                SpectH=spect )
         return prof
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
@@ -1823,9 +1963,9 @@ class bldgCp(windCAD.building):
                 cpTemp = np.multiply(np.reshape(wght,(-1,1)), self.CpOfT[:,idx,:])
                 cpTemp = np.reshape(np.sum(cpTemp,axis=1), [nAoA,1,nT])
                 if p == 0:
-                    avgCp = getTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
+                    avgCp = get_CpTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
                 else:
-                    temp = getTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
+                    temp = get_CpTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
                     for fld in temp:
                         avgCp[fld] = np.concatenate((avgCp[fld],temp[fld]),axis=1)
 
@@ -1849,9 +1989,9 @@ class bldgCp(windCAD.building):
                         cpTemp = np.multiply(np.reshape(wght,(-1,1)), self.CpOfT[:,idx,:])
                         cpTemp = np.reshape(np.sum(cpTemp,axis=1), [nAoA,1,nT])
                         if p == 0:
-                            avgCp = getTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
+                            avgCp = get_CpTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
                         else:
-                            temp = getTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
+                            temp = get_CpTH_stats(cpTemp,axis=axT,peakSpecs=self.peakSpecs)
                             for fld in temp:
                                 avgCp[fld] = np.concatenate((avgCp[fld],temp[fld]),axis=1)
                     avgCp_z.append(avgCp)
@@ -1874,7 +2014,7 @@ class bldgCp(windCAD.building):
             self.CpOfT = self.CpOfT*factor
         if self.CpStats is not None:
             for fld in self.CpStats:
-                if fld in scalableCpStats:
+                if fld in SCALABLE_CP_STATS:
                     self.CpStats[fld] = self.CpStats[fld]*factor
 
     def __str__(self):
@@ -1888,6 +2028,35 @@ class bldgCp(windCAD.building):
             return 1
         return len(self.AoA)
 
+    @property
+    def CpStatEnvlp(self) -> dict:
+        if self.CpStats is None:
+            return None
+        stats = self.CpStats.copy()
+        for s in stats:
+            arr = self.CpStats[s]
+            abs_max = np.amax(np.abs(arr), axis=0, keepdims=True)
+            stats[s] = np.squeeze(abs_max * np.sign(arr))
+        return stats
+    
+    @property
+    def CpStatEnvlp_high(self) -> dict:
+        if self.CpStats is None:
+            return None
+        stats = self.CpStats.copy()
+        for s in stats:
+            stats[s] = np.max(self.CpStats[s], axis=0)
+        return stats
+
+    @property
+    def CpStatEnvlp_low(self) -> dict:
+        if self.CpStats is None:
+            return None
+        stats = self.CpStats.copy()
+        for s in stats:
+            stats[s] = np.min(self.CpStats[s], axis=0)
+        return stats
+    
     def CpStatsAreaAvgCollected(self, mixNominalAreas=False, 
                         envelope:Literal['max','min','none']='none', 
                         extremesPerNominalArea:Literal['max','min','none']='none'):
@@ -1956,7 +2125,7 @@ class bldgCp(windCAD.building):
         self.__verifyData()
         self.__computeCpTHfrom_p_TH()
         if self.CpOfT is not None:
-            self.CpStats = getTH_stats(self.CpOfT,axis=len(np.shape(self.CpOfT))-1,peakSpecs=self.peakSpecs)
+            self.CpStats = get_CpTH_stats(self.CpOfT,axis=len(np.shape(self.CpOfT))-1,peakSpecs=self.peakSpecs)
         self.__computeAreaAveragedCp()
     
     def write(self):
@@ -1971,30 +2140,40 @@ class bldgCp(windCAD.building):
             raise Exception(f"The field {fld} is not a part of the available stat fields. Available stat fields: {list(self.CpStats.keys())}")
     
     """--------------------------------- Plotters -------------------------------------"""
-    def plotTapCpStatsPerAoA(self, fields=['peakMin','mean','peakMax',],fldRange=[-15,10], 
+    def plotTapCpStatsPerAoA(self, fields=['peakMin','mean','peakMax',],fldRange=[-15,10], tapsToPlot=None, includeTapName=True,
                         nCols=7, nRows=10, cols = ['r','k','g','b','m','r','k','b','g','m'],mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], 
                         ls=['-','-','-','-','-','-','-','-','-','-',],
                         xticks=None, mrkrSize=2,
                         legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20]):
+        tapIdxs = self.tapIdx if tapsToPlot is None else self.idxOfTapNum(tapsToPlot)
+        
         for fld in fields:
             self.checkStatField(fld)
         nPltPerPage = nCols * nRows
-        nPltTotal = self.NumTaps
+        nPltTotal = len(tapIdxs)
         nPages = int(np.ceil(nPltTotal/nPltPerPage))
 
-        tapIdx = 0
+        tapPltCount = 0
+        tapIdx = tapIdxs[tapPltCount]
+        figs = []
         for p in range(nPages):
             fig = plt.figure(figsize=figsize)
             # fig, axs = plt.subplots(nRows, nCols)
             for i in range(nPltPerPage):
-                if tapIdx >= nPltTotal:
+                if tapPltCount >= nPltTotal:
                     break
                 ax = plt.subplot(nRows,nCols,i+1)
                 for f,fld in enumerate(fields):
                     ax.plot(self.AoA, self.CpStats[fld][:,tapIdx], label=fld,
                             marker=mrkrs[f], color=cols[f], ls=ls[f],mfc=cols[f], ms=mrkrSize)
                 ax.hlines([-1,0,1],0,360,colors=['k','k','k'],linestyles=['--','-','--'],lw=0.7)
-                tapName = '' #'('+self.tapName[tapIdx]+')' if self.tapName is not None and self.tapName[tapIdx] is not '' else ''
+                if includeTapName:
+                    if self.tapName is not None and self.tapName[tapIdx] != '':
+                        tapName = '('+self.tapName[tapIdx]+')'
+                    else:
+                        tapName = ''
+                else:
+                    tapName = ''
                 tag = str(self.tapNo[tapIdx]) + tapName
                 ax.annotate(tag, xy=(0,0), xycoords='axes fraction',xytext=(0.05, 0.05), textcoords='axes fraction',
                             fontsize=12, ha='left', va='bottom', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.7))
@@ -2013,22 +2192,40 @@ class bldgCp(windCAD.building):
                 else:
                     ax.xaxis.set_ticklabels([])
                     ax.yaxis.set_ticklabels([])
-                tapIdx += 1
+                tapPltCount += 1
+                if tapPltCount < len(tapIdxs):
+                    tapIdx = tapIdxs[tapPltCount]
+
             
             handles, labels = ax.get_legend_handles_labels()
             fig.legend(handles, fields, loc='upper center',ncol=len(fields), bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
             plt.annotate(f"Page {p+1} of {nPages}", xy=pageNo_xy, xycoords='figure fraction', ha='right', va='bottom')
             plt.annotate(self.name, xy=pageNo_xy, xycoords='figure fraction', ha='left', va='bottom')
             plt.show()
+            figs.append(fig)
+        return figs
 
-    def plotTapCpStatContour(self, fieldName, dxnIdx=0, figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both'):
+    def plotTapCpStatContour(self, fieldName, dxnIdx=None, envelopeType:Literal['high','low','both']='both', figSize=[15,10], ax=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both',
+                             title=None, colBarOrientation='horizontal'):
         self.checkStatField(fieldName)
+        if dxnIdx is None:
+            if envelopeType == 'both':
+                data = self.CpStatEnvlp[fieldName]
+            elif envelopeType == 'high':
+                data = self.CpStatEnvlp_high[fieldName]
+            elif envelopeType == 'low':
+                data = self.CpStatEnvlp_low[fieldName]
+            else:
+                msg = f"Unknown envelope type {envelopeType}"
+                raise Exception(msg)
+        else:
+            data = self.CpStats[fieldName][dxnIdx,:]
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure(figsize=figSize)
             ax = fig.add_subplot()
-        self.plotTapField(ax=ax, field=self.CpStats[fieldName][dxnIdx,:], fldRange=fldRange, nLvl=nLvl, cmap=cmap, extend=extend)
+        cObj = self.plotTapField(ax=ax, field=data, fldRange=fldRange, nLvl=nLvl, cmap=cmap, extend=extend)
         if newFig:
             self.plotEdges(ax=ax)
 
@@ -2040,7 +2237,12 @@ class bldgCp(windCAD.building):
             # cbar.set_clim(fldRange[0],fldRange[1])
             ax.axis('equal')
             ax.axis('off')
-        return
+
+            title = fieldName if title is None else title
+            cbar = fig.colorbar(cObj[0], ax=ax, orientation=colBarOrientation)
+            cbar.set_label(title, fontsize=14)
+
+        return cObj
 
     def plotPanelCpStatContour(self, fieldName, dxnIdx=0, aIdx=0, showValueText=False, strFmt="{:.3g}", figSize=[15,10], ax=None, title=None, fldRange=None, nLvl=100, cmap='RdBu'):
         self.checkStatField(fieldName)

@@ -17,7 +17,7 @@ from datetime import datetime
 
 import wind
 # import windLoadCaseProcessors__toBeRemoved as wProc
-import windPlotters as wPlt
+import windPlotting as wPlt
 
 __tol_time = 1e-7
 __tol_data = 1e15
@@ -610,7 +610,7 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
     print("  >> Processing profile data.")
     name = caseName+"__"+probeName if name is None else name
     vel_LES = wind.profile(name=name,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
-                          WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.unitsCommonSI)
+                          WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.DEFAULT_SI_UNITS)
     print("             << Done!")
     
     if writeToDataFile:

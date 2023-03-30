@@ -132,7 +132,7 @@ class BLWTL_HFPI:
         self.files_pssr = None
         self.AoA = None
         self.WTTDATALOG = None
-        self.CpTH = None
+        self.CpTH: np.array() = None
         self.sampleRate_orig = None
         self.sampleRate = None
         self.testDuration = None

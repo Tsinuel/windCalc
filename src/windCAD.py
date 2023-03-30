@@ -763,12 +763,13 @@ class face:
             levels = np.linspace(min(field), max(field), nLvl)
         else:
             levels = np.linspace(fldRange[0], fldRange[1], nLvl)
-        ax.contourf(X, Y, Z,
+        cObj = ax.contourf(X, Y, Z,
                 levels=levels, cmap=cmap, extend=extend)
         if newFig:
             plt.colorbar()
             ax.axis('equal')
             ax.axis('off')
+        return cObj
 
     def plotPanelField(self, field, fldName, dIdx=0, aIdx=0, showValueText=False, strFmt="{:.3g}", fldRange=None, ax=None, nLvl=100, cmap='RdBu'):
         newFig = False
@@ -937,13 +938,6 @@ class Faces:
         return tapIdx
 
     @property
-    def tapIdx(self) -> List[int]:
-        tapIdx = []
-        for f in self.members:
-            tapIdx.extend(f.tapIdx)
-        return tapIdx
-
-    @property
     def tapName(self) -> List[str]:
         tapName = []
         for f in self.members:
@@ -1080,6 +1074,30 @@ class Faces:
         for fc in self.members:
             fc.Update()
 
+    def idxOfTapNum(self,tapNo) -> List[int]:
+        tapNo = np.array(tapNo)
+        allIdx = np.array(self.tapIdx)
+        allTapNo = np.array(self.tapNo)
+        if not np.shape(allIdx) == np.shape(allTapNo):
+            msg = f"The tapIdx (shape: {np.shape(allIdx)}) does not match the tapNo (shape: {np.shape(allTapNo)}) in this object."
+            raise Exception(msg)
+        
+        foundTapIdx = []
+        notFoundTaps = []
+        for t in tapNo:
+            if t in allTapNo:
+                idx = np.where(allTapNo == t)[0][0]
+                foundTapIdx.append(idx)
+            else:
+                notFoundTaps.append(t)
+
+        # foundTapIdx = allIdx[np.isin(allTapNo, tapNo).nonzero()[0]]
+        # notFoundTaps = tapNo[np.where(~np.isin(tapNo, allTapNo))[0]]
+        if len(notFoundTaps) > 0:
+            msg = f"ERROR: The following taps are not found in the object: {notFoundTaps}"
+            raise Exception(msg)
+        return foundTapIdx
+
     def writeToFile(self,file_basic, file_derived=None):
         getDerived = file_derived is not None
         basic = {}
@@ -1190,7 +1208,7 @@ class Faces:
             plt.colorbar()
             ax.axis('equal')
             ax.axis('off')
-        return
+        return contours
 
     def plotPanelField(self, field, fldName, dIdx=0, aIdx=0, showValueText=False, strFmt="{:.3g}", fldRange=None, ax=None, nLvl=100, cmap='RdBu'):
         newFig = False
