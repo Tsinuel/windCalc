@@ -42,7 +42,7 @@ DEFAULT_SI_UNITS = {
 
 VALID_CP_TH_STAT_FIELDS = ['mean','std','peak','peakMin','peakMax','skewness','kurtosis']
 
-VALID_VEL_TH_STAT_FIELDS = ['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']
+VALID_VELOCITY_STAT_FIELDS = ['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']
 
 SCALABLE_CP_STATS = ['mean','std','peakMin','peakMax']
 
@@ -53,6 +53,8 @@ DEFAULT_PEAK_SPECS = {
                         'Duration':16, 
                         'prob_non_excd':0.5704,
                     }
+
+DEFAULT_VELOCITY_STAT_FIELDS = ['U','Iu','Iv','Iw','xLu','xLv','xLw','uw']
 
 PATH_SRC = os.path.dirname(os.path.abspath(__file__))
 
@@ -385,9 +387,9 @@ def get_CpTH_stats(TH,axis=0,
     return stats
 
 def get_velTH_stats(UofT, VofT=None, WofT=None, timeAxis=1, dt=None,
-                    fields: Literal['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']=['U','Iu','Iv','Iw','xLu','xLv','xLw','uw']):
-    if not all(x in VALID_VEL_TH_STAT_FIELDS for x in fields):
-        msg = "Not all elements given as fields are valid. Choose from: "+str(VALID_VEL_TH_STAT_FIELDS)
+                    fields: Literal['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']=DEFAULT_VELOCITY_STAT_FIELDS):
+    if not all(x in VALID_VELOCITY_STAT_FIELDS for x in fields):
+        msg = "Not all elements given as fields are valid. Choose from: "+str(VALID_VELOCITY_STAT_FIELDS)
         raise Exception(msg)
     vIsHere = VofT is not None
     wIsHere = WofT is not None
@@ -734,11 +736,11 @@ class profile:
 
     def __updateUh(self):
         if self.N_pts == 0:
-            self.iH = None
+            self.H_idx = None
             self.Uh = self.IuH = self.IvH = self.IwH = None
             return
         if self.interpolateToH:
-            self.iH = None
+            self.H_idx = None
             if self.U is not None:
                 self.Uh = np.interp(self.H, self.Z, self.U)
             if self.Iu is not None:
@@ -748,15 +750,15 @@ class profile:
             if self.Iw is not None:
                 self.IwH = np.interp(self.H, self.Z, self.Iw)
         else: # nearest value
-            self.iH = (np.abs(self.Z - self.H)).argmin()
+            self.H_idx = (np.abs(self.Z - self.H)).argmin()
             if self.U is not None:
-                self.Uh = self.U[self.iH]
+                self.Uh = self.U[self.H_idx]
             if self.Iu is not None:
-                self.IuH = self.Iu[self.iH]
+                self.IuH = self.Iu[self.H_idx]
             if self.Iv is not None:
-                self.IvH = self.Iv[self.iH]
+                self.IvH = self.Iv[self.H_idx]
             if self.Iw is not None:
-                self.IwH = self.Iw[self.iH]
+                self.IwH = self.Iw[self.H_idx]
 
     def __computeFromTH(self):
         atLeastOneTHfound = False
@@ -801,22 +803,26 @@ class profile:
         if self.dt is None and self.t is not None and atLeastOneTHfound:
             self.dt = np.mean(np.diff(self.t))
 
-        self.__updateUh()
+        # self.__updateUh()
         self.__computeSpectra()
     
+    def __computeVelStats(self):
+        self.stats = get_velTH_stats(UofT=self.UofT, VofT=self.VofT, WofT=self.WofT, 
+                                     fields=self.fields, )
+
     def __computeSpectra(self):
         if self.SpectH is not None:
             return
-        if self.iH is None:
-            self.SpectH = None
-            return
+        # if self.H_idx is None:
+        #     self.SpectH = None
+        #     return
         uOfT = vOfT = wOfT = None
         if self.UofT is not None:
-            uOfT = self.UofT[self.iH,:]
+            uOfT = self.UofT[self.H_idx,:]
         if self.VofT is not None:
-            vOfT = self.VofT[self.iH,:]
+            vOfT = self.VofT[self.H_idx,:]
         if self.WofT is not None:
-            wOfT = self.WofT[self.iH,:]
+            wOfT = self.WofT[self.H_idx,:]
         
         self.SpectH = spectra(name=self.name, UofT=uOfT, VofT=vOfT, WofT=wOfT, samplingFreq=self.samplingFreq, Z=self.H, nSpectAvg=self.nSpectAvg)
 
@@ -824,10 +830,12 @@ class profile:
                 name="profile", 
                 profType=None, # {"continuous","discrete","scatter"}
                 Z=None, H=None, dt=None, t=None,
-                U=None, V=None, W=None, 
+                # U=None, V=None, W=None, 
                 UofT=None, VofT=None, WofT=None,
-                Iu=None, Iv=None, Iw=None, 
-                xLu=None, xLv=None, xLw=None,
+                # Iu=None, Iv=None, Iw=None, 
+                # xLu=None, xLv=None, xLw=None,
+                fields=DEFAULT_VELOCITY_STAT_FIELDS,
+                stats=None,
                 SpectH=None, nSpectAvg=8,
                 fileName=None,
                 keepTH=True,
@@ -835,9 +843,17 @@ class profile:
         self.name = name
         self.profType = profType
         self.Z = Z  # [N_pts]
-        self.U = U  # [N_pts]
-        self.V = V  # [N_pts]
-        self.W = W  # [N_pts]
+        self.stats = stats
+
+        # self.U = U  # [N_pts]
+        # self.V = V  # [N_pts]
+        # self.W = W  # [N_pts]
+        # self.Iu = Iu  # [N_pts]
+        # self.Iv = Iv  # [N_pts]
+        # self.Iw = Iw  # [N_pts]
+        # self.xLu = xLu  # [N_pts]
+        # self.xLv = xLv  # [N_pts]
+        # self.xLw = xLw  # [N_pts]
         
         self.H = H
         
@@ -848,14 +864,6 @@ class profile:
         self.VofT = VofT  # [N_pts x nTime]
         self.WofT = WofT  # [N_pts x nTime]
         
-        self.Iu = Iu  # [N_pts]
-        self.Iv = Iv  # [N_pts]
-        self.Iw = Iw  # [N_pts]
-        
-        self.xLu = xLu  # [N_pts]
-        self.xLv = xLv  # [N_pts]
-        self.xLw = xLw  # [N_pts]
-        
         self.SpectH = SpectH
         self.nSpectAvg = nSpectAvg
         
@@ -863,12 +871,11 @@ class profile:
         self.interpolateToH = interpolateToH
         self.units = units
 
-        self.N_pts = 0 if Z is None else len(Z)
-        self.Uh = None
-        self.IuH = None
-        self.IvH = None
-        self.IwH = None
-        self.iH = None
+        # self.Uh = None
+        # self.IuH = None
+        # self.IvH = None
+        # self.IwH = None
+        # self.iH = None
         
         self.Update()
         if not keepTH:
@@ -895,6 +902,64 @@ class profile:
         if dur is not None and self.H is not None and self.Uh is not None:
             durStar = dur * self.Uh / self.H
         return durStar
+    
+    @property
+    def N_pts(self):
+        if self.Z is None:
+            return 0
+        else:
+            return len(self.Z)
+
+    @property
+    def H_idx(self):
+        if self.H is None or self.Z is None:
+            return None
+        else:
+            return np.argmin(np.abs(self.Z-self.H))
+    
+    @property
+    def Uh(self):
+        idx = self.H_idx
+        if idx is None:
+            return None
+        else:
+            if self.interpolateToH:
+                return np.interp(self.H,self.Z,self.U)
+            else:
+                return self.U[idx]
+    
+    @property
+    def IuH(self):
+        idx = self.H_idx
+        if idx is None:
+            return None
+        else:
+            if self.interpolateToH:
+                return np.interp(self.H,self.Z,self.Iu)
+            else:
+                return self.Iu[idx]
+            
+    @property
+    def IvH(self):
+        idx = self.H_idx
+        if idx is None:
+            return None
+        else:
+            if self.interpolateToH:
+                return np.interp(self.H,self.Z,self.Iv)
+            else:
+                return self.Iv[idx]
+    
+    @property
+    def IwH(self):
+        idx = self.H_idx
+        if idx is None:
+            return None
+        else:
+            if self.interpolateToH:
+                return np.interp(self.H,self.Z,self.Iw)
+            else:
+                return self.Iw[idx]
     
     """---------------------------------- Normalizers ---------------------------------"""
     @property
@@ -939,13 +1004,11 @@ class profile:
     """-------------------------------- Data handlers ---------------------------------"""
     def Update(self):
         self.__verifyData()
-        if self.Z is not None:
-            self.N_pts = len(self.Z)
         self.__computeFromTH()
         
         if self.origFileName is not None:
             self.readFromFile(self.origFileName)
-        self.__updateUh()
+        # self.__updateUh()
 
     def writeToFile(self,outDir,
                     nameSuffix='',
@@ -991,7 +1054,7 @@ class profile:
             self.H = self.Z[idx]
 
         self.N_pts = len(self.Z)
-        self.__updateUh()
+        # self.__updateUh()
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotProfiles(self,figFile=None,xLimits=None,yLimits='auto',figSize=[15,5]):
@@ -1036,13 +1099,13 @@ class profile:
         
         if self.UofT is not None:
             N_T = np.shape(self.UofT)[1]
-            U = self.UofT[self.iH,:]/self.Uh if normalizeVel else self.UofT[self.iH,:]
+            U = self.UofT[self.H_idx,:]/self.Uh if normalizeVel else self.UofT[self.H_idx,:]
         if self.VofT is not None:
             N_T = np.shape(self.VofT)[1]
-            V = self.VofT[self.iH,:]/self.Uh if normalizeVel else self.VofT[self.iH,:] 
+            V = self.VofT[self.H_idx,:]/self.Uh if normalizeVel else self.VofT[self.H_idx,:] 
         if self.WofT is not None:
             N_T = np.shape(self.WofT)[1]
-            W = self.WofT[self.iH,:]/self.Uh if normalizeVel else self.WofT[self.iH,:] 
+            W = self.WofT[self.H_idx,:]/self.Uh if normalizeVel else self.WofT[self.H_idx,:] 
         
         if self.t is None:
             self.t = np.linspace(0,(N_T-1)*self.dt,num=N_T)
@@ -1082,7 +1145,6 @@ class profile:
 class Profiles:
     def __init__(self, profiles=[]):
         self._currentIndex = 0
-        self.N = len(profiles)
         self.profiles:List[profile] = profiles
 
     def __numOfProfiles(self):
@@ -1100,6 +1162,10 @@ class Profiles:
             return member
         self._currentIndex = 0
         raise StopIteration
+
+    @property
+    def N(self):
+        return len(self.profiles)
 
     def plot(self, fig=None, prof_ax=None, spect_ax=None, zLim=None, col=None, 
              linestyle_U=None, linestyle_Iu=None, marker_U=None, marker_Iu=None, mfc_U=None, mfc_Iu=None, linestyle_Spect=None, marker_Spect=None, alpha_Spect=None,
@@ -1219,6 +1285,9 @@ class Profiles:
                         nCols=4
                         )
     
+    def plotAllProfiles(self, fig=None, ax=None, xLim=None, yLim=None):
+        pass
+
     def plotTimeHistory(self,
                     figFile=None,
                     xLabel='t [s]',
@@ -1631,8 +1700,8 @@ class ESDU85:
 
     def U(self,Z=None):
         Z = self.Z if Z is None else Z
-        if (Z > 300).any():
-            raise Warning("The provided Z vector contains values higher than 300m which is beyond the range provided in ESDU 82026, eq. A1.8.")
+        # if (Z > 300).any():
+        #     raise Warning("The provided Z vector contains values higher than 300m which is beyond the range provided in ESDU 82026, eq. A1.8.")
         if Z is None or self.z0 is None or self.Uref is None or self.Zref is None:
             return None
         else:
