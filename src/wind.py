@@ -18,7 +18,7 @@ import windPlotting as wplt
 import windCAD
 
 from shapely.ops import voronoi_diagram
-from typing import List,Literal,Dict,Tuple,Any
+from typing import List,Literal,Dict,Tuple,Any,Union,Set
 from scipy import signal
 from scipy.stats import skew,kurtosis
 from scipy.interpolate import interp1d
@@ -386,11 +386,15 @@ def get_CpTH_stats(TH,axis=0,
         stats['kurtosis'] = kurtosis(TH, axis=axis)
     return stats
 
-def get_velTH_stats(UofT, VofT=None, WofT=None, timeAxis=1, dt=None,
-                    fields: Literal['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']=DEFAULT_VELOCITY_STAT_FIELDS):
+def get_velTH_stats(UofT: np.ndarray=None, 
+                    VofT: np.ndarray=None, 
+                    WofT: np.ndarray=None,
+                    timeAxis=1, dt=None,
+                    fields: List[Literal['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']]=DEFAULT_VELOCITY_STAT_FIELDS):
     if not all(x in VALID_VELOCITY_STAT_FIELDS for x in fields):
         msg = "Not all elements given as fields are valid. Choose from: "+str(VALID_VELOCITY_STAT_FIELDS)
         raise Exception(msg)
+    uIsHere = UofT is not None
     vIsHere = VofT is not None
     wIsHere = WofT is not None
     if timeAxis == 0:
@@ -400,40 +404,80 @@ def get_velTH_stats(UofT, VofT=None, WofT=None, timeAxis=1, dt=None,
         if wIsHere:
             WofT = np.transpose(WofT)
         timeAxis = 1
-    if len(UofT) > 2:
+    if len(np.shape(UofT)) > 2:
         raise Exception("The velocity time history matrices must be 2D.")
     if vIsHere and np.shape(UofT) != np.shape(VofT):
         raise Exception("The shapes of UofT and VofT must match for profile stat calculation.")
     if wIsHere and np.shape(UofT) != np.shape(WofT):
         raise Exception("The shapes of UofT and WofT must match for profile stat calculation.")
-    if dt is None and any(['xLu','xLv','xLw'] in fields):
-        warnings.warn("Time step 'dt' of the time histories is not provided while requesting integral length scales. Skipping those stats.")
-        fields.pop()
+    if dt is None:
+        if any(x in fields for x in ['xLu','xLv','xLw']):
+            warnings.warn("Time step 'dt' of the time histories is not provided while requesting integral length scales. Skipping those stats.")
+            fields = [x for x in fields if x not in ['xLu','xLv','xLw']]
     
     stats = {}
-    if 'U' in fields:
+    if uIsHere:
         U = np.mean(UofT,axis=timeAxis)
-        stats['U'] = U
-    if 'Iu' in fields:
-        stats['Iu'] = np.std(UofT, axis=timeAxis) / U
-    if 'xLu' in fields:
-        L = np.zeros_like(U)
-        for i,u in enumerate(U):
-            L[i] = integLengthScale(UofT[i,:], dt)
+        u_ofT = UofT - U[:, np.newaxis]
+        if 'U' in fields:
+            stats['U'] = U
+        if 'Iu' in fields:
+            stats['Iu'] = np.std(UofT, axis=timeAxis) / U
+        if 'xLu' in fields:
+            L = np.zeros_like(U)
+            for i,u in enumerate(U):
+                L[i] = integLengthScale(UofT[i,:], dt, meanU=u)
+            stats['xLu'] = L
 
     if vIsHere:
+        V = np.mean(VofT, axis=timeAxis)
+        v_ofT = VofT - V[:, np.newaxis]
         if 'V' in fields:
-            stats['V'] = np.mean(VofT, axis=timeAxis)
+            stats['V'] = V
         if 'Iv' in fields:
             stats['Iv'] = np.std(VofT, axis=timeAxis) / U
+        if 'xLv' in fields:
+            L = np.zeros_like(U)
+            for i,u in enumerate(U):
+                L[i] = integLengthScale(VofT[i,:], dt, meanU=u)
+            stats['xLv'] = L
+        if 'uv' in fields:
+            stats['uv'] = np.mean(u_ofT*v_ofT, axis=timeAxis)
     
     if wIsHere:
+        W = np.mean(WofT, axis=timeAxis)
+        w_ofT = WofT - W[:, np.newaxis]
         if 'W' in fields:
-            stats['W'] = np.mean(WofT, axis=timeAxis)
+            stats['W'] = W
         if 'Iw' in fields:
             stats['Iw'] = np.std(WofT, axis=timeAxis) / U
-
+        if 'xLw' in fields:
+            L = np.zeros_like(U)
+            for i,u in enumerate(U):
+                L[i] = integLengthScale(WofT[i,:], dt, meanU=u)
+            stats['xLw'] = L
+        if 'uw' in fields:
+            stats['uw'] = np.mean(u_ofT*w_ofT, axis=timeAxis)
+        if 'vw' in fields and vIsHere:
+            stats['vw'] = np.mean(v_ofT*w_ofT, axis=timeAxis)
+    
     return stats
+
+#-------------------------------- PLOTTING -------------------------------------
+def formatAxis(ax, gridMajor=True, gridMinor=False, tickLabelSize=10, labelSize=12,
+               tickTop=True, tickRight=True, gridColor_mjr=[0.8,0.8,0.8], gridColor_mnr=[0.85,0.85,0.85], 
+            #    kwargs_grid_major={'linestyle':'-', 'linewidth':1, 'color':'k'}, 
+            #    kwargs_grid_minor={},
+               ):
+    ax.tick_params(axis='both', which='major', labelsize=tickLabelSize, direction='in', top=tickTop, right=tickRight)
+    ax.tick_params(axis='both', which='minor', labelsize=tickLabelSize, direction='in', top=tickTop, right=tickRight)
+    ax.xaxis.label.set_size(labelSize)
+    ax.yaxis.label.set_size(labelSize)
+    if gridMajor:
+        ax.grid(True, which='major', linestyle='-', linewidth=1, color=gridColor_mjr)
+    if gridMinor:
+        ax.grid(True, which='minor', linestyle='--', linewidth=0.5, color=gridColor_mnr)
+    return ax
 
 #===============================================================================
 #================================ CLASSES ======================================
@@ -441,34 +485,7 @@ def get_velTH_stats(UofT, VofT=None, WofT=None, timeAxis=1, dt=None,
 
 #------------------------------- WIND FIELD ------------------------------------
 class spectra:
-    UofT = VofT = WofT = None
-
     """---------------------------------- Internals -----------------------------------"""
-    def __calculateSpectra(self):
-        if self.UofT is not None:
-            self.n, self.Suu = psd(self.UofT, self.samplingFreq, nAvg=self.nSpectAvg)
-            self.U = np.mean(self.UofT)
-            self.Iu = np.std(self.UofT)/self.U
-            self.xLu = integLengthScale(self.UofT, 1/self.samplingFreq)
-
-        if self.VofT is not None:
-            n, self.Svv = psd(self.VofT, self.samplingFreq, nAvg=self.nSpectAvg)
-            self.Iv = np.std(self.VofT)/self.U
-            self.xLv = integLengthScale(self.VofT, 1/self.samplingFreq,meanU=self.U)
-            if self.n is None:
-                self.n = n
-            elif not len(n) == len(self.n):
-                raise Exception("UofT and VofT have different no. of time steps. The number of time steps in all UofT, VofT, and WofT must match for spectra calculation.")
-                
-        if self.WofT is not None:
-            n, self.Sww = psd(self.WofT, self.samplingFreq, nAvg=self.nSpectAvg)
-            self.Iw = np.std(self.WofT)/self.U
-            self.xLw = integLengthScale(self.WofT, 1/self.samplingFreq,meanU=self.U)
-            if self.n is None:
-                self.n = n
-            elif not len(n) == len(self.n):
-                raise Exception("WofT has different no. of time steps from UofT and VofT. All three must have the same number of time steps for spectra calculation.")
-        
     def __init__(self, name=None, UofT=None, VofT=None, WofT=None, samplingFreq=None, 
                  n=None, Suu=None, Svv=None, Sww=None, nSpectAvg=8,
                  Z=None, U=None, Iu=None, Iv=None, Iw=None,
@@ -497,8 +514,33 @@ class spectra:
 
         self.Update()
 
+    def __calculateSpectra(self):
+        if self.UofT is not None:
+            self.n, self.Suu = psd(self.UofT, self.samplingFreq, nAvg=self.nSpectAvg)
+            self.U = np.mean(self.UofT)
+            self.Iu = np.std(self.UofT)/self.U
+            self.xLu = integLengthScale(self.UofT, 1/self.samplingFreq)
+
+        if self.VofT is not None:
+            n, self.Svv = psd(self.VofT, self.samplingFreq, nAvg=self.nSpectAvg)
+            self.Iv = np.std(self.VofT)/self.U
+            self.xLv = integLengthScale(self.VofT, 1/self.samplingFreq,meanU=self.U)
+            if self.n is None:
+                self.n = n
+            elif not len(n) == len(self.n):
+                raise Exception("UofT and VofT have different no. of time steps. The number of time steps in all UofT, VofT, and WofT must match for spectra calculation.")
+                
+        if self.WofT is not None:
+            n, self.Sww = psd(self.WofT, self.samplingFreq, nAvg=self.nSpectAvg)
+            self.Iw = np.std(self.WofT)/self.U
+            self.xLw = integLengthScale(self.WofT, 1/self.samplingFreq,meanU=self.U)
+            if self.n is None:
+                self.n = n
+            elif not len(n) == len(self.n):
+                raise Exception("WofT has different no. of time steps from UofT and VofT. All three must have the same number of time steps for spectra calculation.")
+        
     def __str__(self):
-        return self.name
+        return str(self.name)
     
     """--------------------------------- Normalizers ----------------------------------"""
     def rf(self,n='auto',normZ:Literal['Z','xLi']='Z'):
@@ -669,153 +711,172 @@ class spectra:
         pass
 
     """--------------------------------- Plotters -------------------------------------"""
-    def plotSpectra(self, 
-                    figFile=None, 
-                    xLimits=None, 
-                    yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
-                    figSize=[15,5], 
-                    normalize=True,
-                    normZ:Literal['Z','xLi']='Z',
-                    normU:Literal['U','sigUi']='U',
-                    plotType='loglog',
-                    overlayVonK=False,
-                    avoidZeroFreq=True
-                    ):
-        if normalize:
-            n = (self.rf(normZ=normZ),)
-            Suu = (self.rSuu(normU=normU),)
-            Svv = (self.rSvv(normU=normU),)
-            Sww = (self.rSww(normU=normU),)
-            if normU == 'U':
-                ylabels = (r"$nS_{uu}/U_{ref}^2$",r"$nS_{vv}/U_{ref}^2$",r"$nS_{ww}/U_{ref}^2$")
-            elif normU == 'sigUi':
-                ylabels = (r"$nS_{uu}/\sigma_u^2$",r"$nS_{vv}/\sigma_v^2$",r"$nS_{ww}/\sigma_w^2$")
-            if normZ == 'Z':
-                xlabel = r"$n Z_{ref}/U$"
-            elif normZ == 'xLi':
-                xlabel = r"$n ^xL_u/U$"
-            drawXlineAt_rf1 = True
-        else:
-            n = (self.n,)
-            Suu = (self.Suu,)
-            Svv = (self.Svv,)
-            Sww = (self.Sww,)
-            ylabels = (r"$S_{uu}$",r"$S_{vv}$",r"$S_{ww}$")
-            xlabel = r"$n [Hz]$"
-            drawXlineAt_rf1 = False
-        names = (self.name,)
-        if overlayVonK:
-            names += ('vonK-'+self.name,)
-            n += (n[0],)
-            Suu += (self.Suu_vonK(self.n,normalized=normalize,normU=normU),)
-            Svv += (self.Svv_vonK(self.n,normalized=normalize,normU=normU),)
-            Sww += (self.Sww_vonK(self.n,normalized=normalize,normU=normU),)
+    def plotSpect_any(self, f, S, ax=None, fig=None, figSize=[15,5], label=None, xLabel=None, yLabel=None, xLimits=None, yLimits=None, 
+                      plotType: Literal['loglog', 'semilogx', 'semilogy']='loglog', 
+                      kwargs_plot={'color': 'k', 'linestyle': '-'}, kwargs_legend={'loc': 'lower left', 'fontsize': 12}, kwargs_ax={}):
+        newFig = False
+        if fig is None:
+            newFig = True
+            fig = plt.figure(figsize=figSize)
+            ax = fig.add_subplot()
 
-        wplt.plotSpectra(
-                        freq=n, # ([n1,], [n2,], ... [nN,])
-                        Suu=Suu, # ([n1,], [n2,], ... [nN,])
-                        Svv=Svv, # ([n1,], [n2,], ... [nN,])
-                        Sww=Sww, # ([n1,], [n2,], ... [nN,])
-                        dataLabels=names, # ("str1", "str2", ... "strN")
-                        pltFile=figFile, # "/path/to/plot/file.pdf"
-                        xLabel=xlabel,
-                        yLabels=ylabels, # ("str1", "str2", ... "str_m")
-                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                        yLimits=yLimits, # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
-                        figSize=figSize,
-                        plotType=plotType,
-                        drawXlineAt_rf1=drawXlineAt_rf1,
-                        avoidZeroFreq=avoidZeroFreq
-                        )
+        if plotType == 'loglog':
+            ax.loglog(f,S, label=label, **kwargs_plot)
+        elif plotType == 'semilogx':
+            ax.semilogx(f,S, label=label, **kwargs_plot)
+        elif plotType == 'semilogy':
+            ax.semilogy(f,S, label=label, **kwargs_plot)
+        
+        if xLabel is not None:
+            ax.set_xlabel(xLabel)
+        if yLabel is not None:
+            ax.set_ylabel(yLabel)
+        if xLimits is not None:
+            ax.set_xlim(xLimits)
+        if yLimits is not None:
+            ax.set_ylim(yLimits)
+        
+        if newFig:
+            fig.legend(**kwargs_legend)
+            formatAxis(ax, **kwargs_ax)
+            plt.show()
+        return fig, ax
+
+    def plot(self, fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figSize=[15,4], label=None, plotSuu=True, plotSvv=True, plotSww=True,
+                    xLabel=None, yLabel_Suu=None, yLabel_Svv=None, yLabel_Sww=None,
+                    xLimits=None, yLimits=None, 
+                    normalize=True, normZ:Literal['Z','xLi']='Z', normU:Literal['U','sigUi']='U',         
+                    plotType: Literal['loglog', 'semilogx', 'semilogy']='loglog', avoidZeroFreq=True, 
+                    kwargs_Suu={'color': 'k', 'linestyle': '-'}, kwargs_Svv={'color': 'k', 'linestyle': '-'}, kwargs_Sww={'color': 'k', 'linestyle': '-'}, 
+                    showLegend=True,  kwargs_legend={'loc': 'lower left', 'fontsize': 12}, 
+                    kwargs_ax={}):
+        newFig = False
+        if fig is None:
+            newFig = True
+            fig = plt.figure(figsize=figSize)
+            axs = fig.subplots(1,3)
+            ax_Suu = axs[0]
+            ax_Svv = axs[1]
+            ax_Sww = axs[2]
+        
+        label = self.name if label is None else label
+        if normalize:
+            n = self.rf(normZ=normZ)
+            Suu = self.rSuu(normU=normU)
+            Svv = self.rSvv(normU=normU)
+            Sww = self.rSww(normU=normU)
+            
+            if xLabel is None:
+                xLabel = r'$nH/Uh$' if normZ == 'Z' else r'$^xLi/Uh$'
+            if yLabel_Suu is None:
+                yLabel_Suu = r'$nS_{uu}/\sigma_u^2$' if normU == 'sigUi' else r'$nS_{uu}/Uh^2$'
+            if yLabel_Svv is None:
+                yLabel_Svv = r'$nS_{vv}/\sigma_v^2$' if normU == 'sigUi' else r'$nS_{vv}/Uh^2$'
+            if yLabel_Sww is None:
+                yLabel_Sww = r'$nS_{ww}/\sigma_w^2$' if normU == 'sigUi' else r'$nS_{ww}/Uh^2$'
+        else:
+            n = self.n
+            Suu = self.Suu
+            Svv = self.Svv
+            Sww = self.Sww
+
+            if xLabel is None:
+                xLabel = r'$n$'
+            if yLabel_Suu is None:
+                yLabel_Suu = r'$S_{uu}$'
+            if yLabel_Svv is None:
+                yLabel_Svv = r'$S_{vv}$'
+            if yLabel_Sww is None:
+                yLabel_Sww = r'$S_{ww}$'
+
+        if avoidZeroFreq and n[0] == 0:
+            n = n[1:]
+            Suu = Suu[1:]
+            Svv = Svv[1:]
+            Sww = Sww[1:]
+        
+        if plotSuu and ax_Suu is not None:
+            self.plotSpect_any(n, Suu, ax=ax_Suu, fig=fig, figSize=figSize, label=label, xLabel=xLabel, yLabel=yLabel_Suu, xLimits=xLimits, yLimits=yLimits, 
+                            kwargs_plot=kwargs_Suu, plotType=plotType)
+        if plotSvv and ax_Svv is not None:
+            self.plotSpect_any(n, Svv, ax=ax_Svv, fig=fig, figSize=figSize, label=label, xLabel=xLabel, yLabel=yLabel_Svv, xLimits=xLimits, yLimits=yLimits,
+                                kwargs_plot=kwargs_Svv, plotType=plotType)
+        if plotSww and ax_Sww is not None:
+            self.plotSpect_any(n, Sww, ax=ax_Sww, fig=fig, figSize=figSize, label=label, xLabel=xLabel, yLabel=yLabel_Sww, xLimits=xLimits, yLimits=yLimits,
+                                kwargs_plot=kwargs_Sww, plotType=plotType)
+
+        if showLegend:
+            ax_Suu.legend(**kwargs_legend)
+
+        if newFig:
+            formatAxis(ax_Suu, **kwargs_ax)
+            formatAxis(ax_Svv, **kwargs_ax)
+            formatAxis(ax_Sww, **kwargs_ax)
+            plt.show()
+        pass
 
 class profile:
-    
     """---------------------------------- Internals -----------------------------------"""
+    def __init__(self,
+                name="profile", 
+                profType: Union[Literal["continuous","discrete","scatter"], None] =None, 
+                Z=None, H=None, dt=None, t=None,
+                UofT: np.ndarray=None, 
+                VofT: np.ndarray=None,
+                WofT: np.ndarray=None,
+                fields=VALID_VELOCITY_STAT_FIELDS,
+                stats: Dict ={},
+                SpectH: spectra =None, nSpectAvg=8,
+                fileName=None,
+                keepTH=True,
+                interpolateToH=False, units=DEFAULT_SI_UNITS):
+        self.name = name
+        self.profType = profType
+        self.Z: Union[np.ndarray, None] = Z  # [N_pts]
+        self.stats: Dict = stats
+        self.fields = fields
+
+        self.H = H
+        self.dt = dt
+        self.samplingFreq = None if dt is None else 1/dt
+        self.t = t
+        self.UofT: np.ndarray = UofT  # [N_pts x nTime]
+        self.VofT: np.ndarray = VofT  # [N_pts x nTime]
+        self.WofT: np.ndarray = WofT  # [N_pts x nTime]
+        
+        self.SpectH : spectra = SpectH
+        self.nSpectAvg = nSpectAvg
+        
+        self.origFileName = fileName
+        self.interpolateToH = interpolateToH
+        self.units = units
+
+        self.Update()
+        if not keepTH:
+            self.UofT = None
+            self.VofT = None
+            self.WofT = None
+    
     def __verifyData(self):
         pass
 
-    def __updateUh(self):
-        if self.N_pts == 0:
-            self.H_idx = None
-            self.Uh = self.IuH = self.IvH = self.IwH = None
+    def __computeVelStats(self):
+        if all([self.UofT is None, self.VofT is None, self.WofT is None]):
             return
-        if self.interpolateToH:
-            self.H_idx = None
-            if self.U is not None:
-                self.Uh = np.interp(self.H, self.Z, self.U)
-            if self.Iu is not None:
-                self.IuH = np.interp(self.H, self.Z, self.Iu)
-            if self.Iv is not None:
-                self.IvH = np.interp(self.H, self.Z, self.Iv)
-            if self.Iw is not None:
-                self.IwH = np.interp(self.H, self.Z, self.Iw)
-        else: # nearest value
-            self.H_idx = (np.abs(self.Z - self.H)).argmin()
-            if self.U is not None:
-                self.Uh = self.U[self.H_idx]
-            if self.Iu is not None:
-                self.IuH = self.Iu[self.H_idx]
-            if self.Iv is not None:
-                self.IvH = self.Iv[self.H_idx]
-            if self.Iw is not None:
-                self.IwH = self.Iw[self.H_idx]
-
-    def __computeFromTH(self):
-        atLeastOneTHfound = False
-        if self.UofT is not None:
-            N_T = np.shape(self.UofT)[1]
-            if self.Z is None:
-                raise Exception("Z values not found while UofT is given.")
-            self.U = np.mean(self.UofT,axis=1)
-            self.Iu = np.std(self.UofT,axis=1)/self.U
-            self.xLu = np.zeros(self.N_pts)
-            for i in range(self.N_pts):
-                self.xLu[i] = integLengthScale(self.UofT[i,:], self.dt)
-            atLeastOneTHfound = True
-            
-        if self.VofT is not None:
-            N_T = np.shape(self.VofT)[1]
-            if self.U is None or self.Z is None:
-                raise Exception("Either Z or U(z) does not exist to calculate V stats.")
-            self.V = np.mean(self.VofT,axis=1)
-            self.Iv = np.std(self.VofT,axis=1)/self.U
-            self.xLv = np.zeros(self.N_pts)
-            for i in range(self.N_pts):
-                self.xLv[i] = integLengthScale(self.VofT[i,:], self.dt, meanU=self.U[i])
-            atLeastOneTHfound = True
-
-        if self.WofT is not None:
-            N_T = np.shape(self.WofT)[1]
-            if self.U is None or self.Z is None:
-                raise Exception("Either Z or U(z) does not exist to calculate W stats.")
-            self.W = np.mean(self.WofT,axis=1)
-            self.Iw = np.std(self.WofT,axis=1)/self.U
-            self.xLw = np.zeros(self.N_pts)
-            self.uw = np.zeros(self.N_pts)
-            for i in range(self.N_pts):
-                self.xLw[i] = integLengthScale(self.WofT[i,:], self.dt, meanU=self.U[i])
-                if self.UofT is not None:
-                    self.uw[i] = np.cov(self.UofT[i,:], self.WofT[i,:])[0,1]
-            atLeastOneTHfound = True
+        N_T = np.shape(self.UofT)[1]
         
-        if self.t is None and self.dt is not None and atLeastOneTHfound:
+        if self.t is None and self.dt is not None:
             self.t = np.linspace(0,(N_T-1)*self.dt,num=N_T)
-        if self.dt is None and self.t is not None and atLeastOneTHfound:
+        if self.dt is None and self.t is not None:
             self.dt = np.mean(np.diff(self.t))
 
-        # self.__updateUh()
+        self.stats = get_velTH_stats(UofT=self.UofT, VofT=self.VofT, WofT=self.WofT, dt=self.dt,
+                                     fields=self.fields)
         self.__computeSpectra()
-    
-    def __computeVelStats(self):
-        self.stats = get_velTH_stats(UofT=self.UofT, VofT=self.VofT, WofT=self.WofT, 
-                                     fields=self.fields, )
-
+        
     def __computeSpectra(self):
         if self.SpectH is not None:
             return
-        # if self.H_idx is None:
-        #     self.SpectH = None
-        #     return
         uOfT = vOfT = wOfT = None
         if self.UofT is not None:
             uOfT = self.UofT[self.H_idx,:]
@@ -826,68 +887,10 @@ class profile:
         
         self.SpectH = spectra(name=self.name, UofT=uOfT, VofT=vOfT, WofT=wOfT, samplingFreq=self.samplingFreq, Z=self.H, nSpectAvg=self.nSpectAvg)
 
-    def __init__(self,
-                name="profile", 
-                profType=None, # {"continuous","discrete","scatter"}
-                Z=None, H=None, dt=None, t=None,
-                # U=None, V=None, W=None, 
-                UofT=None, VofT=None, WofT=None,
-                # Iu=None, Iv=None, Iw=None, 
-                # xLu=None, xLv=None, xLw=None,
-                fields=DEFAULT_VELOCITY_STAT_FIELDS,
-                stats=None,
-                SpectH=None, nSpectAvg=8,
-                fileName=None,
-                keepTH=True,
-                interpolateToH=False, units=DEFAULT_SI_UNITS):
-        self.name = name
-        self.profType = profType
-        self.Z = Z  # [N_pts]
-        self.stats = stats
-
-        # self.U = U  # [N_pts]
-        # self.V = V  # [N_pts]
-        # self.W = W  # [N_pts]
-        # self.Iu = Iu  # [N_pts]
-        # self.Iv = Iv  # [N_pts]
-        # self.Iw = Iw  # [N_pts]
-        # self.xLu = xLu  # [N_pts]
-        # self.xLv = xLv  # [N_pts]
-        # self.xLw = xLw  # [N_pts]
-        
-        self.H = H
-        
-        self.dt = dt
-        self.samplingFreq = None if dt is None else 1/dt
-        self.t = t
-        self.UofT = UofT  # [N_pts x nTime]
-        self.VofT = VofT  # [N_pts x nTime]
-        self.WofT = WofT  # [N_pts x nTime]
-        
-        self.SpectH = SpectH
-        self.nSpectAvg = nSpectAvg
-        
-        self.origFileName = fileName
-        self.interpolateToH = interpolateToH
-        self.units = units
-
-        # self.Uh = None
-        # self.IuH = None
-        # self.IvH = None
-        # self.IwH = None
-        # self.iH = None
-        
-        self.Update()
-        if not keepTH:
-            self.UofT = None
-            self.VofT = None
-            self.WofT = None
-
     def __str__(self):
         return self.name
 
     """----------------------------------- Properties ---------------------------------"""
-
     @property
     def T(self):
         dur = None
@@ -920,7 +923,7 @@ class profile:
     @property
     def Uh(self):
         idx = self.H_idx
-        if idx is None:
+        if idx is None or self.U is None:
             return None
         else:
             if self.interpolateToH:
@@ -929,86 +932,125 @@ class profile:
                 return self.U[idx]
     
     @property
-    def IuH(self):
-        idx = self.H_idx
-        if idx is None:
+    def U(self) -> Union[np.ndarray, None]:
+        if self.stats is None or 'U' not in self.stats:
             return None
-        else:
-            if self.interpolateToH:
-                return np.interp(self.H,self.Z,self.Iu)
-            else:
-                return self.Iu[idx]
-            
-    @property
-    def IvH(self):
-        idx = self.H_idx
-        if idx is None:
-            return None
-        else:
-            if self.interpolateToH:
-                return np.interp(self.H,self.Z,self.Iv)
-            else:
-                return self.Iv[idx]
+        return self.stats['U']
     
     @property
-    def IwH(self):
-        idx = self.H_idx
-        if idx is None:
+    def Iu(self) -> Union[np.ndarray, None]:
+        if self.stats is None or 'Iu' not in self.stats:
             return None
-        else:
-            if self.interpolateToH:
-                return np.interp(self.H,self.Z,self.Iw)
-            else:
-                return self.Iw[idx]
+        return self.stats['Iu']
     
+    @property
+    def Iv(self) -> Union[np.ndarray, None]:
+        if self.stats is None or 'Iv' not in self.stats:
+            return None
+        return self.stats['Iv']
+    
+    @property
+    def Iw(self) -> Union[np.ndarray, None]:
+        if self.stats is None or 'Iw' not in self.stats:
+            return None
+        return self.stats['Iw']
+    
+    @property
+    def xLu(self) -> Union[np.ndarray, None]:
+        if self.stats is None or 'xLu' not in self.stats:
+            return None
+        return self.stats['xLu']
+    
+    @property
+    def xLv(self) -> Union[np.ndarray, None]:
+        if self.stats is None or 'xLv' not in self.stats:
+            return None
+        return self.stats['xLv']
+    
+    @property
+    def xLw(self) -> Union[np.ndarray, None]:
+        if self.stats is None or 'xLw' not in self.stats:
+            return None
+        return self.stats['xLw']
+    
+    @property
+    def uw(self) -> Union[np.ndarray, None]:
+        if self.stats is None or 'uw' not in self.stats:
+            return None
+        return self.stats['uw']
+
     """---------------------------------- Normalizers ---------------------------------"""
     @property
-    def ZbyH(self):
+    def ZbyH(self) -> Union[np.ndarray, None]:
         if self.H is None or self.Z is None:
             return None
         return self.Z/self.H
 
     @property
-    def UbyUh(self):
+    def UbyUh(self) -> Union[np.ndarray, None]:
         if self.Uh is None or self.U is None:
             return None
         return self.U/self.Uh
 
-    def xLuByH(self,H=None):
-        if H is None:
-            H = self.H
-        if H is None or self.Z is None:
+    @property
+    def xLuByH(self) -> Union[np.ndarray, None]:
+        if self.H is None or self.Z is None or self.xLu is None:
             return None
         else:
-            return self.xLu/H
+            return self.xLu/self.H
 
-    def xLvByH(self,H=None):
-        if H is None:
-            H = self.H
-        if H is None or self.Z is None:
+    @property
+    def xLvByH(self) -> Union[np.ndarray, None]:
+        if self.H is None or self.Z is None or self.xLv is None:
             return None
         else:
-            return self.xLv/H
+            return self.xLv/self.H
 
-    def xLwByH(self,H=None):
-        if H is None:
-            H = self.H
-        if H is None or self.Z is None:
+    @property
+    def xLwByH(self) -> Union[np.ndarray, None]:
+        if self.H is None or self.Z is None or self.xLw is None:
             return None
         else:
-            return self.xLw/H
+            return self.xLw/self.H
+        
+    @property
+    def uwByUh(self) -> Union[np.ndarray, None]:
+        if self.Uh is None or self.uw is None:
+            return None
+        else:
+            return self.uw/(self.Uh**2)
 
-    def normalize(self):
-        pass
+    def stat_at_H(self, field):
+        if self.H is None or self.stats is None:
+            return None
+        else:
+            return self.stats[field][self.H_idx]
 
+    def stat_norm(self, field):
+        if self.stats is None:
+            return None, ''
+        else:
+            if field == 'U':
+                return self.UbyUh, 'U/Uh'
+            elif field in ['Iu','Iv','Iw']:
+                return self.stats[field], field
+            elif field in ['xLu','xLv','xLw']:
+                if self.H is None:
+                    return None, ''
+                return self.stats[field]/self.H, field+'/H'
+            elif field in ['uv','uw','vw']:
+                if self.Uh is None:
+                    return None, ''
+                return self.stats[field]/(self.Uh**2), field+'/Uh^2'
+            else:
+                raise NotImplementedError("Normalization for field '{}' not implemented".format(field))
+            
     """-------------------------------- Data handlers ---------------------------------"""
     def Update(self):
         self.__verifyData()
-        self.__computeFromTH()
-        
+        self.__computeVelStats()
         if self.origFileName is not None:
             self.readFromFile(self.origFileName)
-        # self.__updateUh()
 
     def writeToFile(self,outDir,
                     nameSuffix='',
@@ -1043,43 +1085,162 @@ class profile:
         pass
 
     def readFromFile(self,fileName,getHfromU_Uh=False):
-        data = pd.read_csv(fileName)
-        self.Z = data.Z
-        self.U = data.U
-        self.Iu = data.Iu
-        self.Iv = data.Iv
-        self.Iw = data.Iw
-        if 'U_Uh' in data.columns and self.H is None:
-            idx = (np.abs(data.U_Uh - 1)).argmin()
-            self.H = self.Z[idx]
+        # data = pd.read_csv(fileName)
+        # self.Z = data.Z
+        # self.U = data.U
+        # self.Iu = data.Iu
+        # self.Iv = data.Iv
+        # self.Iw = data.Iw
+        # if 'U_Uh' in data.columns and self.H is None:
+        #     idx = (np.abs(data.U_Uh - 1)).argmin()
+        #     self.H = self.Z[idx]
 
-        self.N_pts = len(self.Z)
-        # self.__updateUh()
+        # self.N_pts = len(self.Z)
+        # # self.__updateUh()
+        pass
 
     """--------------------------------- Plotters -------------------------------------"""
-    def plotProfiles(self,figFile=None,xLimits=None,yLimits='auto',figSize=[15,5]):
-        Z = (self.Z,)
-        val = (np.transpose(np.stack((self.U, self.Iu, self.Iv, self.Iw))),)
-        xlabels = (r"U",r"I_u",r"I_v",r"I_w")
-        zlabel = 'Z'
+    def plotProfile_any(self, fld, ax=None, label=None, normalize=True, overlay_H=True, xLabel=None, yLabel=None, xLimits=None, yLimits=None, 
+                        kwargs={'color': 'k', 'linestyle': '-'}, kwargs_ax={}, kwargs_Hline={'color': 'k', 'linestyle': '--', 'linewidth': 0.5}):
+        newFig = False
+        if ax is None:
+            newFig = True
+            plt.figure()
+            ax = plt.subplot()
+        
+        label = self.name if label is None else label
+        if normalize:
+            Z = self.ZbyH
+            H = 1.0
+            F, name = self.stat_norm(fld)
+            xLabel = name if xLabel is None else xLabel
+            yLabel = 'Z/H' if yLabel is None else yLabel
+        else:
+            Z = self.Z
+            H = self.H
+            F = self.stats[fld]
+            xLabel = fld if xLabel is None else xLabel
+            yLabel = 'Z' if yLabel is None else yLabel
 
-        wplt.plotProfiles(
-                        Z, # ([n1,], [n2,], ... [nN,])
-                        val, # ([n1,M], [n2,M], ... [nN,M])
-                        dataLabels=(self.name,), # ("str1", "str2", ... "strN")
-                        pltFile=figFile, # "/path/to/plot/file.pdf"
-                        xLabels=xlabels, # ("str1", "str2", ... "str_m")
-                        yLabel=zlabel,
-                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                        yLimits=yLimits, # [zMin, zMax]
-                        figSize=figSize,
-                        nCols=4
-                        )
+        ax.plot(F, Z, label=label, **kwargs)
+        if overlay_H:
+            ax.axhline(y=H, **kwargs_Hline)
+        ax.set_ylabel(yLabel)
+        ax.set_xlabel(xLabel)
+        if xLimits is not None:
+            ax.set_xlim(xLimits)
+        if yLimits is not None:
+            ax.set_ylim(yLimits)
+
+        if newFig:
+            ax = formatAxis(ax, **kwargs_ax)
+            plt.show()
+        return ax
+
+    def plotProfile_basic1(self, fig=None, ax_U=None, ax_Iu=None, figsize=[8,6], U_lgnd_lbl=None, Iu_lgnd_lbl=None, normalize=True, overlay_H=True,
+                           xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, yLimits=None, showLegend=True,
+                           kwargs_legend_U={'fontsize': 12, 'loc': 'upper center', 'ncol': 1}, kwargs_legend_Iu={'fontsize': 12, 'loc': 'center', 'ncol': 1},
+                           kwargs_U={'color': 'k', 'linestyle': '-'}, kwargs_Iu={'color': 'k', 'linestyle': '--'}, kwargs_Hline={'color': 'k', 'linestyle': '--'},
+                           kwargs_ax={}, kwargs_ax2={}):
+        newFig = False
+        if fig is None:
+            newFig = True
+            fig = plt.figure(figsize=figsize)
+        if ax_U is None:
+            newFig = True
+            ax_U = plt.subplot()
+        if ax_Iu is None:
+            ax_Iu = ax_U.twiny()
+        
+        if normalize:
+            U_lgnd_lbl = "U/Uh ("+self.name+")" if U_lgnd_lbl is None else U_lgnd_lbl
+        else:
+            U_lgnd_lbl = "U ("+self.name+")" if U_lgnd_lbl is None else U_lgnd_lbl
+        Iu_lgnd_lbl = "Iu ("+self.name+")" if Iu_lgnd_lbl is None else Iu_lgnd_lbl
+        if zLabel is None:
+            zLabel = 'Z/H' if normalize else 'Z'
+        
+        self.plotProfile_any('U', ax=ax_U, label=U_lgnd_lbl, normalize=normalize, overlay_H=overlay_H, kwargs_Hline=kwargs_Hline,
+                            xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_U, yLimits=yLimits, kwargs=kwargs_U)
+        self.plotProfile_any('Iu', ax=ax_Iu, label=Iu_lgnd_lbl, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iu, yLimits=yLimits, kwargs=kwargs_Iu)
+        
+        if showLegend:
+            ax_U.legend(**kwargs_legend_U)
+            ax_Iu.legend(**kwargs_legend_Iu)
+
+        if newFig:
+            ax_U = formatAxis(ax_U, **kwargs_ax)
+            ax_Iu = formatAxis(ax_Iu, tickRight=False, gridMajor=False, gridMinor=False, **kwargs_ax2)
+            plt.show()
+        return fig, ax_U, ax_Iu
+
+    def plotProfile_basic2(self, fig=None, axs=None, figsize=[12,10], label=None, normalize=True,
+                            xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
+                            xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
+                            yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
+                            kwargs_plt={'color': 'k', 'linestyle': '-'}, kwargs_ax={}):
+        newFig = False
+        if fig is None:
+            newFig = True
+            fig, axs = plt.subplots(3,3)
+            fig.set_size_inches(figsize)
+        
+        label = self.name if label is None else label
+        if zLabel is None:
+            zLabel = 'Z/H' if normalize else 'Z'
+        
+        if 'U' in self.stats.keys():
+            self.plotProfile_any('U', ax=axs[0,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_U, yLimits=yLimits, kwargs=kwargs_plt)
+        if 'uw' in self.stats.keys():
+            self.plotProfile_any('uw', ax=axs[0,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_uw, yLimits=yLimits, kwargs=kwargs_plt)
+        if 'Iu' in self.stats.keys():
+            self.plotProfile_any('Iu', ax=axs[1,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iu, yLimits=yLimits, kwargs=kwargs_plt)
+        if 'Iv' in self.stats.keys():
+            self.plotProfile_any('Iv', ax=axs[1,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iv, yLimits=yLimits, kwargs=kwargs_plt)
+        if 'Iw' in self.stats.keys():
+            self.plotProfile_any('Iw', ax=axs[1,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iw, yLimits=yLimits, kwargs=kwargs_plt)
+        if 'xLu' in self.stats.keys():
+            self.plotProfile_any('xLu', ax=axs[2,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLu, yLimits=yLimits, kwargs=kwargs_plt)
+        if 'xLv' in self.stats.keys():
+            self.plotProfile_any('xLv', ax=axs[2,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLv, yLimits=yLimits, kwargs=kwargs_plt)
+        if 'xLw' in self.stats.keys():
+            self.plotProfile_any('xLw', ax=axs[2,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLw, yLimits=yLimits, kwargs=kwargs_plt)
+        
+        if newFig:
+            axs[0,2].axis('off')
+            fig.legend(handles=axs[0,0].get_lines(), bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
+            for ax in axs.flatten():
+                formatAxis(ax, **kwargs_ax)
+            plt.show()
+        return fig, axs
     
-    def plot(self,figFile=None):
-        self.plotProfiles(figFile=figFile)
-        self.SpectH.plotSpectra(figFile=figFile)
+    def plot(self, fig=None, ax_U=None, ax_Iu=None, ax_Spect=None, figsize=None, landscape=True, 
+             kwargs_profile={}, 
+             kwargs_spect={}):
+        newFig = False
+        if fig is None:
+            newFig = True
+            if landscape:
+                figsize = [12,5] if figsize is None else figsize
+                fig, axs = plt.subplots(1,2)
+            else:
+                figsize = [5,12] if figsize is None else figsize
+                fig, axs = plt.subplots(2,1)
+            ax_U = axs[0]
+            ax_Iu = ax_U.twiny()
+            ax_Spect = axs[1]
+            fig.set_size_inches(figsize)
 
+        self.plotProfile_basic1(fig=fig, ax_U=ax_U, ax_Iu=ax_Iu, **kwargs_profile)
+        self.SpectH.plot(fig=fig, ax_Suu=ax_Spect, **kwargs_spect)
+
+        if newFig:
+            formatAxis(ax_U, tickTop=False, gridMajor=False, gridMinor=False)
+            formatAxis(ax_Iu, tickRight=False, gridMajor=False, gridMinor=False)
+            formatAxis(ax_Spect, gridMajor=False, gridMinor=False)
+            plt.show()
+        return fig, ax_U, ax_Iu, ax_Spect
+                
     def plotTimeHistory(self,
                     figFile=None,
                     normalizeTime=False,
@@ -1134,14 +1295,6 @@ class profile:
                                 alwaysShowFig=alwaysShowFig
                                 )   
 
-    def plotA_prof(self, fld, ax=None, xLabel=None, yLabel='Z', xlim=None, ylim=None, col='b', mrkr='None', mrkSz=4, ls='-', lw=1, ):
-        if ax is None:
-            fig = plt.figure()
-            ax = plt.subplot()
-        
-        ax.plot(self.Z)
-        pass
-
 class Profiles:
     def __init__(self, profiles=[]):
         self._currentIndex = 0
@@ -1167,7 +1320,32 @@ class Profiles:
     def N(self):
         return len(self.profiles)
 
-    def plot(self, fig=None, prof_ax=None, spect_ax=None, zLim=None, col=None, 
+    def plot(self, figsize=None, landscape=True, 
+             kwargs_profile={}, 
+             kwargs_spect={}):
+        if landscape:
+            figsize = [12,5] if figsize is None else figsize
+            fig, axs = plt.subplots(1,2)
+        else:
+            figsize = [5,12] if figsize is None else figsize
+            fig, axs = plt.subplots(2,1)
+        ax_U = axs[0]
+        ax_Iu = ax_U.twiny()
+        ax_Spect = axs[1]
+        fig.set_size_inches(figsize)
+
+        for i, prof in enumerate(self.profiles):
+            if i == 0:
+                kwargs_profile['overlay_H'] = True
+            else:
+                kwargs_profile['overlay_H'] = False
+            prof.plot(fig=fig, ax_U=ax_U, ax_Iu=ax_Iu, ax_Spect=ax_Spect, kwargs_profile=kwargs_profile, kwargs_spect=kwargs_spect)
+
+        formatAxis(ax_U, tickTop=False, gridMajor=False, gridMinor=False)
+        formatAxis(ax_Iu, tickRight=False, gridMajor=False, gridMinor=False)
+        formatAxis(ax_Spect, gridMajor=False, gridMinor=False)
+
+    def plot__(self, fig=None, prof_ax=None, spect_ax=None, zLim=None, col=None, 
              linestyle_U=None, linestyle_Iu=None, marker_U=None, marker_Iu=None, mfc_U=None, mfc_Iu=None, linestyle_Spect=None, marker_Spect=None, alpha_Spect=None,
              Iu_factr=100.0, IuLim=[0,100], Ulim=None, IuLgndLoc='upper left', UlgndLoc='upper right',
              fontSz_axNum=10, fontSz_axLbl=12, fontSz_lgnd=12,
@@ -1411,28 +1589,6 @@ class Profiles:
                         drawXlineAt_rf1=drawXlineAt_rf1
                         )
 
-class profile_repeatedTest(profile): # should be mereged into or inherit Profiles class
-    def __init__(self, 
-                name="profile", 
-                profType=None, 
-                Z=None, H=None, dt=None, t=None, 
-                U=None, V=None, W=None, 
-                UofT=None, VofT=None, WofT=None, 
-                Iu=None, Iv=None, Iw=None, 
-                xLu=None, xLv=None, xLw=None, 
-                SpectH=None, nSpectAvg=8, 
-                fileName=None, 
-                interpolateToH=False, 
-                units=DEFAULT_SI_UNITS):
-        super().__init__(name, profType, Z, H, dt, 
-                        t, U, V, W, UofT, VofT, WofT, 
-                        Iu, Iv, Iw, xLu, xLv, xLw, 
-                        SpectH, nSpectAvg, fileName, 
-                        interpolateToH, units)
-
-    def plotProfiles(self, figFile=None, xLimits=None, figSize=[15, 5]):
-        return super().plotProfiles(figFile, xLimits, figSize)
-
 class ESDU74:
     __Omega = 72.7e-6            # Angular rate of rotation of the earth in [rad/s].  ESDU 74031 sect. A.1
     __k = 0.4   # von Karman constant
@@ -1651,12 +1807,19 @@ class ESDU74:
                         Z=Zref, U=self.U(Zref), Iu=self.Iu(Zref), Iv=self.Iv(Zref), Iw=self.Iw(Zref), 
                         xLu=self.xLu(Zref), xLv=self.xLv(Zref), xLw=self.xLw(Zref) )
         
+        stats = {}
+        stats['U'] = self.U()
+        stats['Iu'] = self.Iu()
+        stats['Iv'] = self.Iv()
+        stats['Iw'] = self.Iw()
+        stats['xLu'] = self.xLu()
+        stats['xLv'] = self.xLv()
+        stats['xLw'] = self.xLw()
+
         prof = profile(name=name, 
                 profType="continuous", 
                 Z=self.Z, H=self.Zref,
-                U=self.U(),
-                Iu=self.Iu(), Iv=self.Iv(), Iw=self.Iw(), 
-                xLu=self.xLu(), xLv=self.xLv(), xLw=self.xLw(),
+                stats=stats,
                 SpectH=spect )
         return prof
     
@@ -1913,12 +2076,19 @@ class ESDU85:
                         Z=Zref, U=self.U(Zref), Iu=self.Iu(Zref), Iv=self.Iv(Zref), Iw=self.Iw(Zref), 
                         xLu=self.xLu(Zref), xLv=self.xLv(Zref), xLw=self.xLw(Zref) )
         
+        stats = {}
+        stats['U'] = self.U()
+        stats['Iu'] = self.Iu()
+        stats['Iv'] = self.Iv()
+        stats['Iw'] = self.Iw()
+        stats['xLu'] = self.xLu()
+        stats['xLv'] = self.xLv()
+        stats['xLw'] = self.xLw()
+
         prof = profile(name=name, 
                 profType="continuous", 
                 Z=self.Z, H=self.Zref,
-                U=self.U(),
-                Iu=self.Iu(), Iv=self.Iv(), Iw=self.Iw(), 
-                xLu=self.xLu(), xLv=self.xLv(), xLw=self.xLw(),
+                stats=stats,
                 SpectH=spect )
         return prof
 
@@ -2126,7 +2296,7 @@ class bldgCp(windCAD.building):
             stats[s] = np.min(self.CpStats[s], axis=0)
         return stats
     
-    def CpStatsAreaAvgCollected(self, mixNominalAreas=False, 
+    def CpStatsAreaAvgCollected(self, mixNominalAreasFromAllZonesAndFaces=False, 
                         envelope:Literal['max','min','none']='none', 
                         extremesPerNominalArea:Literal['max','min','none']='none'):
         # [Nfaces][Nzones][Narea][Nflds][N_AoA,Npanels]
@@ -2135,7 +2305,7 @@ class bldgCp(windCAD.building):
             zNames.append(self.zoneDict[zn][0]+'_'+self.zoneDict[zn][1])
         CpAavg = self.zoneDict
         for zm, zone_m in enumerate(CpAavg):
-            if mixNominalAreas:
+            if mixNominalAreasFromAllZonesAndFaces:
                 CpAavg[zone_m][2] = {}
                 for _, fld in enumerate(self.CpStatsAreaAvg[0][zm][0]):
                     CpAavg[zone_m][2][fld] = None                
@@ -2167,7 +2337,7 @@ class bldgCp(windCAD.building):
                 zIdx = zNames.index(fc.zoneDict[zone][0]+'_'+fc.zoneDict[zone][1])
                 for a,_ in enumerate(fc.nominalPanelAreas):
                     for _, fld in enumerate(self.CpStatsAreaAvg[f][z][a]):
-                        if mixNominalAreas:
+                        if mixNominalAreasFromAllZonesAndFaces:
                             if CpAavg[zIdx][2][fld] is None:
                                 CpAavg[zIdx][2][fld] = {}
                                 CpAavg[zIdx][2][fld] = envelopeFld(self.CpStatsAreaAvg[f][z][a][fld])
@@ -2179,7 +2349,7 @@ class bldgCp(windCAD.building):
                                 CpAavg[zIdx][2][a][fld] = envelopeFld(self.CpStatsAreaAvg[f][z][a][fld])
                             else:
                                 CpAavg[zIdx][2][a][fld] = np.concatenate((CpAavg[zIdx][2][a][fld], envelopeFld(self.CpStatsAreaAvg[f][z][a][fld]) ), axis=1)
-        if not extremesPerNominalArea == 'none' and not mixNominalAreas:
+        if not extremesPerNominalArea == 'none' and not mixNominalAreasFromAllZonesAndFaces:
             __CpAavg = CpAavg
             CpAavg = self.zoneDict
             for zm, zone_m in enumerate(CpAavg):
@@ -2213,7 +2383,7 @@ class bldgCp(windCAD.building):
                         nCols=7, nRows=10, cols = ['r','k','g','b','m','r','k','b','g','m'],mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], 
                         ls=['-','-','-','-','-','-','-','-','-','-',],
                         xticks=None, mrkrSize=2,
-                        legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20]):
+                        legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20], sharex=True, sharey=True):
         tapIdxs = self.tapIdx if tapsToPlot is None else self.idxOfTapNum(tapsToPlot)
         
         for fld in fields:
@@ -2274,8 +2444,8 @@ class bldgCp(windCAD.building):
             figs.append(fig)
         return figs
 
-    def plotTapCpStatContour(self, fieldName, dxnIdx=None, envelopeType:Literal['high','low','both']='both', figSize=[15,10], ax=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both',
-                             title=None, colBarOrientation='horizontal'):
+    def plotTapCpStatContour(self, fieldName, dxnIdx=None, envelopeType:Literal['high','low','both']='both', figSize=[15,10], ax=None, 
+                             fldRange=None, nLvl=100, cmap='RdBu', extend='both', title=None, colBarOrientation='horizontal'):
         self.checkStatField(fieldName)
         if dxnIdx is None:
             if envelopeType == 'both':
@@ -2327,13 +2497,90 @@ class bldgCp(windCAD.building):
             ax.axis('off')
         return
 
-    def plotAreaAveragedStat(self, field, ax=None, zoneIndex=None, xLim=None, yLim=None,):
-        if ax is None:
+    def plotAreaAveragedStat(self, fig=None, axs=None, figSize=[15,10], 
+                            plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, invertYAxis=True,
+                            overlayThis_min=None, overlayLabel_min='', kwargs_overlay_min={'color':'k', 'linewidth':2, 'linestyle':'-'},
+                            overlayThis_max=None, overlayLabel_max='', kwargs_overlay_max={'color':'k', 'linewidth':2, 'linestyle':'-'},
+                            plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], zoneShadeColor='darkgrey', kwargs_zonePlots={},
+                            xLimits=None, yLimits=None, xLabel=None, yLabel=None,
+                            kwargs_min={}, kwargs_max={}, kwargs_ax={'gridMajor':True, 'gridMinor':True}):
+        newFig = False
+        if fig is None:
             newFig = True
             fig = plt.figure(figsize=figSize)
-            ax = fig.add_subplot()
-        pass
 
+            NumZones = self.NumZones
+            nCols = min(nCols, NumZones)
+            nRows = int(np.ceil(NumZones/nCols))
+            axs = fig.subplots(nRows, nCols, sharex=True, sharey=True)
+
+        zoneDict = self.zoneDict
+        pnlA_all = self.panelAreas
+        pnlA_nom = self.NominalPanelArea
+        if plotExtremesPerNominalArea:
+            areaAvgStats_min = self.CpStatsAreaAvgCollected(mixNominalAreasFromAllZonesAndFaces=True,envelope='min',extremesPerNominalArea='min')
+            areaAvgStats_max = self.CpStatsAreaAvgCollected(mixNominalAreasFromAllZonesAndFaces=True,envelope='max',extremesPerNominalArea='max')
+        else:
+            areaAvgStats_min = self.CpStatsAreaAvgCollected(mixNominalAreasFromAllZonesAndFaces=True,envelope='min',extremesPerNominalArea='none')
+            areaAvgStats_max = self.CpStatsAreaAvgCollected(mixNominalAreasFromAllZonesAndFaces=True,envelope='max',extremesPerNominalArea='none')
+
+        if plotZoneGeom:
+            zoneCol = {zoneDict[z][0]+zoneDict[z][1]: 'w' for z in zoneDict}
+
+        for I, z in enumerate(zoneDict):
+            zoneName = zoneDict[z][0] + ', ' + zoneDict[z][1]
+            area = pnlA_nom*areaFactor if plotExtremesPerNominalArea else np.array(pnlA_all[z][2])*areaFactor
+            maxVal = np.squeeze(areaAvgStats_max[z][2]['peakMax'])
+            minVal = np.squeeze(areaAvgStats_min[z][2]['peakMin'])
+            
+            i, j = np.unravel_index(z, axs.shape)
+            ax = axs[i,j]
+            ax.semilogx(area, minVal, 'vr', label='min', **kwargs_min)
+            ax.semilogx(area, maxVal, '^b', label='max', **kwargs_max)
+            if overlayThis_min is not None:
+                ax.semilogx(overlayThis_min[z][2]['area'], overlayThis_min[z][2]['value'], label=overlayLabel_min, **kwargs_overlay_min)
+            if overlayThis_max is not None:
+                ax.semilogx(overlayThis_max[z][2]['area'], overlayThis_max[z][2]['value'], label=overlayLabel_max, **kwargs_overlay_max)
+
+            if invertYAxis:
+                ax.invert_yaxis()
+            if plotZoneGeom:
+                zoneCol_copy = zoneCol.copy()
+                zoneCol_copy[zoneDict[z][0]+zoneDict[z][1]] = zoneShadeColor
+                bounds = insetBounds # if insetBounds is isinstance(insetBounds, list) else insetBounds[z]
+                ax_inset = ax.inset_axes(bounds=bounds)
+                self.plotZones(ax=ax_inset, zoneCol=zoneCol_copy, drawEdge=True, **kwargs_zonePlots)
+                ax_inset.axis('off')
+                ax_inset.axis('equal')
+                # ax_inset.patch.set_facecolor('w')
+                # ax_inset.patch.set_alpha(0.2)
+                ax_inset.tick_params(axis='both', which='major', length=0)
+                ax_inset.set_xticklabels('')
+                ax_inset.set_yticklabels('')
+                for spine in ax_inset.spines.values():
+                    spine.set_visible(False)
+
+            if newFig:
+                ax.set_title(zoneName)
+                if i == axs.shape[0]-1:
+                    xLabel = r'Area [$m^2$]' if xLabel is None else xLabel
+                    ax.set_xlabel(xLabel)
+                if j == 0:
+                    yLabel = r'Peak Cp' if yLabel is None else yLabel
+                    ax.set_ylabel(yLabel)
+                if i == 0 and j == 0:
+                    ax.legend()
+                if xLimits is not None:
+                    ax.set_xlim(xLimits)
+                if yLimits is not None:
+                    ax.set_ylim(yLimits)
+
+                formatAxis(ax, **kwargs_ax)
+
+        if newFig:
+            plt.show()
+        return #fig, axs
+    
 class BldgCps():
     def __init__(self) -> None:
         self._members = []

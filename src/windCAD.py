@@ -697,7 +697,8 @@ class face:
         if newFig:
             ax.axis('equal')
         
-    def plotZones(self, ax=None, col='b', dotSz=3, lw=1.5, ls='--', mrkr='None', zoneCol=None, drawEdge=False, fill=True):
+    def plotZones(self, ax=None, zoneCol=None, drawEdge=False, fill=True, 
+                  kwargs_Edge={'color':'k', 'lw':0.5, 'ls':'-'}, kwargs_Fill={}):
         if zoneCol is None:
             nCol = len(self.zoneDictUniqe)
             c = plt.cm.tab20(np.linspace(0,1,nCol))
@@ -713,12 +714,11 @@ class face:
         for zDict in self.zoneDict:
             xy = transform(self.zoneDict[zDict][2], self.origin_plt, self.basisVectors_plt)
             if drawEdge:
-                ax.plot(xy[:,0], xy[:,1], 
-                        ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
+                ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
             if fill:
                 zn = self.zoneDict[zDict]
                 colIdx = zn[0] + zn[1]
-                ax.fill(xy[:,0], xy[:,1], facecolor=zoneCol[colIdx])
+                ax.fill(xy[:,0], xy[:,1], facecolor=zoneCol[colIdx], **kwargs_Fill)
         if newFig:
             ax.axis('equal')
 
@@ -945,6 +945,14 @@ class Faces:
         return tapName
     
     @property
+    def NominalPanelArea(self) -> List[float]:
+        nomArea = self._members[0].nominalPanelAreas
+        for f in self.members:
+            if f.nominalPanelAreas != nomArea:
+                raise ValueError('All faces must have the same nominal panel areas.')
+        return nomArea
+
+    @property
     def zoneDict(self):
         allZones = {}
         i = 0
@@ -1165,7 +1173,7 @@ class Faces:
         if newFig:
             ax.axis('equal')
 
-    def plotZones(self, ax=None, col='b', dotSz=3, lw=1.5, ls='--', mrkr='None', zoneCol=None, drawEdge=False, fill=True):
+    def plotZones(self, ax=None, zoneCol=None, drawEdge=False, fill=True, kwargs_Edge={'color':'k', 'lw':0.5, 'ls':'-'}, kwargs_Fill={}):
         if zoneCol is None:
             nCol = len(self.zoneDict)
             c = plt.cm.tab20(np.linspace(0,1,nCol))
@@ -1179,7 +1187,7 @@ class Faces:
             fig = plt.figure()
             ax = fig.add_subplot()
         for fc in self._members:
-            fc.plotZones(ax=ax, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr, zoneCol=zoneCol, drawEdge=drawEdge, fill=fill)
+            fc.plotZones(ax=ax, zoneCol=zoneCol, drawEdge=drawEdge, fill=fill, kwargs_Edge=kwargs_Edge, kwargs_Fill=kwargs_Fill)
         if newFig:
             ax.axis('equal')
 
