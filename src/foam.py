@@ -596,22 +596,26 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
     outDir = caseDir+"/_processed/"
     if not os.path.exists(outDir):
         os.mkdir(outDir)
-    print("Processing OpenFOAM case:\t"+caseDir)
-    print("Probe read from:\t\t"+postProcDir+probeName)
-    print("Target profile read from:\t"+str(targetProfile))
+    if showLog:
+        print("Processing OpenFOAM case:\t"+caseDir)
+        print("Probe read from:\t\t"+postProcDir+probeName)
+        print("Target profile read from:\t"+str(targetProfile))
     
-    print("  >> Reading probe data ...")
+        print("  >> Reading probe data ...")
     probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
-    print("             << Done!")
+    if showLog:
+        print("             << Done!")
     
     Z = probes[:,2]
     dt = np.mean(np.diff(time))
     
-    print("  >> Processing profile data.")
+    if showLog:
+        print("  >> Processing profile data.")
     name = caseName+"__"+probeName if name is None else name
     vel_LES = wind.profile(name=name,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
                           WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.DEFAULT_SI_UNITS)
-    print("             << Done!")
+    if showLog:
+        print("             << Done!")
     
     if writeToDataFile:
         print("  >> Writing data to file.")
@@ -624,7 +628,8 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
     else:
         vel_EXP = wind.profile(name="target",fileName=targetProfile,H=H)
         profiles = wind.Profiles((vel_EXP, vel_LES))
-    print("  >> Finished reading probe data.")
+    if showLog:
+        print("  >> Finished reading probe data.")
     figFile = outDir+vel_LES.name+"_profiles.pdf"
     if exportPlots:
         profiles.plotProfiles(figFile,normalize=normalize)
@@ -683,5 +688,214 @@ def writeProbeDict(file, points, fields=['p','U'], writeControl='adjustableRunTi
 
 
     pass
+
+#===============================================================================
+#================================ CLASSES ======================================
+#===============================================================================
+
+class foamCase:
+    def __init__(self, 
+                caseDir=None,
+                name=None,
+                trimTimeSegs:List[List[float]]=[0,0.5],
+                velProbeName_main=None,
+                velProbeName_all=None,
+                cpProbeName=None,
+                ) -> None:
+        self.caseDir = caseDir
+        self.name = name
+        self.trimTimeSegs = trimTimeSegs
+        self.velProbeName_main = velProbeName_main
+        self.velProbeName_all = velProbeName_all
+        self.cpProbeName = cpProbeName
+
+        self.mainProfile = None
+        self.__allProfiles = None
+
+    def Update(self, **kwargs):
+        if self.caseDir is not None:
+            if self.velProbeName_main is not None:
+                self.mainProfile = processVelProfile(self.caseDir, self.velProbeName_main, name=self.name, 
+                                                     exportPlots=False,trimTimeSegs=self.trimTimeSegs, H=self.H, showLog=False, **kwargs)
+            if self.velProbeName_all is not None:
+                self.__allProfiles = []
+                for probe in self.velProbeName_all:
+                    self.__allProfiles.append(processVelProfile(self.caseDir, probe, name=probe, exportPlots=False, 
+                                                                trimTimeSegs=self.trimTimeSegs, H=self.H, showLog=False, **kwargs))
+
+    @property
+    def allProfiles(self):
+        if self.__allProfiles is not None:
+            return wind.Profiles(self.__allProfiles)
+        else:
+            return None
+
+class inflowTuner:
+    def __init__(self,
+                 H = None,
+                 nSpectAvg=8,
+                 target:wind.profile=None,
+                 inflows:wind.Profiles=None,
+                 incidents:wind.Profiles=None,
+                 ) -> None:
+        self.H = H
+        self.nSpectAvg = nSpectAvg
+        self.target = target
+        self.inflows = inflows
+        self.incidents = incidents
+
+    @property
+    def allProfiles(self):
+        profs = []
+        if self.target is not None:
+            profs.append(self.target)
+        if self.inflows is not None:
+            profs.extend(self.inflows.profiles)
+        if self.incidents is not None:
+            profs.extend(self.incidents.profiles)
+        return wind.Profiles(profs)
+
+    def targetProfileTable(self, castToUniform=False, nPts=1000, smoothWindow=1, kwargs_smooth={}) -> pd.DataFrame:
+        if self.target is None:
+            return None
+        if np.isscalar(smoothWindow):
+            smoothWindow = [smoothWindow,]*7
+
+        table = pd.DataFrame()
+        if castToUniform:
+            table['Z'] = np.linspace(self.target.Z[0], np.array(self.target.Z)[-1], nPts)
+            table['U'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.U), smoothWindow[0], **kwargs_smooth)
+            table['Iu'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.Iu), smoothWindow[1], **kwargs_smooth)
+            table['Iv'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.Iv), smoothWindow[2], **kwargs_smooth)
+            table['Iw'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.Iw), smoothWindow[3], **kwargs_smooth)
+            table['xLu'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.xLu), smoothWindow[4], **kwargs_smooth)
+            table['xLv'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.xLv), smoothWindow[5], **kwargs_smooth)
+            table['xLw'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.xLw), smoothWindow[6], **kwargs_smooth)
+        else:
+            table['Z'] = self.target.Z
+            table['U'] = wind.smooth(self.target.U, smoothWindow, **kwargs_smooth)
+            table['Iu'] = wind.smooth(self.target.Iu, smoothWindow, **kwargs_smooth)
+            table['Iv'] = wind.smooth(self.target.Iv, smoothWindow, **kwargs_smooth)
+            table['Iw'] = wind.smooth(self.target.Iw, smoothWindow, **kwargs_smooth)
+            table['xLu'] = wind.smooth(self.target.xLu, smoothWindow, **kwargs_smooth)
+            table['xLv'] = wind.smooth(self.target.xLv, smoothWindow, **kwargs_smooth)
+            table['xLw'] = wind.smooth(self.target.xLw, smoothWindow, **kwargs_smooth)
+        return table
     
-    
+    def addInflow(self, caseName, sampleName, name=None):
+
+        tFile = caseName+"/"+sampleName+"/time.npy"
+        Ufile = caseName+"/"+sampleName+"/UofT.npy"
+        Vfile = caseName+"/"+sampleName+"/VofT.npy"
+        Wfile = caseName+"/"+sampleName+"/WofT.npy"
+        probeFile = caseName+"/"+sampleName+"/probes.npy"
+
+        time = np.load(tFile)
+        UofT = np.load(Ufile)
+        VofT = np.load(Vfile)
+        WofT = np.load(Wfile)
+        probes = np.load(probeFile)
+
+        dt = time[2] - time[1]
+
+        prof = wind.profile(name=name, Z=probes[:,2], UofT=UofT, VofT=VofT, WofT=WofT, H=self.H, dt=dt, nSpectAvg=self.nSpectAvg)
+        if self.inflows is None:
+            self.inflows = wind.Profiles([prof,])
+        else:
+            self.inflows.profiles.append(prof)
+
+    def addIncident(self, caseDir, probeName, name=None, trimTimeSegs=[[0, 1.0],], showLog=False):
+        prof = processVelProfile(caseDir,probeName=probeName,name=name, exportPlots=False,showLog=showLog, trimTimeSegs=trimTimeSegs,H=self.H)
+        if self.incidents is None:
+            self.incidents = wind.Profiles([prof,])
+        else:
+            self.incidents.profiles.append(prof)
+
+    def __curveRatio(self, x1, x2, y1, y2, smoothWindow=1, castToUniform=True, nPoints=100, kwargs_smooth={}):
+        if castToUniform:
+            all_x = np.linspace(np.min(np.concatenate((x1, x2))), np.max(np.concatenate((x1, x2))), nPoints)
+        else:
+            all_x = np.unique(np.sort(np.concatenate((x1, x2))))
+        all_y1 = np.interp(all_x, x1, y1, left=y1[0], right=y1[-1])
+        all_y2 = np.interp(all_x, x2, y2, left=y2[0], right=y2[-1])
+        all_y = wind.smooth(all_y1/all_y2, window_len=smoothWindow, **kwargs_smooth)
+        return all_x, all_y
+
+    def __profRatio(self, prof1, prof2, smoothWindow=1, castToUniform=True, nPoints=100, LES_useRange_Z=[0, 100], kwargs_smooth={}):
+        table = pd.DataFrame()
+        s = np.argmin(np.abs(prof2.Z - LES_useRange_Z[0]))
+        e = np.argmin(np.abs(prof2.Z - LES_useRange_Z[1]))
+        
+        table['Z'], table['U'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.U, prof2.U[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+                                                   kwargs_smooth=kwargs_smooth)
+        _, table['Iu'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.Iu, prof2.Iu[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+                                           kwargs_smooth=kwargs_smooth)
+        _, table['Iv'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.Iv, prof2.Iv[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+                                           kwargs_smooth=kwargs_smooth)
+        _, table['Iw'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.Iw, prof2.Iw[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+                                           kwargs_smooth=kwargs_smooth)
+        _, table['xLu'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.xLu, prof2.xLu[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+                                           kwargs_smooth=kwargs_smooth)
+        _, table['xLv'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.xLv, prof2.xLv[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+                                           kwargs_smooth=kwargs_smooth)
+        _, table['xLw'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.xLw, prof2.xLw[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+                                           kwargs_smooth=kwargs_smooth)
+        e = np.argmin(np.abs(table['Z'] - LES_useRange_Z[1]))
+        for comp in ['U', 'Iu', 'Iv', 'Iw', 'xLu', 'xLv', 'xLw']:
+            table[comp][e:] = table[comp][e-1]
+        return table
+
+    def getScaledTarget(self, smoothWindow=1, scaleByInflow=False, nPoints=100, castToUniform=True, LES_useRange_Z=[0, 100], kwargs_smooth={}):
+        # if self.target is None or self.incidents is None or (self.inflows is None and scaleByInflow):
+        #     return None, None, None
+        
+        target = self.targetProfileTable(smoothWindow=smoothWindow, kwargs_smooth=kwargs_smooth)
+        # target = self.targetProfileTable(smoothWindow=10, castToUniform=True, kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True, 
+        #                                                                                 'paddingFactor':2, 'paddingMode':'edge'})
+        names = []
+        if scaleByInflow:
+            if self.inflows is None:
+                profs = wind.Profiles()
+                names = []
+            else:
+                profs = self.inflows.copy()
+                names = [prof.name for prof in self.inflows.profiles]
+        else:
+            if self.incidents is None:
+                profs = wind.Profiles()
+                names = []
+            else:
+                profs = self.incidents.copy()
+                names = [prof.name for prof in self.incidents.profiles]
+        
+        factors = []
+        scaledTables = []
+        for i, prof in enumerate(profs.profiles):
+            factors.append(self.__profRatio(self.target, prof, smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, LES_useRange_Z=LES_useRange_Z, kwargs_smooth=kwargs_smooth))
+
+            scaledTable = target.copy()
+            for col in ['U', 'Iu', 'Iv', 'Iw', 'xLu', 'xLv', 'xLw']:
+                scaledTable[col] *= factors[i][col]
+            scaledTables.append(scaledTable)
+        return scaledTables, factors, names
+
+    def plotProfiles(self, figsize=[15,12], zLim=[0,10], normalize=True, lw = 1.5, ms=3,
+                            xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
+                            xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
+                            lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
+                            kwargs_plt=None, kwargs_ax={}):
+        longListOfColors = ['r', 'b', 'g', 'm', 'k', 'c', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'lime', 'teal', 'navy', ]
+       
+        if kwargs_plt is None:
+            kwargs_plt = []
+            kwargs_plt.append({'color':'k', 'lw':1, 'ls':'None', 'marker':'o', 'ms':ms})
+            if self.inflows is not None:
+                for i, prof in enumerate(self.inflows.profiles):
+                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'--'})
+            if self.incidents is not None:
+                for i, prof in enumerate(self.incidents.profiles):
+                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'-'})
+
+        self.allProfiles.plotProfile_basic2(figsize=figsize, yLimits=zLim, normalize=normalize, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, 
+                                            xLimits_Iw=xLimits_Iw, xLimits_uw=xLimits_uw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
+                                            xLabel=xLabel, zLabel=zLabel, lgnd_kwargs=lgnd_kwargs, kwargs_plt=kwargs_plt, kwargs_ax=kwargs_ax)

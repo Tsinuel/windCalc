@@ -13,6 +13,7 @@ import shapely.geometry as shp
 import json
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
+import matplotlib.patches as mpatches
 
 from shapely.ops import voronoi_diagram
 from shapely.validation import make_valid
@@ -254,6 +255,94 @@ def meshRegionWithPanels(region,area,minAreaFactor=0.5,debug=False) -> Tuple[shp
     panels = shp.MultiPolygon(panels)
     return panels, areas
 
+def meshRegionWithWiggle(region, area_orig, minAreaFactor=0.5, debug=False, 
+                        tol_factorFromRegionArea=0.001, wiggle_h=1.001, wiggle_r=1.001, wiggleFactorLimit=1.5, maxNumTrial=1000) -> Tuple[shp.MultiPolygon, List[float]]:
+    '''
+    This function is similar to meshRegionWithPanels() but it allows for a wiggle factor to be applied to the target area.
+    The wiggle factor is applied in a loop until the area of the panels is within the tolerance of the target area.
+
+    Parameters
+    ----------
+    region : np.ndarray
+        A 2D array of the vertices of the region to be meshed.
+    area_orig : float
+        The target area of the panels.
+    minAreaFactor : float, optional (default=0.5)
+        The minimum area factor to be used in the first iteration of the meshing.
+    debug : bool, optional (default=False)
+        If True, the meshing process will be plotted.
+    tol_factorFromRegionArea : float, optional (default=0.001) 
+        The tolerance of the difference between the area of the panels and the area of the region.
+    wiggle_h : float, optional (default=1.001) 
+        The wiggle factor to be applied to the target area.
+    wiggle_r : float, optional (default=1.001)
+        The rate of increase of the wiggle factor.
+    wiggleFactorLimit : float, optional (default=1.2)
+        The maximum wiggle factor to be applied.
+
+    Returns
+    -------
+    panels : shp.MultiPolygon
+        A shapely MultiPolygon object of the panels.
+    areas : List[float]
+        A list of the areas of the panels.
+    '''
+    if debug:
+        print(f"Region: shape {region.shape}, {region}\n")
+        print(f"NominalArea = {area_orig}")
+        print("n \tfactor \t\tArea")
+    area = area_orig
+    panels, areas = meshRegionWithPanels(region, area, minAreaFactor=minAreaFactor, debug=False)
+    zoneArea = shp.Polygon(region).area
+    tiledArea = panels.area
+
+    all_areas = [area,]
+    sign = 1
+    count = 0
+    while np.abs(zoneArea - tiledArea) > tol_factorFromRegionArea*zoneArea:
+        area = area_orig
+        sign *= -1
+        factor = np.power(wiggle_h, sign*wiggle_r*count)
+        if factor > wiggleFactorLimit:
+            print(f"Reached the limit of wiggle factor of {wiggleFactorLimit}. Breaking the loop.")
+            break
+        if count > maxNumTrial:
+            print(f"Reached the maximum number of trials of {count}. Breaking the loop.")
+            break
+        area *= factor
+        all_areas.append(area)
+        count += 1
+
+        try:
+            panels, areas = meshRegionWithPanels(region, area, minAreaFactor=minAreaFactor, debug=False)
+        except:
+            if debug:
+                print(f"An error occured while meshing the region with area = {area}. Skipping it to the next area.")
+            continue
+        zoneArea = shp.Polygon(region).area
+        tiledArea = panels.area
+        if debug:
+            print(f"{count} \t{factor:.6f} \t{area:.6f}")
+    if debug:
+        plt.figure()
+        x,y = shp.Polygon(region).exterior.xy
+        plt.plot(x,y,'-b',lw=3)
+        for p in panels.geoms:
+            x,y = p.exterior.xy
+            plt.fill(x,y,'r',alpha=0.5)
+            plt.plot(x,y,'-k',alpha=1,lw=0.5)
+        plt.axis('equal')
+        plt.show()
+
+        plt.figure()
+        plt.plot(all_areas,'-o')
+        plt.xlabel('Iteration')
+        plt.ylabel('Tested areas')
+        plt.show()
+        print(f"Finito! Final nominal area: {area}")
+
+    return panels, areas
+
 def calculateTapWeightsPerPanel(panels:shp.MultiPolygon,tapsAll,tapIdxAll, wghtTolerance=0.0000001, showLog=True):    
     weights = ()
     tapIdxs = ()
@@ -320,6 +409,59 @@ class face:
                 file_basic=None,
                 file_derived=None,
                 ):
+        """
+        Represents a 2D planar face of a building. The face is defined by its vertices in the face-local coordinate system. The face-local coordinate system is defined by its origin and basis vectors in the main 3D coordinate system. The face-local coordinate system is also defined by its origin and basis vectors in the 2D coordinate system for plotting. The face is also defined by its taps. The taps are defined by their numbers, names, and coordinates in the face-local coordinate system. Component and cladding load zoning can be defined for the face according to a pre-defined dictionary that specifies the design code zonings.
+
+        Parameters
+        ----------
+        ID : int, optional
+            The ID of the face. The default is None.
+        name : str, optional
+            The name of the face. The default is None.
+        note : str, optional
+            A note about the face. The default is None.
+        origin : np.ndarray, optional
+            The origin of the face-local coordinate system. The default is None.
+        basisVectors : np.ndarray, optional
+            The basis vectors of the face-local coordinate system. The default is None.
+        origin_plt : np.ndarray, optional
+            The origin of the face-local coordinate system for plotting. The default is None.
+        basisVectors_plt : np.ndarray, optional
+            The basis vectors of the face-local coordinate system for plotting. The default is None.
+        vertices : np.ndarray, optional
+            [Nv, 2]
+            The vertices of the face in face-local coordinate system. The default is None.
+        tapNo : List[int], optional
+            The tap numbers of the face. The default is None.
+        tapIdx : List[int], optional
+            The tap indices in the main building-level list of taps. The default is None.
+        tapName : List[str], optional
+            The tap names of the face. The default is None.
+        badTaps : List[int], optional
+            The tap numbers of the bad taps in the face. The default is None.
+        allBldgTaps : List[int], optional
+            The tap numbers of all the taps of the building. The default is None.
+        tapCoord : np.ndarray, optional
+            The coordinates of the taps of the face in the face-local coordinate system. The default is None.
+        zoneDict : dict, optional
+            The zoning dictionary of the face. It is defined as a dictionary with the following structure:
+                zoneDict = {
+                                0:['Design Code','zone name', np.array(<vertices of the zone>)],
+                        }
+            The 'Design code' is the building code, such as NBCC, ASCE, etc. The 'zone name' is the name of the zone, such as 'z1', 'z2', etc. The vertices define the zone boundary. The default is None.
+        nominalPanelAreas : np.ndarray, optional
+            List of the nominal panel areas to generate panels of the face. The default is None.
+        numOfNominalPanelAreas : int, optional
+            The number of nominal panel areas to generate panels of the face. The default is 5.
+        file_basic : str, optional
+            The path to the file that contains the basic information of the face. The default is None.
+        file_derived : str, optional
+            The path to the file that contains the derived information of the face. The default is None.
+
+        Returns
+        -------
+        None.
+        """
         # basics
         self.ID = ID
         self.name = name
@@ -429,7 +571,8 @@ class face:
             for a,area in enumerate(self.nominalPanelAreas):
                 # print(f"\t\tWorking on nominal area: {area}")
                 # print(f"zoneBoundary: {zoneBoundary}, area: {area}")
-                pnls,areas = meshRegionWithPanels(zoneBoundary,area,debug=False)
+                # pnls,areas = meshRegionWithPanels(zoneBoundary,area,debug=False)
+                pnls,areas = meshRegionWithWiggle(zoneBoundary,area,debug=False) 
 
                 tapsInSubzone = []
                 idxInSubzone = []
@@ -471,12 +614,15 @@ class face:
                 pnlArea_z.append(pnlArea_a)
             self.panelAreas.append(pnlArea_z)
         
-        print(f"Shape of 'panels': {np.shape(np.array(self.panels,dtype=object))}")
-        print(f"Shape of 'panelAreas': {np.shape(np.array(self.panelAreas,dtype=object))}")
-        print(f"Shape of 'pnlWeights': {np.shape(np.array(self.tapWghtPerPanel,dtype=object))}")
-        print(f"Shape of 'tapIdxByPnl': {np.shape(np.array(self.tapIdxPerPanel,dtype=object))}")
-        print(f"Indecies of nominalPanelArea per each zone with error of unequal area between total sum of panel areas vs. zone: \n\t\t\t{self.error_in_zones}")
-        print(f"Indecies of panels within nominalPanelArea within zone with tap weights that do not sum to 1 : \n\t\t\t{self.error_in_panels}")
+        # print(f"Shape of 'panels': {np.shape(np.array(self.panels,dtype=object))}")
+        # print(f"Shape of 'panelAreas': {np.shape(np.array(self.panelAreas,dtype=object))}")
+        # print(f"Shape of 'pnlWeights': {np.shape(np.array(self.tapWghtPerPanel,dtype=object))}")
+        # print(f"Shape of 'tapIdxByPnl': {np.shape(np.array(self.tapIdxPerPanel,dtype=object))}")
+        print(f"Done generating panels ...")
+        print(f"Error summary in paneling:")
+        print(json.dumps(self.panelingErrors, indent=4))
+        # print(f"Indecies of nominalPanelArea per each zone with error of unequal area between total sum of panel areas vs. zone: \n\t\t\t{self.error_in_zones}")
+        # print(f"Indecies of panels within nominalPanelArea within zone with tap weights that do not sum to 1 : \n\t\t\t{self.error_in_panels}")
 
     """--------------------------------- Properties -----------------------------------"""
     @property
@@ -557,6 +703,19 @@ class face:
                 allZones[i] = x
                 i += 1
         return allZones
+
+    @property
+    def panelingErrors(self):
+        if self.error_in_zones is None or self.error_in_panels is None:
+            return None
+        errDict = {}
+        for z,zn in enumerate(self.zoneDict):
+            zn_ID = self.zoneDict[zn][0] + ' -- ' + self.zoneDict[zn][1]
+            errDict[zn_ID] = {f"nom. areas idxs with tiling errors {self.nominalPanelAreas}": self.error_in_zones[z]}
+            errDict[zn_ID]['tap idxs with weight errors'] = {}
+            for a,area in enumerate(self.nominalPanelAreas):
+                errDict[zn_ID]['tap idxs with weight errors'][f"A={area}"] = self.error_in_panels[z][a]
+        return errDict
 
     """-------------------------------- Data handlers ---------------------------------"""
     def Update(self):
@@ -652,39 +811,53 @@ class face:
         self.from_dict(basic, derived=derived)
 
     """--------------------------------- Plotters -------------------------------------"""
-    def plotEdges(self, ax=None, showName=True, col='k', dotSz=3, lw=2, ls='-', mrkr='None'):
+    def plotEdges(self, ax=None, showName=True, drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0,
+                  kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'}, 
+                  kwargs_Name={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.3]},
+                  ):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         xy = np.array(self.verticesPlt)
-        ax.plot(xy[:,0], xy[:,1], 
-                ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
+        ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
         if showName:
-            ax.text(np.mean([min(xy[:,0]), max(xy[:,0])]), np.mean([min(xy[:,1]), max(xy[:,1])]), self.name, 
-                    ha='center', va='center', color=col, backgroundcolor=[1,1,1,0.3],)
+            ax.text(np.mean([min(xy[:,0]), max(xy[:,0])]), np.mean([min(xy[:,1]), max(xy[:,1])]), self.name, **kwargs_Name)
+        if drawOrigin:
+            # ax.plot(self.origin_plt[0], self.origin_plt[1], 'ko')
+            pass
+        if drawBasisVectors:
+            # basis vectors of the local coord sys in 2D (not for the plotting).
+            # windowSize = 0.05*np.max([np.max(xy[:,0])-np.min(xy[:,0]), np.max(xy[:,1])-np.min(xy[:,1])])
+            # arrowLength = basisVectorLength*windowSize
+            # ax.arrow(self.origin_plt[0], self.origin_plt[1], self.basisVectors_plt[0][0]*arrowLength, self.basisVectors_plt[0][1]*arrowLength, color='r', width=0.01*windowSize, head_width=0.15*windowSize, head_length=0.2*windowSize)
+            # ax.arrow(self.origin_plt[0], self.origin_plt[1], self.basisVectors_plt[1][0]*arrowLength, self.basisVectors_plt[1][1]*arrowLength, color='g', width=0.01*windowSize, head_width=0.15*windowSize, head_length=0.2*windowSize)
+            # ax.text(self.origin_plt[0]+self.basisVectors_plt[0][0]*arrowLength + 0.15*windowSize, self.origin_plt[1]+self.basisVectors_plt[0][1]*arrowLength + 0.15*windowSize, 'x', **kwargs_Name)
+            # ax.text(self.origin_plt[0]+self.basisVectors_plt[1][0]*arrowLength + 0.15*windowSize, self.origin_plt[1]+self.basisVectors_plt[1][1]*arrowLength + 0.15*windowSize, 'y', **kwargs_Name)
+            pass
         if newFig:
             ax.axis('equal')
 
-    def plotTaps(self, ax=None, showTapNo=False, fontsize='small', col='k', dotSz=3, lw=2, ls='None', mrkr='.'):
+    def plotTaps(self, ax=None, showTapNo=False, 
+                 kwargs_dots={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
+                 kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
+                ):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         xy = np.array(self.tapCoordPlt)
-        ax.plot(xy[:,0], xy[:,1], 
-                ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
+        ax.plot(xy[:,0], xy[:,1], **kwargs_dots)
         if showTapNo:
             for t,tpNo in enumerate(self.tapNo):
-                ax.text(xy[t,0], xy[t,1], str(tpNo),
-                        ha='left', va='top', rotation=45, fontsize=fontsize, color=col, backgroundcolor=[1,1,1,0.3],)
-            pass
+                ax.text(xy[t,0], xy[t,1], str(tpNo), **kwargs_text)
         if newFig:
             ax.axis('equal')
     
-    def plotTribs(self, ax=None, col='r', dotSz=3, lw=0.5, ls='-.', mrkr='None'):
+    def plotTribs(self, ax=None, 
+                  kwargs_Edge={'color':'r', 'lw':0.5, 'ls':'-', 'marker':'None', 'markersize':3},):
         newFig = False
         if ax is None:
             newFig = True
@@ -692,47 +865,80 @@ class face:
             ax = fig.add_subplot()
         for trib in self.tapTribs.geoms:
             xy = transform(np.transpose(trib.exterior.xy), self.origin_plt, self.basisVectors_plt) 
-            ax.plot(xy[:,0], xy[:,1], 
-                    ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
+            ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
         if newFig:
             ax.axis('equal')
         
-    def plotZones(self, ax=None, zoneCol=None, drawEdge=False, fill=True, 
-                  kwargs_Edge={'color':'k', 'lw':0.5, 'ls':'-'}, kwargs_Fill={}):
+    def plotZones(self, ax=None, zoneCol=None, drawEdge=False, fill=True, showLegend=True, zonesToPlot=None, overlayZoneIdx=False,
+                  kwargs_Edge={'color':'k', 'lw':0.5, 'ls':'-'}, 
+                  kwargs_Fill={}, 
+                  kwargs_text={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.3]},
+                  kwargs_Legend={'loc':'upper left', 'bbox_to_anchor':(1.05, 1), 'borderaxespad':0.}):
         if zoneCol is None:
             nCol = len(self.zoneDictUniqe)
             c = plt.cm.tab20(np.linspace(0,1,nCol))
             zoneCol = {}
             for i,z in enumerate(self.zoneDictUniqe):
-                zn = self.zoneDict[z]
-                zoneCol[zn[0]+zn[1]] = c[i]
+                zn = self.zoneDictUniqe[z]
+                zoneCol[zn[0]+', '+zn[1]] = c[i]
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
+        if zonesToPlot is None:
+            zonesToPlot = self.zoneDict.keys()
         for zDict in self.zoneDict:
+            if zDict not in zonesToPlot:
+                continue
             xy = transform(self.zoneDict[zDict][2], self.origin_plt, self.basisVectors_plt)
             if drawEdge:
                 ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
             if fill:
                 zn = self.zoneDict[zDict]
-                colIdx = zn[0] + zn[1]
+                colIdx = zn[0]+', '+zn[1]
                 ax.fill(xy[:,0], xy[:,1], facecolor=zoneCol[colIdx], **kwargs_Fill)
+            if overlayZoneIdx:
+                ax.text(np.mean([min(xy[:,0]), max(xy[:,0])]), np.mean([min(xy[:,1]), max(xy[:,1])]), str(zDict), **kwargs_text)
         if newFig:
             ax.axis('equal')
+        if showLegend:
+            patches = []
+            for i,z in enumerate(zoneCol):
+                patches.append(mpatches.Patch(color=zoneCol[z], label=z))
+            ax.legend(handles=patches, **kwargs_Legend)
 
-    def plotPanels(self, aIdx=0, ax=None, col='g', dotSz=3, lw=0.5, ls='-', mrkr='None'):
+        return zoneCol
+
+    def plotPanels(self, ax=None, aIdx=0, panelsToPlot=None, fill=False, overlayPanelIdx=False,
+                    kwargs_Edge={'color':'g', 'lw':0.5, 'ls':'-', 'marker':'None', 'markersize':3}, 
+                    kwargs_Fill={'facecolor':[0,1,0,0.3], 'edgecolor':'None', 'lw':0.5, 'ls':'-'},
+                    kwargs_text={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.0]},
+                   ):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        for z,_ in enumerate(self.zoneDict):
-            for p in self.panels[z][aIdx].geoms:
+        if panelsToPlot is None:
+            panelsToPlot = {}
+            for z,zKey in enumerate(self.zoneDict):
+                panelsToPlot[zKey] = {}
+                for a, aKey in enumerate(self.nominalPanelAreas):
+                    panelsToPlot[zKey][a] = np.arange(len(self.panels[z][a].geoms))
+                    
+        for zIdx,zKey in enumerate(self.zoneDict):
+            if zKey not in panelsToPlot.keys():
+                continue
+            for pIdx,p in enumerate(self.panels[zIdx][aIdx].geoms):
+                if pIdx not in panelsToPlot[zKey][aIdx]:
+                    continue
                 xy = transform(np.transpose(p.exterior.xy), self.origin_plt, self.basisVectors_plt)
-                ax.plot(xy[:,0], xy[:,1], 
-                    ls=ls, color=col, lw=lw, marker=mrkr, markersize=dotSz)
+                ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
+                if fill:
+                    ax.fill(xy[:,0], xy[:,1], **kwargs_Fill)
+                if overlayPanelIdx:
+                    ax.text(np.mean([min(xy[:,0]), max(xy[:,0])]), np.mean([min(xy[:,1]), max(xy[:,1])]), str(pIdx), **kwargs_text)
         if newFig:
             ax.axis('equal')
 
@@ -863,6 +1069,15 @@ class face:
                 ax.set_frame_on(False)
             plt.show()
 
+    def plotTilingErrors(self, ax=None, col='r', dotSz=3, lw=0.5, ls='-', mrkr='None'):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot()
+        self.plotEdges(ax=ax, col='k', dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
+        if newFig:
+            ax.axis('equal')
 
 class Faces:
     """---------------------------------- Internals -----------------------------------"""
@@ -1077,6 +1292,15 @@ class Faces:
         return None
         pass
 
+    @property
+    def panelingErrors(self):
+        if self._numOfMembers() == 0:
+            return None
+        errDict = {}
+        for f, fc in enumerate(self._members):
+            errDict[f"Face {f+1}"] = fc.panelingErrors
+        return errDict
+
     """-------------------------------- Data handlers ---------------------------------"""
     def Update(self):
         for fc in self.members:
@@ -1140,65 +1364,82 @@ class Faces:
             self.members.append(mem)
 
     """--------------------------------- Plotters -------------------------------------"""
-    def plotEdges(self, ax=None, showName=True, col='k', dotSz=3, lw=2, ls='-', mrkr='None'):
+    def plotEdges(self, ax=None, showName=True, 
+                  kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'},
+                  ):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         for fc in self._members:
-            fc.plotEdges(ax=ax, showName=showName, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
+            fc.plotEdges(ax=ax, showName=showName, kwargs_Edge=kwargs_Edge)
         if newFig:
             ax.axis('equal')
 
-    def plotTaps(self, ax=None, showTapNo=False, fontsize='small', col='k', dotSz=3, lw=2, ls='None', mrkr='.'):
+    def plotTaps(self, ax=None, showTapNo=False, 
+                 kwargs_dots={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
+                 kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         for fc in self._members:
-            fc.plotTaps(ax=ax, showTapNo=showTapNo, fontsize=fontsize, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
+            fc.plotTaps(ax=ax, showTapNo=showTapNo, kwargs_dots=kwargs_dots, kwargs_text=kwargs_text)
         if newFig:
             ax.axis('equal')
 
-    def plotTribs(self, ax=None, col='r', dotSz=3, lw=0.5, ls='-.', mrkr='None'):
+    def plotTribs(self, ax=None, 
+                  kwargs_Edge={'color':'r', 'lw':0.5, 'ls':'-', 'marker':'None', 'markersize':3},
+                  ):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         for fc in self._members:
-            fc.plotTribs(ax=ax, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
+            fc.plotTribs(ax=ax, kwargs_Edge=kwargs_Edge)
         if newFig:
             ax.axis('equal')
 
-    def plotZones(self, ax=None, zoneCol=None, drawEdge=False, fill=True, kwargs_Edge={'color':'k', 'lw':0.5, 'ls':'-'}, kwargs_Fill={}):
+    def plotZones(self, ax=None, zoneCol=None, drawEdge=True, fill=True, showLegend=True,
+                  kwargs_Edge={'color':'k', 'lw':0.5, 'ls':'-'}, 
+                  kwargs_Fill={},
+                  kwargs_Legend={'loc':'upper left', 'bbox_to_anchor':(1.05, 1), 'borderaxespad':0.}):
         if zoneCol is None:
             nCol = len(self.zoneDict)
             c = plt.cm.tab20(np.linspace(0,1,nCol))
             zoneCol = {}
             for i,z in enumerate(self.zoneDict):
                 zn = self.zoneDict[z]
-                zoneCol[zn[0]+zn[1]] = c[i]
+                zoneCol[zn[0]+', '+zn[1]] = c[i]
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         for fc in self._members:
-            fc.plotZones(ax=ax, zoneCol=zoneCol, drawEdge=drawEdge, fill=fill, kwargs_Edge=kwargs_Edge, kwargs_Fill=kwargs_Fill)
+            fc.plotZones(ax=ax, zoneCol=zoneCol, drawEdge=drawEdge, fill=fill, showLegend=False, kwargs_Edge=kwargs_Edge, kwargs_Fill=kwargs_Fill)
         if newFig:
             ax.axis('equal')
+        if showLegend:
+            patches = []
+            for i,z in enumerate(zoneCol):
+                patches.append(mpatches.Patch(color=zoneCol[z], label=z))
+            ax.legend(handles=patches, **kwargs_Legend)
+        return zoneCol
 
-    def plotPanels(self, ax=None, aIdx=0, col='g', dotSz=3, lw=0.5, ls='-', mrkr='None'):
+    def plotPanels(self, ax=None, aIdx=0, 
+                   kwargs_Edge={'color':'g', 'lw':0.5, 'ls':'-', 'marker':'None', 'markersize':3},
+                   ):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         for fc in self._members:
-            fc.plotPanels(ax=ax, aIdx=aIdx, col=col, dotSz=dotSz, lw=lw, ls=ls, mrkr=mrkr)
+            fc.plotPanels(ax=ax, aIdx=aIdx, kwargs_Edge=kwargs_Edge)
         if newFig:
             ax.axis('equal')
 

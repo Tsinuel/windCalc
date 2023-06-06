@@ -13,6 +13,7 @@ import shapely.geometry as shp
 import matplotlib.pyplot as plt
 import matplotlib.lines as lines
 import json
+import copy
 
 import windPlotting as wplt
 import windCAD
@@ -192,6 +193,30 @@ def lowpass(x, fs, fc, axis=-1, order = 4, resample=False):
     if resample:
         y = signal.resample(y, int(np.shape(y)[axis] * fc / fs), axis=axis)
     return y
+
+def smooth(x, window_len=11, window:Literal['flat', 'hanning', 'hamming', 'bartlett', 'blackman']='hanning', 
+           mode:Literal['same', 'valid', 'full', 'wrap', 'constant']='valid',
+           usePadding=True, paddingFactor=0.5, paddingMode='edge'):
+    if window_len<3:
+        return x
+    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+        raise ValueError("Window must be one of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
+    
+    half_window = np.floor(window_len*paddingFactor).astype(int)
+    if usePadding:
+        x = np.pad(x, (half_window,half_window), mode=paddingMode)
+
+    s=np.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]]
+    if window == 'flat': #moving average
+        w=np.ones(window_len,'d')
+    else:
+        w=eval('np.'+window+'(window_len)')
+    y=np.convolve(w/w.sum(),s,mode=mode)
+    y = y[int(window_len/2-1):-int(window_len/2)]
+    if usePadding:
+        return y[half_window:-half_window]
+    else:
+        return y
 
 def vonKarmanSuu(n,U,Iu,xLu):
     return np.divide((4*xLu*(Iu**2)*U), np.power((1 + 70.8*np.power(n*xLu/U,2)),5/6))
@@ -1099,6 +1124,9 @@ class profile:
         # # self.__updateUh()
         pass
 
+    def copy(self):
+        return copy.deepcopy(self)
+
     """--------------------------------- Plotters -------------------------------------"""
     def plotProfile_any(self, fld, ax=None, label=None, normalize=True, overlay_H=True, xLabel=None, yLabel=None, xLimits=None, yLimits=None, 
                         kwargs={'color': 'k', 'linestyle': '-'}, kwargs_ax={}, kwargs_Hline={'color': 'k', 'linestyle': '--', 'linewidth': 0.5}):
@@ -1123,8 +1151,9 @@ class profile:
             yLabel = 'Z' if yLabel is None else yLabel
 
         ax.plot(F, Z, label=label, **kwargs)
+        ax.axvline(x=0, label='_', c='k', ls='-', lw=0.5)
         if overlay_H:
-            ax.axhline(y=H, **kwargs_Hline)
+            ax.axhline(y=H, label='_', **kwargs_Hline)
         ax.set_ylabel(yLabel)
         ax.set_xlabel(xLabel)
         if xLimits is not None:
@@ -1208,7 +1237,9 @@ class profile:
         
         if newFig:
             axs[0,2].axis('off')
-            fig.legend(handles=axs[0,0].get_lines(), bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning)
+                fig.legend(handles=axs[0,0].get_lines(), bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
             for ax in axs.flatten():
                 formatAxis(ax, **kwargs_ax)
             plt.show()
@@ -1295,6 +1326,7 @@ class profile:
                                 alwaysShowFig=alwaysShowFig
                                 )   
 
+
 class Profiles:
     def __init__(self, profiles=[]):
         self._currentIndex = 0
@@ -1319,6 +1351,9 @@ class Profiles:
     @property
     def N(self):
         return len(self.profiles)
+
+    def copy(self):
+        return copy.deepcopy(self)
 
     def plot(self, figsize=None, landscape=True, 
              kwargs_profile={}, 
@@ -1463,8 +1498,28 @@ class Profiles:
                         nCols=4
                         )
     
-    def plotAllProfiles(self, fig=None, ax=None, xLim=None, yLim=None):
-        pass
+    def plotProfile_basic2(self, figsize=[12,10], label=None, normalize=True,
+                            xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
+                            xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
+                            yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
+                            kwargs_plt=None, kwargs_ax={}):
+        fig, axs = plt.subplots(3,3)
+        fig.set_size_inches(figsize)
+
+        kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
+
+        for i, prof in enumerate(self.profiles):
+            prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, 
+                                    xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, xLimits_uw=xLimits_uw, 
+                                    yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+        
+        axs[0,2].axis('off')
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning)
+            fig.legend(handles=axs[0,0].get_lines(), bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
+        for ax in axs.flatten():
+            formatAxis(ax, **kwargs_ax)
+        plt.show()
 
     def plotTimeHistory(self,
                     figFile=None,
@@ -2109,6 +2164,9 @@ class bldgCp(windCAD.building):
                 faces: List[windCAD.face] = [], faces_file_basic=None, faces_file_derived=None,
                 # Inputs for the derived class
                 caseName=None,
+                notes_Cp=" ",
+                AoA_zero_deg_basisVector=None,
+                AoA_rotation_direction:Literal['CW','CCW']=None,
                 refProfile:profile=None,
                 Zref_input=None,  # for the Cp TH being input below
                 Uref_input=None,  # for the Cp TH being input below
@@ -2129,6 +2187,7 @@ class bldgCp(windCAD.building):
                         faces_file_basic=faces_file_basic, faces_file_derived=faces_file_derived)
 
         self.name = caseName
+        self.notes_Cp = notes_Cp
         self.refProfile:profile = refProfile
         self.samplingFreq = samplingFreq
         self.airDensity = airDensity
@@ -2379,11 +2438,13 @@ class bldgCp(windCAD.building):
             raise Exception(f"The field {fld} is not a part of the available stat fields. Available stat fields: {list(self.CpStats.keys())}")
     
     """--------------------------------- Plotters -------------------------------------"""
-    def plotTapCpStatsPerAoA(self, fields=['peakMin','mean','peakMax',],fldRange=[-15,10], tapsToPlot=None, includeTapName=True,
-                        nCols=7, nRows=10, cols = ['r','k','g','b','m','r','k','b','g','m'],mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], 
-                        ls=['-','-','-','-','-','-','-','-','-','-',],
-                        xticks=None, mrkrSize=2,
-                        legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20], sharex=True, sharey=True):
+    def plotTapCpStatsPerAoA(self, figs=None, all_axes=None,
+                            fields=['peakMin','mean','peakMax',],fldRange=[-15,10], tapsToPlot=None, includeTapName=True,
+                            nCols=7, nRows=10, cols = ['r','k','b','g','m','r','k','b','g','m'],mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], 
+                            ls=['-','-','-','-','-','-','-','-','-','-',],
+                            xticks=None, mrkrSize=2,
+                            legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20], sharex=True, sharey=True,
+                            overlayThis=None, overlay_AoA=None, overlayLabel=None, kwargs_overlay={}):
         tapIdxs = self.tapIdx if tapsToPlot is None else self.idxOfTapNum(tapsToPlot)
         
         for fld in fields:
@@ -2394,17 +2455,32 @@ class bldgCp(windCAD.building):
 
         tapPltCount = 0
         tapIdx = tapIdxs[tapPltCount]
-        figs = []
+        
+        newFig = False
+        if figs is None:
+            newFig = True
+            figs = []
+            all_axes = []
         for p in range(nPages):
-            fig = plt.figure(figsize=figsize)
-            # fig, axs = plt.subplots(nRows, nCols)
+            # fig = plt.figure(figsize=figsize)
+            if newFig:
+                fig, axs = plt.subplots(nRows, nCols, figsize=figsize, sharex=sharex, sharey=sharey)
+                all_axes.append(axs)
+                figs.append(fig)
+            else:
+                axs = all_axes[p]
+                # fig = figs[p]
+                
             for i in range(nPltPerPage):
                 if tapPltCount >= nPltTotal:
                     break
-                ax = plt.subplot(nRows,nCols,i+1)
+                ax = axs[i//nCols,i%nCols]
+                # ax = plt.subplot(nRows,nCols,i+1)
                 for f,fld in enumerate(fields):
                     ax.plot(self.AoA, self.CpStats[fld][:,tapIdx], label=fld,
                             marker=mrkrs[f], color=cols[f], ls=ls[f],mfc=cols[f], ms=mrkrSize)
+                    if overlayThis is not None:
+                        ax.plot(overlay_AoA, overlayThis[fld][:,tapPltCount], label=overlayLabel, color=cols[f],**kwargs_overlay)
                 ax.hlines([-1,0,1],0,360,colors=['k','k','k'],linestyles=['--','-','--'],lw=0.7)
                 if includeTapName:
                     if self.tapName is not None and self.tapName[tapIdx] != '':
@@ -2423,26 +2499,32 @@ class bldgCp(windCAD.building):
                 
                 ax.grid(which='both')
                 
-                if i == 0:
+                if i//nCols == nRows-1:
                     ax.set_xlabel(r'AoA')
+                if i%nCols == 0:
                     ax.set_ylabel(r'$C_p$')
-                    ax.xaxis.tick_top()
-                    ax.xaxis.set_label_position('top')
-                else:
-                    ax.xaxis.set_ticklabels([])
-                    ax.yaxis.set_ticklabels([])
+                # if i == 0:
+                #     ax.set_xlabel(r'AoA')
+                #     ax.set_ylabel(r'$C_p$')
+                #     ax.xaxis.tick_top()
+                #     ax.xaxis.set_label_position('top')
+                # else:
+                #     ax.xaxis.set_ticklabels([])
+                #     ax.yaxis.set_ticklabels([])
                 tapPltCount += 1
                 if tapPltCount < len(tapIdxs):
                     tapIdx = tapIdxs[tapPltCount]
 
-            
             handles, labels = ax.get_legend_handles_labels()
-            fig.legend(handles, fields, loc='upper center',ncol=len(fields), bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
-            plt.annotate(f"Page {p+1} of {nPages}", xy=pageNo_xy, xycoords='figure fraction', ha='right', va='bottom')
-            plt.annotate(self.name, xy=pageNo_xy, xycoords='figure fraction', ha='left', va='bottom')
-            plt.show()
-            figs.append(fig)
-        return figs
+            if newFig:
+                fig.legend(handles, fields, loc='upper center',ncol=len(fields), bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
+                plt.annotate(f"Page {p+1} of {nPages}", xy=pageNo_xy, xycoords='figure fraction', ha='right', va='bottom')
+                plt.annotate(self.name, xy=pageNo_xy, xycoords='figure fraction', ha='left', va='bottom')
+                plt.show()
+        if newFig:
+            return figs, all_axes
+        else:
+            return 
 
     def plotTapCpStatContour(self, fieldName, dxnIdx=None, envelopeType:Literal['high','low','both']='both', figSize=[15,10], ax=None, 
                              fldRange=None, nLvl=100, cmap='RdBu', extend='both', title=None, colBarOrientation='horizontal'):
@@ -2499,11 +2581,13 @@ class bldgCp(windCAD.building):
 
     def plotAreaAveragedStat(self, fig=None, axs=None, figSize=[15,10], 
                             plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, invertYAxis=True,
+                            label_min='Min', label_max='Max',
                             overlayThis_min=None, overlayLabel_min='', kwargs_overlay_min={'color':'k', 'linewidth':2, 'linestyle':'-'},
                             overlayThis_max=None, overlayLabel_max='', kwargs_overlay_max={'color':'k', 'linewidth':2, 'linestyle':'-'},
                             plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], zoneShadeColor='darkgrey', kwargs_zonePlots={},
                             xLimits=None, yLimits=None, xLabel=None, yLabel=None,
-                            kwargs_min={}, kwargs_max={}, kwargs_ax={'gridMajor':True, 'gridMinor':True}):
+                            kwargs_min={}, kwargs_max={}, kwargs_legend={},
+                            kwargs_ax={'gridMajor':True, 'gridMinor':True}):
         newFig = False
         if fig is None:
             newFig = True
@@ -2535,8 +2619,8 @@ class bldgCp(windCAD.building):
             
             i, j = np.unravel_index(z, axs.shape)
             ax = axs[i,j]
-            ax.semilogx(area, minVal, 'vr', label='min', **kwargs_min)
-            ax.semilogx(area, maxVal, '^b', label='max', **kwargs_max)
+            ax.semilogx(area, minVal, 'vr', label=label_min, **kwargs_min)
+            ax.semilogx(area, maxVal, '^b', label=label_max, **kwargs_max)
             if overlayThis_min is not None:
                 ax.semilogx(overlayThis_min[z][2]['area'], overlayThis_min[z][2]['value'], label=overlayLabel_min, **kwargs_overlay_min)
             if overlayThis_max is not None:
@@ -2550,10 +2634,10 @@ class bldgCp(windCAD.building):
                 bounds = insetBounds # if insetBounds is isinstance(insetBounds, list) else insetBounds[z]
                 ax_inset = ax.inset_axes(bounds=bounds)
                 self.plotZones(ax=ax_inset, zoneCol=zoneCol_copy, drawEdge=True, **kwargs_zonePlots)
-                ax_inset.axis('off')
+                # ax_inset.axis('off')
                 ax_inset.axis('equal')
-                # ax_inset.patch.set_facecolor('w')
-                # ax_inset.patch.set_alpha(0.2)
+                ax_inset.patch.set_facecolor('w')
+                ax_inset.patch.set_alpha(0.7)
                 ax_inset.tick_params(axis='both', which='major', length=0)
                 ax_inset.set_xticklabels('')
                 ax_inset.set_yticklabels('')
@@ -2569,7 +2653,7 @@ class bldgCp(windCAD.building):
                     yLabel = r'Peak Cp' if yLabel is None else yLabel
                     ax.set_ylabel(yLabel)
                 if i == 0 and j == 0:
-                    ax.legend()
+                    ax.legend(**kwargs_legend)
                 if xLimits is not None:
                     ax.set_xlim(xLimits)
                 if yLimits is not None:
@@ -2579,7 +2663,7 @@ class bldgCp(windCAD.building):
 
         if newFig:
             plt.show()
-        return #fig, axs
+        return fig, axs
     
 class BldgCps():
     def __init__(self) -> None:
