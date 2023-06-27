@@ -705,6 +705,11 @@ class face:
         return allZones
 
     @property
+    def zoneDictKeys(self):
+        zoneDict = self.zoneDictUniqe
+        return [val[0]+', '+val[1] for val in zoneDict.values()]
+
+    @property
     def panelingErrors(self):
         if self.error_in_zones is None or self.error_in_panels is None:
             return None
@@ -809,6 +814,47 @@ class face:
             derived = None
 
         self.from_dict(basic, derived=derived)
+
+    def getNearestTapsToLine(self, start: np.ndarray, end: np.ndarray, distTolerance: float=0.0001):
+        """
+        Returns the tap number that is nearest to the line defined by the start and end points. The distance is measured in the face-local coordinate system.
+
+        Parameters
+        ----------
+        start : np.ndarray
+            [2,]
+            The start point of the line.
+        end : np.ndarray
+            [2,]
+            The end point of the line.
+        distTolerance : float, optional
+            The tolerance of the distance between the line and the tap. The default is 0.0001.
+
+        Returns
+        -------
+        tapNos : List[int]
+            The tap numbers that are nearest to the line.
+        tapIdxs : List[int]
+            The tap indices in the main building-level list of taps that are nearest to the line.
+        dist_from_start : List[float]
+            The distance of the taps from the start point of the line.
+        """
+        if self.tapCoord is None:
+            return None, None
+        tapNos = []
+        tapIdxs = []
+        dist_from_start = []
+        for t,tp in enumerate(self.tapCoord):
+            d = np.linalg.norm(np.cross(end-start, start-tp))/np.linalg.norm(end-start)
+            if d <= distTolerance:
+                tapNos.append(self.tapNo[t])
+                tapIdxs.append(self.tapIdx[t])
+                dist_from_start.append(np.linalg.norm(tp-start))
+        # sort the tapNos and tapIdxs by distance from the start point
+        tapNos = [x for _,x in sorted(zip(dist_from_start,tapNos))]
+        tapIdxs = [x for _,x in sorted(zip(dist_from_start,tapIdxs))]
+        return tapNos, tapIdxs, dist_from_start
+    
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotEdges(self, ax=None, showName=True, drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0,
@@ -1186,6 +1232,11 @@ class Faces:
         return allZones
 
     @property
+    def zoneDictKeys(self):
+        zoneDict = self.zoneDict
+        return [val[0]+', '+val[1] for val in zoneDict.values()]
+        
+    @property
     def NumZones(self):
         return len(self.zoneDict)
 
@@ -1261,7 +1312,7 @@ class Faces:
         return tapIdxs
 
     @property
-    def panelAreas(self):
+    def panelAreas__to_be_redacted(self):
         if self._numOfMembers() == 0:
             return None
         zNames = []
@@ -1300,6 +1351,19 @@ class Faces:
         for f, fc in enumerate(self._members):
             errDict[f"Face {f+1}"] = fc.panelingErrors
         return errDict
+    
+    @property
+    def boundingBoxPlt(self):
+        if self._numOfMembers() == 0:
+            return None
+        minX, maxX, minY, maxY = [], [], [], []
+        for fc in self.members:
+            minX.append(np.min(fc.verticesPlt[:,0]))
+            maxX.append(np.max(fc.verticesPlt[:,0]))
+            minY.append(np.min(fc.verticesPlt[:,1]))
+            maxY.append(np.max(fc.verticesPlt[:,1]))
+        bb = [np.min(minX), np.max(maxX), np.min(minY), np.max(maxY)]
+        return bb
 
     """-------------------------------- Data handlers ---------------------------------"""
     def Update(self):
@@ -1427,8 +1491,10 @@ class Faces:
             patches = []
             for i,z in enumerate(zoneCol):
                 patches.append(mpatches.Patch(color=zoneCol[z], label=z))
-            ax.legend(handles=patches, **kwargs_Legend)
-        return zoneCol
+            lg = ax.legend(handles=patches, **kwargs_Legend)
+        else:
+            lg = None
+        return zoneCol, lg
 
     def plotPanels(self, ax=None, aIdx=0, 
                    kwargs_Edge={'color':'g', 'lw':0.5, 'ls':'-', 'marker':'None', 'markersize':3},
@@ -1471,7 +1537,6 @@ class Faces:
             plt.colorbar()
             ax.axis('equal')
             ax.axis('off')
-
 
 class building(Faces):
     """---------------------------------- Internals -----------------------------------"""
@@ -1518,3 +1583,42 @@ class building(Faces):
         # finally add derived things if any
         pass
 
+class line:
+    def __init__(self, 
+                name=None,
+                faces: List[face]=[],
+                startEndPointPairs: List[List[float]]=[],
+                labels: List[str]=[],
+                dist_tolerance=1e-3,
+                iterpolationMethod='nearest',
+                ):
+        self.name = name
+        self.faces: List[face] = faces
+        self.startEndPointPairs: List[List[List[float]]] = startEndPointPairs # [nFaces][2][2]
+        self.labels: List[str] = labels
+        self.dist_tolerance = dist_tolerance
+        self.iterpolationMethod = iterpolationMethod
+
+        self.tapNo = []
+        self.tapIdx = []
+        self.d_tap = []
+        self.d_vertices = []
+
+        self._identifyTaps()
+
+    def __str__(self):
+        return 'Line name: '+self.name
+    
+    def _identifyTaps(self):
+        if len(self.faces) == 0:
+            return
+        self.tapNo = []
+        self.tapIdx = []
+        self.d_tap = []
+        for f, fc in enumerate(self.faces):
+            tapNos, tapIdxs, dist_from_start = fc.getNearestTapsToLine(self.startEndPointPairs[f][0], self.startEndPointPairs[f][1], distTolerance=self.dist_tolerance)
+            self.tapNo.extend(tapNos)
+            self.tapIdx.extend(tapIdxs)
+            self.d_tap.extend(dist_from_start)
+            
+    

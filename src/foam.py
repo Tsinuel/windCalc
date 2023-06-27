@@ -19,8 +19,8 @@ import wind
 # import windLoadCaseProcessors__toBeRemoved as wProc
 import windPlotting as wPlt
 
-__tol_time = 1e-7
-__tol_data = 1e15
+TIME_STEP_TOLERANCE = 1e-7
+MAX_DATA_LIMIT = 1e+50
 
 
 __showPlots = False
@@ -472,7 +472,7 @@ def __readProbe_singleT(file,field):
     return probes, time, data
 
 def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None, trimOverlap=True, 
-              shiftTimeToZero=True, removeOutOfDomainProbes=True, showLog=True):
+              shiftTimeToZero=True, removeOutOfDomainProbes=True, showLog=True, skipNoneExistingFiles=True):
     """
     Read probe time-history data from an OpenFOAM case.
 
@@ -525,11 +525,30 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None
     
     for t in times:
         fileName = probeDir+t[0]+"/"+field
+        if not os.path.exists(fileName):
+            if skipNoneExistingFiles:
+                if showLog:
+                    print(f"           skipping non-existing file: {fileName}")
+                continue
+            else:
+                msg = f"ERROR! The file '{fileName}' does not exist."
+                raise Exception(msg)
         if showLog:
-            print(f"           reading {field} from: {fileName}")
+            print(f"           Reading {field} from: {fileName}")
         
         (probes,time,d) = __readProbe_singleT(fileName, field)
+        if showLog:
+            tStart = time[0] if len(time) > 0 else np.nan
+            tEnd = time[-1] if len(time) > 0 else np.nan
+            print(f"                {len(probes)} probes with {len(time)} time steps ({tStart} to {tEnd})")
+            print(f"                No. of overlapping time steps with previously read data: {len(np.intersect1d(T,time))}")
+            print(f"                Shape of data: {np.shape(d)}")
         
+        if len(time) == 0:
+            if showLog:
+                print(f"             No data found in: {fileName}")
+            continue
+
         if len(T) == 0:
             T = time
             data = d
@@ -539,25 +558,27 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None
 
     if trimOverlap:
         if showLog:
-            print("    Trimming overlapping times.")
+            print("      Trimming overlapping times.")
         T,idx = np.unique(T,return_index=True)
         data = data[idx,:]
         
     dt = np.diff(np.unique(np.sort(T)))
-    if max(dt)-min(dt) > __tol_time:
+    if showLog:
+        print(f"      Deviation from fixed time step is: {max(dt)-min(dt)}")
+    if max(dt)-min(dt) > TIME_STEP_TOLERANCE:
         msg = f"WARNING! Non-uniform time step detected in '{probeName}'. The highest difference in time step is: {max(dt)-min(dt)}"
         warnings.warn(msg)
         
     if trimTimeSegs is not None:
         if showLog:
-            print(f"   Trimming times: {trimTimeSegs}")
+            print(f"      Trimming explicitly defined time segments: {trimTimeSegs}")
         idx = []
         for seg in trimTimeSegs:
             if not len(seg) == 2:
-                msg = "The length of each 'trimTimeSegs' must be a pair of start and end time to trim out. The probelematic segment is: "+str(seg)
+                msg = "The length of each 'trimTimeSegs' must be a pair of start and end time to trim out. The problematic segment is: "+str(seg)
                 raise Exception(msg)
             if seg[0] > seg[1]:
-                msg = "The first entry of every 'trimTimeSegs' must be less than the second. The probelematic segment is: "+str(seg)
+                msg = "The first entry of every 'trimTimeSegs' must be less than the second. The problematic segment is: "+str(seg)
                 raise Exception(msg)
             s, e = np.argmin(np.abs(T - seg[0])), np.argmin(np.abs(T - seg[1]))
             idx.extend(range(s,e))
@@ -567,14 +588,16 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None
     if shiftTimeToZero:
         dt = np.mean(dt)
         if showLog:
-            print(f"    Adopted time step: {dt}")
+            print(f"      Shifting time to start from zero with a time step of {dt}.")            
         T = np.linspace(0, (len(T)-1)*dt, num=len(T))
 
     if removeOutOfDomainProbes:
         if field == 'p':
-            removeIdx = np.where(np.prod(abs(data) > __tol_data,axis=0))
+            removeIdx = np.where(np.prod(abs(data) > MAX_DATA_LIMIT,axis=0))
         elif field == 'U':
-            removeIdx = np.where(np.prod(np.prod(abs(data) > __tol_data,axis=2),axis=0))
+            removeIdx = np.where(np.prod(np.prod(abs(data) > MAX_DATA_LIMIT,axis=2),axis=0))
+        if showLog:
+            print(f"      Removing {len(removeIdx[0])} out-of-domain probes.")
         probes = np.delete(probes,removeIdx,0)
         data = np.delete(data,removeIdx,1)
         
@@ -594,8 +617,7 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
     caseName = os.path.abspath(caseDir).split(os.sep)[-1]
     postProcDir = caseDir+"/postProcessing/"
     outDir = caseDir+"/_processed/"
-    if not os.path.exists(outDir):
-        os.mkdir(outDir)
+    os.makedirs(outDir, exist_ok=True)
     if showLog:
         print("Processing OpenFOAM case:\t"+caseDir)
         print("Probe read from:\t\t"+postProcDir+probeName)
@@ -635,7 +657,120 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
         profiles.plotProfiles(figFile,normalize=normalize)
 
     return vel_LES
+
+def readVelProfile(caseDir, probeName, 
+                    name=None,
+                    trimTimeSegs:List[List[float]]=[[0,0.5]],
+                    shiftTimeToZero=True,
+                    readPressure=True,
+                    H=None,
+                    showLog=True
+                    ):
+    '''
+    Read velocity profile from an OpenFOAM case.
+
+    Parameters
+    ----------
+    caseDir : str
+        The case directory.
+    probeName : str
+        The probe name given in the controlDict.
+    name : str, optional
+        The name of the profile. The default is None.
+    trimTimeSegs : List[List[float]], optional
+        A list of time segments to be trimmed out. The default is [[0,0.5]].
+    shiftTimeToZero : bool, optional
+        Whether or not to shift the time vector in such a way that the time starts from zero. It is significant if there has been some trimming and clipping on the time history. The default is True.
+    H : float, optional
+        The referece height for normalization. The default is None.
+    showLog : bool, optional
+        Whether or not to show log messages. The default is True.
+
+    Returns
+    -------
+    prof : wind.profile
+        The velocity profile object.
+        
+    Examples
+    --------
+    >>> caseDir = "D:/Tsinu/..../windCalc/data/exampleOFcase/"
+    >>> probeName = "probes.tapsABCD"
+    >>> prof = readVelProfile(caseDir, probeName)
+    >>> prof.name
+    'exampleOFcase__probes.tapsABCD'
+    >>> prof.Z
+    array([0.001, 0.002, 0.003, ..., 0.997, 0.998, 0.999])
+    >>> prof.UofZ
+    '''
+    caseName = os.path.abspath(caseDir).split(os.sep)[-1]
+    postProcDir = caseDir+"/postProcessing/"
+    outDir = caseDir+"/_processed/"
+    os.makedirs(outDir, exist_ok=True)
+    if showLog:
+        print("Processing OpenFOAM case:\t"+caseDir)
+        print("Probe read from:\t\t"+postProcDir+probeName)
+        print("  >> Reading probe data ...")
+    probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
+    if showLog:
+        print("             << Done!")
     
+    Z = probes[:,2]
+    dt = np.mean(np.diff(time))
+    
+    if showLog:
+        print("  >> Processing profile data.")
+    if showLog:
+        print("             << Done!")
+        print("  >> Finished reading probe data.")
+
+    if readPressure:
+        if showLog:
+            print("  >> Reading pressure data ...")
+
+        # list all time directories
+        sampleDir = postProcDir+probeName+"/"
+        times = [ name for name in os.listdir(sampleDir) if os.path.isdir(os.path.join(sampleDir, name)) ]
+        contains_p = [name for name in times if os.path.exists(sampleDir+name+"/p")] 
+        if any(contains_p):
+            _,time_p,pressure = readSurfacePressure(caseDir=caseDir, probeName=probeName, trimTimeSegs=trimTimeSegs, shiftTimeToZero=shiftTimeToZero,
+                                                            showLog=showLog)
+            pressure = np.transpose(pressure)
+        else:
+            pressure = None
+            time_p = None
+    
+    name = caseName+"__"+probeName if name is None else name
+    prof = wind.profile(name=name,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
+                          WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.DEFAULT_SI_UNITS,
+                          pOfT=pressure
+                          )
+    return prof
+
+def readSurfacePressure(caseDir, probeName, 
+                    trimTimeSegs:List[List[float]]=[[0,0.5]],
+                    shiftTimeToZero=True,
+                    showLog=True
+                    ):
+    # caseName = os.path.abspath(caseDir).split(os.sep)[-1]
+    postProcDir = caseDir+"/postProcessing/"
+    outDir = caseDir+"/_processed/"
+    os.makedirs(outDir, exist_ok=True)
+    if showLog:
+        print("Processing OpenFOAM case:\t"+caseDir)
+        print("Probe read from:\t\t"+postProcDir+probeName)
+        print("  >> Reading probe data ...")
+    probes,time,pressure = readProbe(probeName, postProcDir, "p", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
+    if showLog:
+        print("             << Done!")
+    
+    # name = caseName+"__"+probeName if name is None else name
+
+    if showLog:
+        print("             << Done!")
+        print("  >> Finished reading probe data.")
+    
+    return probes,time,pressure
+
 def writeProbeDict(file, points, fields=['p','U'], writeControl='adjustableRunTime', writeInterval='$probeWriteTime', includeLines=[], overwrite=False, precision=8, width=10):
     if os.path.exists(file):
         if not overwrite:
@@ -805,7 +940,7 @@ class inflowTuner:
             self.inflows.profiles.append(prof)
 
     def addIncident(self, caseDir, probeName, name=None, trimTimeSegs=[[0, 1.0],], showLog=False):
-        prof = processVelProfile(caseDir,probeName=probeName,name=name, exportPlots=False,showLog=showLog, trimTimeSegs=trimTimeSegs,H=self.H)
+        prof = readVelProfile(caseDir=caseDir,probeName=probeName,name=name, showLog=showLog, trimTimeSegs=trimTimeSegs,H=self.H)
         if self.incidents is None:
             self.incidents = wind.Profiles([prof,])
         else:
@@ -879,13 +1014,205 @@ class inflowTuner:
             scaledTables.append(scaledTable)
         return scaledTables, factors, names
 
+
+
+    def writeProfile(self, rnd=0, dir=None, name='profile', figsize=[15,15], zLim=[0,10], debugMode=False, applySmoothing=True):
+        def plotThese(profs:List[pd.DataFrame]=[], names=[], ratio:pd.DataFrame=None, mainTitle=None, markers=None, color=None, lwgts=None, lss=None):
+            if not debugMode:
+                return
+            if len(profs) == 0:
+                return
+            fig, axs = plt.subplots(3,3, figsize=figsize)
+            axs = axs.flatten()
+            flds = ['U', 'Iu', 'Iv', 'Iw', 'xLu', 'xLv', 'xLw']
+            axIdxs = [0, 3, 4, 5, 6, 7, 8]
+            axs[1].axis('off')
+            axs[2].axis('off')
+            ax_legend = axs[1]
+            mrkrs = ['o', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X', '*', 'H', '1', '2', '3', '4', '+', 'x', '|', '_'] 
+            markers = mrkrs if markers is None else markers
+            cols = ['k', 'b', 'r', 'g', 'm', 'c', 'y'] if color is None else color
+            lwgts = [1,]*len(profs) if lwgts is None else lwgts
+            lss = ['-',]*len(profs) if lss is None else lss
+            
+            for ii in range(len(flds)):
+                ax = axs[axIdxs[ii]]
+                for jj, prof in enumerate(profs):
+                    ax.plot(prof[flds[ii]], prof['Z']/self.target.H, label=names[jj], lw=lwgts[jj], ls=lss[jj], marker=markers[jj], ms=3, c=cols[jj%len(cols)])
+                if ratio is not None:
+                    ax2 = ax.twiny()
+                    ax2.plot(ratio[flds[ii]], ratio['Z']/self.target.H, label='ratio', lw=2, ls='--', c='c',marker='None', ms=3)
+                    ax2.set_xlabel('ratio')
+                    ax2.axvline(1.0, c='k', ls='--', lw=1)
+                ax.set_xlabel(flds[ii])
+                ax.set_ylabel('Z')
+                ax.set_ylim(zLim)
+                wind.formatAxis(ax)
+            # show all legends from ax and ax2 in one legend
+            handles, labels = ax.get_legend_handles_labels()
+            handles2, labels2 = ax2.get_legend_handles_labels()
+            handles.extend(handles2)
+            labels.extend(labels2)
+            ax_legend.legend(handles, labels, loc='center', ) #bbox_to_anchor=(0.5, 0.5))
+            
+            plt.tight_layout()
+            if mainTitle is not None:
+                fig.suptitle(mainTitle)
+
+        def interpToZ(prof, Z, merge=True):
+            if merge:
+                Z = np.unique(np.sort(np.concatenate((prof.Z, Z))))
+            prof_out = pd.DataFrame()
+            prof_out['Z'] = Z
+            prof_out['U'] = np.interp(Z, prof.Z, prof.U,) # left=prof.U[0], right=prof.U[-1])
+            prof_out['Iu'] = np.interp(Z, prof.Z, prof.Iu) #, left=prof.Iu[0], right=prof.Iu[-1])
+            prof_out['Iv'] = np.interp(Z, prof.Z, prof.Iv) #, left=prof.Iv[0], right=prof.Iv[-1])
+            prof_out['Iw'] = np.interp(Z, prof.Z, prof.Iw) #, left=prof.Iw[0], right=prof.Iw[-1])
+            prof_out['xLu'] = np.interp(Z, prof.Z, prof.xLu) #, left=prof.xLu[0], right=prof.xLu[-1])
+            prof_out['xLv'] = np.interp(Z, prof.Z, prof.xLv) #, left=prof.xLv[0], right=prof.xLv[-1])
+            prof_out['xLw'] = np.interp(Z, prof.Z, prof.xLw) #, left=prof.xLw[0], right=prof.xLw[-1])
+            return prof_out
+        
+        def smooth_profile(prof, smoothWindow=[50, 50, 50, 50, 200, 150, 200], kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True, 
+                                                                                        'paddingFactor':2, 'paddingMode':'edge'}):
+            prof_out = prof.copy()
+            prof_out['U'] = wind.smooth(prof['U'], smoothWindow[0], **kwargs_smooth)
+            prof_out['Iu'] = wind.smooth(prof['Iu'], smoothWindow[1], **kwargs_smooth)
+            prof_out['Iv'] = wind.smooth(prof['Iv'], smoothWindow[2], **kwargs_smooth)
+            prof_out['Iw'] = wind.smooth(prof['Iw'], smoothWindow[3], **kwargs_smooth)
+            prof_out['xLu'] = wind.smooth(prof['xLu'], smoothWindow[4], **kwargs_smooth)
+            prof_out['xLv'] = wind.smooth(prof['xLv'], smoothWindow[5], **kwargs_smooth)
+            prof_out['xLw'] = wind.smooth(prof['xLw'], smoothWindow[6], **kwargs_smooth)
+            return prof_out
+
+        def prof_ratio(prof_target, prof_attempt, zMaxCommon=None, zMinCommon=None):
+            if not np.array_equal(prof_target.Z, prof_attempt.Z):
+                Z = np.unique(np.sort(np.concatenate((prof_target.Z, prof_attempt.Z))))
+                prof_attempt = interpToZ(prof_attempt, Z)
+                prof_target = interpToZ(prof_target, Z)
+            ratio = pd.DataFrame()
+            ratio['Z'] = prof_target['Z']
+            ratio['U'] = prof_target['U']/prof_attempt['U']
+            ratio['Iu'] = prof_target['Iu']/prof_attempt['Iu']
+            ratio['Iv'] = prof_target['Iv']/prof_attempt['Iv']
+            ratio['Iw'] = prof_target['Iw']/prof_attempt['Iw']
+            ratio['xLu'] = prof_target['xLu']/prof_attempt['xLu']
+            ratio['xLv'] = prof_target['xLv']/prof_attempt['xLv']
+            ratio['xLw'] = prof_target['xLw']/prof_attempt['xLw']
+            if zMaxCommon is not None:
+                idx = np.argmin(np.abs(ratio['Z'] - zMaxCommon))
+                ratio['U'][idx:] = 1.0
+                ratio['Iu'][idx:] = 1.0
+                ratio['Iv'][idx:] = 1.0
+                ratio['Iw'][idx:] = 1.0
+                ratio['xLu'][idx:] = 1.0
+                ratio['xLv'][idx:] = 1.0
+                ratio['xLw'][idx:] = 1.0
+            if zMinCommon is not None:
+                idx = np.argmin(np.abs(ratio['Z'] - zMinCommon))
+                ratio['U'][:idx] = 1.0
+                ratio['Iu'][:idx] = 1.0
+                ratio['Iv'][:idx] = 1.0
+                ratio['Iw'][:idx] = 1.0
+                ratio['xLu'][:idx] = 1.0
+                ratio['xLv'][:idx] = 1.0
+                ratio['xLw'][:idx] = 1.0
+
+            if applySmoothing:
+                ratio = smooth_profile(ratio)
+            return ratio
+
+        def profileObj_to_df(prof):
+            df = pd.DataFrame()
+            df['Z'] = prof.Z
+            df['U'] = prof.U
+            df['Iu'] = prof.Iu
+            df['Iv'] = prof.Iv
+            df['Iw'] = prof.Iw
+            df['xLu'] = prof.xLu
+            df['xLv'] = prof.xLv
+            df['xLw'] = prof.xLw
+            return df
+
+        def scale_profile(prof, ratio):
+            if not np.array_equal(prof['Z'], ratio['Z']):
+                Z = np.unique(np.sort(np.concatenate((prof['Z'], ratio['Z']))))
+                ratio = interpToZ(ratio, Z)
+                prof = interpToZ(prof, Z)
+            prof_out = prof.copy()
+            prof_out['U'] *= ratio['U']
+            prof_out['Iu'] *= ratio['Iu']
+            prof_out['Iv'] *= ratio['Iv']
+            prof_out['Iw'] *= ratio['Iw']
+            prof_out['xLu'] *= ratio['xLu']
+            prof_out['xLv'] *= ratio['xLv']
+            prof_out['xLw'] *= ratio['xLw']
+            return prof_out
+
+        target_0 = self.targetProfileTable(smoothWindow=[50, 50, 50, 50, 200, 150, 200], castToUniform=True, kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True, 
+                                                                                        'paddingFactor':2, 'paddingMode':'edge'})
+        if rnd == 0:
+            prof = target_0
+        else:
+            prof_latest_incident = profileObj_to_df(self.incidents.profiles[rnd-1])
+            ratio = prof_ratio(target_0, prof_latest_incident, 
+                               zMaxCommon=min(np.array(prof_latest_incident['Z'])[-1], np.array(target_0['Z'])[-1]),
+                               zMinCommon=max(np.array(prof_latest_incident['Z'])[0], np.array(target_0['Z'])[0]))
+            prof = scale_profile(target_0, ratio)
+
+        if dir is not None:
+            if not os.path.exists(dir):
+                os.mkdir(dir)
+            prof.to_csv(dir+'/'+name, index=False, sep=' ', float_format='%.6e', header=False)
+
+        if debugMode:
+            toPlot = [profileObj_to_df(self.target), target_0]
+            names = ['target'+' ('+self.target.name+')', 'target(smooth)']
+            if rnd > 0:
+                toPlot.append(prof_latest_incident)
+                names.append('latest EDS ('+self.incidents.profiles[rnd-1].name+')')
+            toPlot.append(prof)
+            names.append('next_prof')
+            plotThese(profs=toPlot, names=names, ratio=ratio, mainTitle='Scaling', color=['k', 'k', 'b', 'r'], lwgts=[1, 2, 2, 3], lss=['None', '-', '-', '-'], 
+                      markers=['.', 'None', 'None', 'None'])
+            
+        return prof
+
     def plotProfiles(self, figsize=[15,12], zLim=[0,10], normalize=True, lw = 1.5, ms=3,
                             xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
-                            xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
+                            xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None, 
+                            includeInflows=True, includeIncidents=True, 
                             lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
                             kwargs_plt=None, kwargs_ax={}):
         longListOfColors = ['r', 'b', 'g', 'm', 'k', 'c', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'lime', 'teal', 'navy', ]
        
+        if kwargs_plt is None:
+            kwargs_plt = []
+            kwargs_plt.append({'color':'k', 'lw':1, 'ls':'None', 'marker':'o', 'ms':ms})
+            if self.inflows is not None and includeInflows:
+                for i, prof in enumerate(self.inflows.profiles):
+                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'--'})
+            if self.incidents is not None and includeIncidents:
+                for i, prof in enumerate(self.incidents.profiles):
+                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'-'})
+
+        profs = []
+        if self.target is not None:
+            profs.append(self.target)
+        if self.inflows is not None and includeInflows:
+            profs.extend(self.inflows.profiles)
+        if self.incidents is not None and includeIncidents:
+            profs.extend(self.incidents.profiles)
+        profs = wind.Profiles(profs)
+
+        profs.plotProfile_basic2(figsize=figsize, yLimits=zLim, normalize=normalize, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, 
+                                            xLimits_Iw=xLimits_Iw, xLimits_uw=xLimits_uw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
+                                            xLabel=xLabel, zLabel=zLabel, lgnd_kwargs=lgnd_kwargs, kwargs_plt=kwargs_plt, kwargs_ax=kwargs_ax)
+        
+    def plotSpectra(self, figSize=[15,5], lw = 1.5, ms=3,
+                    xLimits='auto', yLimits='auto', includeInflows=True, includeIncidents=True,
+                    kwargs_plt=None, kwargs_Spect={},):
+        longListOfColors = ['r', 'b', 'g', 'm', 'k', 'c', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'lime', 'teal', 'navy', ]
         if kwargs_plt is None:
             kwargs_plt = []
             kwargs_plt.append({'color':'k', 'lw':1, 'ls':'None', 'marker':'o', 'ms':ms})
@@ -895,7 +1222,15 @@ class inflowTuner:
             if self.incidents is not None:
                 for i, prof in enumerate(self.incidents.profiles):
                     kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'-'})
+        
+        profs = []
+        if self.target is not None:
+            profs.append(self.target)
+        if self.inflows is not None and includeInflows:
+            profs.extend(self.inflows.profiles)
+        if self.incidents is not None and includeIncidents:
+            profs.extend(self.incidents.profiles)
+        profs = wind.Profiles(profs)
 
-        self.allProfiles.plotProfile_basic2(figsize=figsize, yLimits=zLim, normalize=normalize, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, 
-                                            xLimits_Iw=xLimits_Iw, xLimits_uw=xLimits_uw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
-                                            xLabel=xLabel, zLabel=zLabel, lgnd_kwargs=lgnd_kwargs, kwargs_plt=kwargs_plt, kwargs_ax=kwargs_ax)
+        profs.plotSpectra(figSize=figSize, xLimits=xLimits, yLimits=yLimits, **kwargs_Spect)
+        

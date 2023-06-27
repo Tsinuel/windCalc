@@ -23,6 +23,7 @@ from typing import List,Literal,Dict,Tuple,Any,Union,Set
 from scipy import signal
 from scipy.stats import skew,kurtosis
 from scipy.interpolate import interp1d
+from matplotlib.patches import Arc
 
 
 #===============================================================================
@@ -239,6 +240,9 @@ def vonKarmanSpectra(n,U,Iu=None,Iv=None,Iw=None,xLu=None,xLv=None,xLw=None):
         Sww = vonKarmanSuu(n,U,Iw,xLw)
     return Suu, Svv, Sww
 
+def Coh_Davenport():
+    pass
+
 def fitESDUgivenIuRef(
                     Zref,
                     IuRef,
@@ -297,6 +301,123 @@ def fitVelToLogProfile(Z, U, Zref=None, Uref=None, uStar=None, d=0.0):
 
 def fitVelToPowerLawProfile(Z, U, Zg=None):
     raise NotImplementedError()
+
+def get_velTH_stats_1pt(UofT: np.ndarray=None, 
+                    VofT: np.ndarray=None, 
+                    WofT: np.ndarray=None,
+                    timeAxis=1, dt=None,
+                    fields: List[Literal['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']]=DEFAULT_VELOCITY_STAT_FIELDS):
+    if not all(x in VALID_VELOCITY_STAT_FIELDS for x in fields):
+        msg = "Not all elements given as fields are valid. Choose from: "+str(VALID_VELOCITY_STAT_FIELDS)
+        raise Exception(msg)
+    uIsHere = UofT is not None
+    vIsHere = VofT is not None
+    wIsHere = WofT is not None
+    if timeAxis == 0:
+        UofT = np.transpose(UofT)
+        if vIsHere:
+            VofT = np.transpose(VofT)
+        if wIsHere:
+            WofT = np.transpose(WofT)
+        timeAxis = 1
+    if len(np.shape(UofT)) > 2:
+        raise Exception("The velocity time history matrices must be 2D.")
+    if vIsHere and np.shape(UofT) != np.shape(VofT):
+        raise Exception("The shapes of UofT and VofT must match for profile stat calculation.")
+    if wIsHere and np.shape(UofT) != np.shape(WofT):
+        raise Exception("The shapes of UofT and WofT must match for profile stat calculation.")
+    if dt is None:
+        if any(x in fields for x in ['xLu','xLv','xLw']):
+            warnings.warn("Time step 'dt' of the time histories is not provided while requesting integral length scales. Skipping those stats.")
+            fields = [x for x in fields if x not in ['xLu','xLv','xLw']]
+    
+    stats = {}
+    if uIsHere:
+        U = np.mean(UofT,axis=timeAxis)
+        u_ofT = UofT - U[:, np.newaxis]
+        if 'U' in fields:
+            stats['U'] = U
+        if 'Iu' in fields:
+            stats['Iu'] = np.std(UofT, axis=timeAxis) / U
+        if 'xLu' in fields:
+            L = np.zeros_like(U)
+            for i,u in enumerate(U):
+                L[i] = integLengthScale(UofT[i,:], dt, meanU=u)
+            stats['xLu'] = L
+
+    if vIsHere:
+        V = np.mean(VofT, axis=timeAxis)
+        v_ofT = VofT - V[:, np.newaxis]
+        if 'V' in fields:
+            stats['V'] = V
+        if 'Iv' in fields:
+            stats['Iv'] = np.std(VofT, axis=timeAxis) / U
+        if 'xLv' in fields:
+            L = np.zeros_like(U)
+            for i,u in enumerate(U):
+                L[i] = integLengthScale(VofT[i,:], dt, meanU=u)
+            stats['xLv'] = L
+        if 'uv' in fields:
+            stats['uv'] = np.mean(u_ofT*v_ofT, axis=timeAxis)
+    
+    if wIsHere:
+        W = np.mean(WofT, axis=timeAxis)
+        w_ofT = WofT - W[:, np.newaxis]
+        if 'W' in fields:
+            stats['W'] = W
+        if 'Iw' in fields:
+            stats['Iw'] = np.std(WofT, axis=timeAxis) / U
+        if 'xLw' in fields:
+            L = np.zeros_like(U)
+            for i,u in enumerate(U):
+                L[i] = integLengthScale(WofT[i,:], dt, meanU=u)
+            stats['xLw'] = L
+        if 'uw' in fields:
+            stats['uw'] = np.mean(u_ofT*w_ofT, axis=timeAxis)
+        if 'vw' in fields and vIsHere:
+            stats['vw'] = np.mean(v_ofT*w_ofT, axis=timeAxis)
+    
+    return stats
+
+def coherence(pts1: np.ndarray, pts2: np.ndarray,
+                vel1: np.ndarray, vel2: np.ndarray, fs,
+                timeAxis=1, 
+                ):
+    if timeAxis == 0:
+        vel1 = np.transpose(vel1)
+        vel2 = np.transpose(vel2)
+        timeAxis = 1
+
+    dist = np.sqrt(np.sum((pts1[:,np.newaxis,:] - pts2[np.newaxis,:,:])**2, axis=-1))
+    
+    f, Coh = signal.coherence(vel1, vel2, fs=fs, nperseg=len(vel1), noverlap=0)
+    
+    return f, Coh, dist
+
+def getDurstFactor(gustDuration):
+    gustDur = [1.03780849700000,1.12767394700000,1.22532098700000,1.33142343500000,1.45694344800000,1.57538111200000,1.70810738900000,1.86913930100000,2.00713704800000,
+               2.19136209900000,2.38111554700000,2.58730004200000,2.81133837300000,3.05477653000000,3.31929437600000,3.60671723400000,3.97673384700000,4.35593123500000,
+               4.73311808800000,5.14296613700000,5.58830356600000,6.07220345400000,6.59800498600000,7.16933648900000,7.79014047400000,8.46470084200000,9.19767243900000,
+               9.99411318600000,10.8595189700000,11.7998616000000,12.8216299400000,13.9318748000000,15.1382574900000,16.4491027200000,17.8734560900000,19.4211464200000,
+               21.1028536600000,22.9301825500000,24.9157426800000,27.0732355500000,29.4175490800000,31.9648603600000,34.7327472800000,37.7403098400000,41.0083019000000,
+               44.5592744800000,48.4177312900000,52.6102978700000,57.1659053000000,62.1159898600000,67.4947099300000,73.3391817300000,79.6897354200000,86.5901934300000,
+               94.0881728100000,102.235413900000,111.088137200000,120.707431600000,131.159675700000,142.516995800000,154.857763800000,168.267138200000,182.837651200000,
+               198.669847400000,215.872978200000,234.565754800000,254.877168000000,276.947377900000,300.928681700000,326.986563800000,355.300838400000,386.066890000000,
+               419.497021800000,455.821920700000,495.292249100000,538.180374500000,584.782249200000,635.419452800000,690.441410500000,750.227804900000,815.191196200000,
+               885.779868400000,962.480923500000,1045.82364200000,1136.38313600000,1234.78431700000,1341.70621000000,1457.88663500000,1584.12730400000,1721.29934900000,
+               1870.34933400000,2032.30578900000,2208.28630400000,2399.50524700000,2607.28213400000,2833.05074500000,3078.36901100000,3344.92976600000,3600]
+    v_t_v3600 = [1.55811434100000,1.55601528500000,1.55444228200000,1.55128020300000,1.54957932800000,1.54695585600000,1.54491784700000,1.54151005900000,1.53832623700000,
+                 1.53464510900000,1.53160764800000,1.52716545800000,1.52373747500000,1.51947963300000,1.51528151900000,1.51108734300000,1.50438942800000,1.49865733900000,
+                 1.49377581200000,1.48752745700000,1.48176725500000,1.47571416100000,1.46931936000000,1.46272929800000,1.45589516000000,1.44886576100000,1.44154347000000,
+                 1.43397710200000,1.42611784400000,1.41825858500000,1.41035051000000,1.40195428300000,1.39497369900000,1.38584524300000,1.37715612500000,1.36851582200000,
+                 1.35968025700000,1.35069824700000,1.34181386700000,1.33288067200000,1.32389866200000,1.31462376000000,1.30515359700000,1.29714789300000,1.28806825200000,
+                 1.27884216500000,1.26961607900000,1.26043880700000,1.25131035100000,1.24252360200000,1.23319988500000,1.22416906000000,1.21547994100000,1.20622944700000,
+                 1.19858985700000,1.18994955300000,1.18209029400000,1.17423103500000,1.16617651500000,1.15841488700000,1.15065325900000,1.14381912000000,1.13654564500000,
+                 1.12971150700000,1.12302381400000,1.11653138300000,1.11023421300000,1.10379059700000,1.09890906900000,1.09392991200000,1.08816970900000,1.08319055100000,
+                 1.07845547000000,1.07396446500000,1.06952227500000,1.06534508200000,1.06151657000000,1.05707438100000,1.05414546400000,1.05087484100000,1.04828763100000,
+                 1.04594449800000,1.04325965800000,1.04047718800000,1.03759708700000,1.03427764800000,1.03125110100000,1.02827336900000,1.02549089900000,1.02246435200000,
+                 1.01968188100000,1.01675296500000,1.01387286400000,1.01079750200000,1.00830792300000,1.00614913700000,1.00386027600000,1.00239036100000,1]
+    return np.interp(gustDuration, gustDur, v_t_v3600)
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
 def peak_gumbel(x, axis:int=0, 
@@ -411,83 +532,6 @@ def get_CpTH_stats(TH,axis=0,
         stats['kurtosis'] = kurtosis(TH, axis=axis)
     return stats
 
-def get_velTH_stats(UofT: np.ndarray=None, 
-                    VofT: np.ndarray=None, 
-                    WofT: np.ndarray=None,
-                    timeAxis=1, dt=None,
-                    fields: List[Literal['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']]=DEFAULT_VELOCITY_STAT_FIELDS):
-    if not all(x in VALID_VELOCITY_STAT_FIELDS for x in fields):
-        msg = "Not all elements given as fields are valid. Choose from: "+str(VALID_VELOCITY_STAT_FIELDS)
-        raise Exception(msg)
-    uIsHere = UofT is not None
-    vIsHere = VofT is not None
-    wIsHere = WofT is not None
-    if timeAxis == 0:
-        UofT = np.transpose(UofT)
-        if vIsHere:
-            VofT = np.transpose(VofT)
-        if wIsHere:
-            WofT = np.transpose(WofT)
-        timeAxis = 1
-    if len(np.shape(UofT)) > 2:
-        raise Exception("The velocity time history matrices must be 2D.")
-    if vIsHere and np.shape(UofT) != np.shape(VofT):
-        raise Exception("The shapes of UofT and VofT must match for profile stat calculation.")
-    if wIsHere and np.shape(UofT) != np.shape(WofT):
-        raise Exception("The shapes of UofT and WofT must match for profile stat calculation.")
-    if dt is None:
-        if any(x in fields for x in ['xLu','xLv','xLw']):
-            warnings.warn("Time step 'dt' of the time histories is not provided while requesting integral length scales. Skipping those stats.")
-            fields = [x for x in fields if x not in ['xLu','xLv','xLw']]
-    
-    stats = {}
-    if uIsHere:
-        U = np.mean(UofT,axis=timeAxis)
-        u_ofT = UofT - U[:, np.newaxis]
-        if 'U' in fields:
-            stats['U'] = U
-        if 'Iu' in fields:
-            stats['Iu'] = np.std(UofT, axis=timeAxis) / U
-        if 'xLu' in fields:
-            L = np.zeros_like(U)
-            for i,u in enumerate(U):
-                L[i] = integLengthScale(UofT[i,:], dt, meanU=u)
-            stats['xLu'] = L
-
-    if vIsHere:
-        V = np.mean(VofT, axis=timeAxis)
-        v_ofT = VofT - V[:, np.newaxis]
-        if 'V' in fields:
-            stats['V'] = V
-        if 'Iv' in fields:
-            stats['Iv'] = np.std(VofT, axis=timeAxis) / U
-        if 'xLv' in fields:
-            L = np.zeros_like(U)
-            for i,u in enumerate(U):
-                L[i] = integLengthScale(VofT[i,:], dt, meanU=u)
-            stats['xLv'] = L
-        if 'uv' in fields:
-            stats['uv'] = np.mean(u_ofT*v_ofT, axis=timeAxis)
-    
-    if wIsHere:
-        W = np.mean(WofT, axis=timeAxis)
-        w_ofT = WofT - W[:, np.newaxis]
-        if 'W' in fields:
-            stats['W'] = W
-        if 'Iw' in fields:
-            stats['Iw'] = np.std(WofT, axis=timeAxis) / U
-        if 'xLw' in fields:
-            L = np.zeros_like(U)
-            for i,u in enumerate(U):
-                L[i] = integLengthScale(WofT[i,:], dt, meanU=u)
-            stats['xLw'] = L
-        if 'uw' in fields:
-            stats['uw'] = np.mean(u_ofT*w_ofT, axis=timeAxis)
-        if 'vw' in fields and vIsHere:
-            stats['vw'] = np.mean(v_ofT*w_ofT, axis=timeAxis)
-    
-    return stats
-
 #-------------------------------- PLOTTING -------------------------------------
 def formatAxis(ax, gridMajor=True, gridMinor=False, tickLabelSize=10, labelSize=12,
                tickTop=True, tickRight=True, gridColor_mjr=[0.8,0.8,0.8], gridColor_mnr=[0.85,0.85,0.85], 
@@ -503,6 +547,115 @@ def formatAxis(ax, gridMajor=True, gridMinor=False, tickLabelSize=10, labelSize=
     if gridMinor:
         ax.grid(True, which='minor', linestyle='--', linewidth=0.5, color=gridColor_mnr)
     return ax
+
+#--------------------------- CODE PROVISIONS -----------------------------------
+def NBCC2020_CpCg(Figure:Literal['4.1.7.6.-A', '4.1.7.6.-B', '4.1.7.6.-C', '4.1.7.6.-D', '4.1.7.6.-E', '4.1.7.6.-F', '4.1.7.6.-G', '4.1.7.6.-H'], subfig='a'):
+    if Figure == '4.1.7.6.-E':
+        if subfig == 'a':
+            CpCg = {}
+            CpCg['Name'] = 'NBCC 2020'
+
+            CpCg['Min'] = {}
+            CpCg['Min']['area'] = {}
+            CpCg['Min']['area']['NBCC 2020, Zone c'] = [0.1, 1, 10, 100]
+            CpCg['Min']['area']['NBCC 2020, Zone s'] = [0.1, 2, 10, 100]
+            CpCg['Min']['area']['NBCC 2020, Zone r'] = [0.1, 0.85, 10, 100]
+            CpCg['Min']['area']['NBCC 2020, Zone e'] = [0.5, 1, 50, 200]
+            CpCg['Min']['area']['NBCC 2020, Zone w'] = [0.5, 1, 50, 200]
+
+            CpCg['Min']['value'] = {}
+            CpCg['Min']['value']['NBCC 2020, Zone c'] = [-5, -5, -4, -4]
+            CpCg['Min']['value']['NBCC 2020, Zone s'] = [-3.6, -3.6, -2.65, -2.65]
+            CpCg['Min']['value']['NBCC 2020, Zone r'] = [-2.5, -2.5, -2, -2]
+            CpCg['Min']['value']['NBCC 2020, Zone e'] = [-2.1, -2.1, -1.5, -1.5]
+            CpCg['Min']['value']['NBCC 2020, Zone w'] = [-1.8, -1.8, -1.5, -1.5]
+
+            CpCg['Max'] = {}
+            CpCg['Max']['area'] = {}
+            CpCg['Max']['area']['NBCC 2020, Zone c'] = [0.1, 1, 8.5, 100]
+            CpCg['Max']['area']['NBCC 2020, Zone s'] = [0.1, 1, 8.5, 100]
+            CpCg['Max']['area']['NBCC 2020, Zone r'] = [0.1, 1, 8.5, 100]
+            CpCg['Max']['area']['NBCC 2020, Zone e'] = [0.5, 1, 50, 200]
+            CpCg['Max']['area']['NBCC 2020, Zone w'] = [0.5, 1, 50, 200]
+
+            CpCg['Max']['value'] = {}
+            CpCg['Max']['value']['NBCC 2020, Zone c'] = [0.8, 0.8, 0.5, 0.5]
+            CpCg['Max']['value']['NBCC 2020, Zone s'] = [0.8, 0.8, 0.5, 0.5]
+            CpCg['Max']['value']['NBCC 2020, Zone r'] = [0.8, 0.8, 0.5, 0.5]
+            CpCg['Max']['value']['NBCC 2020, Zone e'] = [1.75, 1.75, 1.3, 1.3]
+            CpCg['Max']['value']['NBCC 2020, Zone w'] = [1.75, 1.75, 1.3, 1.3]
+
+    return CpCg
+
+def ASCE7_22_GCp(Figure:Literal['30.3-2A', '30.3-2B', '30.3-2C', '30.3-2D', '30.3-2E', '30.3-2F', '30.3-2G'], subfig='a'):
+    if Figure == '30.3-2C':
+        if subfig == 'a':
+            GCp = {}
+            GCp['Name'] = 'ASCE 7-22'
+
+            # ft^2:      __,    10,         100,        200,        500,        __
+            # m^2:      0.1,    0.9290304,  9.290304,   18.580608,  46.45152,   100
+
+            # GCp['Min'] = {}
+            # GCp['Min']['area'] = {}
+            # GCp['Min']['area']['ASCE 7-22, Zone 1'] = [0.1, 0.9290304, 18.580608, 100]
+            # GCp['Min']['area']['ASCE 7-22, Zone 2'] = [0.1, 0.9290304, 9.290304, 100]
+            # GCp['Min']['area']['ASCE 7-22, Zone 3'] = [0.1, 0.9290304, 9.290304, 100]
+            # GCp['Min']['area']['ASCE 7-22, Zone 4'] = [0.1, 0.9290304, 46.45152, 100]
+            # GCp['Min']['area']['ASCE 7-22, Zone 5'] = [0.1, 0.9290304, 46.45152, 100]
+
+            # GCp['Min']['value'] = {}
+            # GCp['Min']['value']['ASCE 7-22, Zone 1'] = [-1.5, -1.5, -0.8, -0.8]
+            # GCp['Min']['value']['ASCE 7-22, Zone 2'] = [-2.5, -2.5, -1.2, -1.2]
+            # GCp['Min']['value']['ASCE 7-22, Zone 3'] = [-3.0, -3.0, -1.4, -1.4]
+            # GCp['Min']['value']['ASCE 7-22, Zone 4'] = [-1.1, -1.1, -0.8, -0.8]
+            # GCp['Min']['value']['ASCE 7-22, Zone 5'] = [-1.4, -1.4, -0.8, -0.8]
+
+            # GCp['Max'] = {}
+            # GCp['Max']['area'] = {}
+            # GCp['Max']['area']['ASCE 7-22, Zone 1'] = [0.1, 0.9290304, 18.580608, 100]
+            # GCp['Max']['area']['ASCE 7-22, Zone 2'] = [0.1, 0.9290304, 18.580608, 100]
+            # GCp['Max']['area']['ASCE 7-22, Zone 3'] = [0.1, 0.9290304, 18.580608, 100]
+            # GCp['Max']['area']['ASCE 7-22, Zone 4'] = [0.1, 0.9290304, 46.45152, 100]
+            # GCp['Max']['area']['ASCE 7-22, Zone 5'] = [0.1, 0.9290304, 46.45152, 100]
+
+            # GCp['Max']['value'] = {}
+            # GCp['Max']['value']['ASCE 7-22, Zone 1'] = [0.6, 0.6, 0.3, 0.3]
+            # GCp['Max']['value']['ASCE 7-22, Zone 2'] = [0.6, 0.6, 0.3, 0.3]
+            # GCp['Max']['value']['ASCE 7-22, Zone 3'] = [0.6, 0.6, 0.3, 0.3]
+            # GCp['Max']['value']['ASCE 7-22, Zone 4'] = [1.0, 1.0, 0.7, 0.7]
+            # GCp['Max']['value']['ASCE 7-22, Zone 5'] = [1.0, 1.0, 0.7, 0.7]
+
+            GCp['Min'] = {}
+            GCp['Min']['area'] = {}
+            GCp['Min']['area']['NBCC 2020, Zone r'] = [0.1, 0.9290304, 18.580608, 100]
+            GCp['Min']['area']['NBCC 2020, Zone s'] = [0.1, 0.9290304, 9.290304, 100]
+            GCp['Min']['area']['NBCC 2020, Zone c'] = [0.1, 0.9290304, 9.290304, 100]
+            GCp['Min']['area']['NBCC 2020, Zone w'] = [0.1, 0.9290304, 46.45152, 100]
+            GCp['Min']['area']['NBCC 2020, Zone e'] = [0.1, 0.9290304, 46.45152, 100]
+
+            GCp['Min']['value'] = {}
+            GCp['Min']['value']['NBCC 2020, Zone r'] = [-1.5, -1.5, -0.8, -0.8]
+            GCp['Min']['value']['NBCC 2020, Zone s'] = [-2.5, -2.5, -1.2, -1.2]
+            GCp['Min']['value']['NBCC 2020, Zone c'] = [-3.0, -3.0, -1.4, -1.4]
+            GCp['Min']['value']['NBCC 2020, Zone w'] = [-1.1, -1.1, -0.8, -0.8]
+            GCp['Min']['value']['NBCC 2020, Zone e'] = [-1.4, -1.4, -0.8, -0.8]
+
+            GCp['Max'] = {}
+            GCp['Max']['area'] = {}
+            GCp['Max']['area']['NBCC 2020, Zone r'] = [0.1, 0.9290304, 18.580608, 100]
+            GCp['Max']['area']['NBCC 2020, Zone s'] = [0.1, 0.9290304, 18.580608, 100]
+            GCp['Max']['area']['NBCC 2020, Zone c'] = [0.1, 0.9290304, 18.580608, 100]
+            GCp['Max']['area']['NBCC 2020, Zone w'] = [0.1, 0.9290304, 46.45152, 100]
+            GCp['Max']['area']['NBCC 2020, Zone e'] = [0.1, 0.9290304, 46.45152, 100]
+
+            GCp['Max']['value'] = {}
+            GCp['Max']['value']['NBCC 2020, Zone r'] = [0.6, 0.6, 0.3, 0.3]
+            GCp['Max']['value']['NBCC 2020, Zone s'] = [0.6, 0.6, 0.3, 0.3]
+            GCp['Max']['value']['NBCC 2020, Zone c'] = [0.6, 0.6, 0.3, 0.3]
+            GCp['Max']['value']['NBCC 2020, Zone w'] = [1.0, 1.0, 0.7, 0.7]
+            GCp['Max']['value']['NBCC 2020, Zone e'] = [1.0, 1.0, 0.7, 0.7]
+    return GCp
 
 #===============================================================================
 #================================ CLASSES ======================================
@@ -844,11 +997,15 @@ class profile:
     """---------------------------------- Internals -----------------------------------"""
     def __init__(self,
                 name="profile", 
-                profType: Union[Literal["continuous","discrete","scatter"], None] =None, 
-                Z=None, H=None, dt=None, t=None,
+                profType: Union[Literal["continuous","discrete","scatter"], None] = None,
+                X: np.ndarray=None,
+                Y: np.ndarray=None,
+                Z: np.ndarray=None,
+                H=None, dt=None, t=None,
                 UofT: np.ndarray=None, 
                 VofT: np.ndarray=None,
                 WofT: np.ndarray=None,
+                pOfT: np.ndarray=None,
                 fields=VALID_VELOCITY_STAT_FIELDS,
                 stats: Dict ={},
                 SpectH: spectra =None, nSpectAvg=8,
@@ -857,6 +1014,8 @@ class profile:
                 interpolateToH=False, units=DEFAULT_SI_UNITS):
         self.name = name
         self.profType = profType
+        self.X: Union[np.ndarray, None] = X  # [N_pts]
+        self.Y: Union[np.ndarray, None] = Y  # [N_pts]
         self.Z: Union[np.ndarray, None] = Z  # [N_pts]
         self.stats: Dict = stats
         self.fields = fields
@@ -868,6 +1027,7 @@ class profile:
         self.UofT: np.ndarray = UofT  # [N_pts x nTime]
         self.VofT: np.ndarray = VofT  # [N_pts x nTime]
         self.WofT: np.ndarray = WofT  # [N_pts x nTime]
+        self.pOfT: np.ndarray = pOfT  # [N_pts x nTime]
         
         self.SpectH : spectra = SpectH
         self.nSpectAvg = nSpectAvg
@@ -895,7 +1055,7 @@ class profile:
         if self.dt is None and self.t is not None:
             self.dt = np.mean(np.diff(self.t))
 
-        self.stats = get_velTH_stats(UofT=self.UofT, VofT=self.VofT, WofT=self.WofT, dt=self.dt,
+        self.stats = get_velTH_stats_1pt(UofT=self.UofT, VofT=self.VofT, WofT=self.WofT, dt=self.dt,
                                      fields=self.fields)
         self.__computeSpectra()
         
@@ -1127,6 +1287,34 @@ class profile:
     def copy(self):
         return copy.deepcopy(self)
 
+    def getCoherence(self, 
+                     D, 
+                     dxn:Literal['x','y','z']='z', 
+                     **kwargs):
+        idx1 = [self.H_idx, self.H_idx+3, self.H_idx+6]
+        pts1 = np.array([[0.0, 0.0, self.Z[i]] for i in idx1])
+        dIdxs = [np.argmin(np.abs(self.Z-self.H-d)) for d in D]
+        pts2 = np.array([[0.0, 0.0, self.Z[i]] for i in dIdxs])
+
+        print(f"Shapes of pts1 and pts2: {np.shape(pts1)}, {np.shape(pts2)}")
+
+        Coh = {}
+
+        u1 = self.UofT[idx1,:]
+        u2 = self.UofT[dIdxs,:]
+        print(f"Shapes of u1 and u2: {np.shape(u1)}, {np.shape(u2)}")
+        f, Coh['zu'], dist = coherence(pts1=pts1, pts2=pts2, vel1=u1, vel2=u2, fs=self.samplingFreq, timeAxis=1, **kwargs)
+
+        v1 = np.array([self.VofT[self.H_idx,:]]).T
+        v2 = np.array([self.VofT[dIdxs,:]]).T
+        _, Coh['zv'], _ = coherence(pts1=pts1, pts2=pts2, vel1=v1, vel2=v2, fs=self.samplingFreq, timeAxis=1, **kwargs)
+
+        w1 = np.array([self.WofT[self.H_idx,:]]).T
+        w2 = np.array([self.WofT[dIdxs,:]]).T
+        _, Coh['zw'], _ = coherence(pts1=pts1, pts2=pts2, vel1=w1, vel2=w2, fs=self.samplingFreq, timeAxis=1, **kwargs)
+
+        return f, Coh, dist
+
     """--------------------------------- Plotters -------------------------------------"""
     def plotProfile_any(self, fld, ax=None, label=None, normalize=True, overlay_H=True, xLabel=None, yLabel=None, xLimits=None, yLimits=None, 
                         kwargs={'color': 'k', 'linestyle': '-'}, kwargs_ax={}, kwargs_Hline={'color': 'k', 'linestyle': '--', 'linewidth': 0.5}):
@@ -1325,7 +1513,6 @@ class profile:
                                 figSize=figSize,
                                 alwaysShowFig=alwaysShowFig
                                 )   
-
 
 class Profiles:
     def __init__(self, profiles=[]):
@@ -1581,6 +1768,8 @@ class Profiles:
                     normalize=True,
                     normZ:Literal['Z','xLi']='Z',
                     normU:Literal['U','sigUi']='U',
+                    smoothFactor=1,
+                    kwargs_smooth={},
                     plotType='loglog',
                     xLimits='auto', # [nMin,nMax]
                     yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
@@ -1620,12 +1809,19 @@ class Profiles:
             ylabels = (r"$S_{uu}$",r"$S_{vv}$",r"$S_{ww}$")
             xlabel = r"$n [Hz]$"
             drawXlineAt_rf1 = False
+        if np.isscalar(smoothFactor):
+            smoothFactor = (smoothFactor,)*self.N
         for i in range(self.N):
             if overlayVonK[i]:
                 n += (self.profiles[i].SpectH.rf(normZ=normZ),) if normalize else (self.profiles[i].SpectH.n,)
-                Suu += (self.profiles[i].SpectH.Suu_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
-                Svv += (self.profiles[i].SpectH.Svv_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
-                Sww += (self.profiles[i].SpectH.Sww_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
+                if smoothFactor[i] > 1:
+                    Suu += (self.profiles[i].SpectH.Suu_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
+                    Svv += (self.profiles[i].SpectH.Svv_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
+                    Sww += (self.profiles[i].SpectH.Sww_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
+                else:
+                    Suu += (smooth(self.profiles[i].SpectH.Suu_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
+                    Svv += (smooth(self.profiles[i].SpectH.Svv_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
+                    Sww += (smooth(self.profiles[i].SpectH.Sww_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
                 names += (self.profiles[i].SpectH.name+'-vonK',)
 
         wplt.plotSpectra(
@@ -2197,13 +2393,15 @@ class bldgCp(windCAD.building):
         self.Uref_FS = Uref_FS
         self.badTaps = badTaps
         self.AoA = [AoA,] if np.isscalar(AoA) else AoA          # [N_AoA]
+        self.AoA_zero_deg_basisVector = AoA_zero_deg_basisVector
+        self.AoA_rotation_direction: Literal['CW','CCW'] = AoA_rotation_direction
         self.CpOfT = CpOfT      # [N_AoA,Ntaps,Ntime]
         self.pOfT = pOfT        # [N_AoA,Ntaps,Ntime]
         self.p0ofT = p0ofT      # [N_AoA,Ntime]
         self.CpStats = CpStats          # dict{nFlds:[N_AoA,Ntaps]}
         self.peakSpecs = peakSpecs
         
-        self.CpStatsAreaAvg = None      # dict{nFlds:[Nzones][N_AoA,Npanels]}
+        self.CpStatsAreaAvg = None      # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
         self.velRatio = None
 
         self.__handleBadTaps()
@@ -2254,7 +2452,7 @@ class bldgCp(windCAD.building):
         axT = len(np.shape(self.CpOfT))-1
         nT = np.shape(self.CpOfT)[-1]
         nAoA = self.NumAoA
-        self.CpStatsAreaAvg = [] # [Nzones][N_AoA,Npanels]
+        self.CpStatsAreaAvg = [] # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
 
         for z,(wght_z,idx_z) in enumerate(zip(self.tapWeightsPerPanel,self.tapIdxsPerPanel)):
             for p,(wght,idx) in enumerate(zip(wght_z,idx_z)):
@@ -2276,7 +2474,7 @@ class bldgCp(windCAD.building):
         axT = len(np.shape(self.CpOfT))-1
         nT = np.shape(self.CpOfT)[-1]
         nAoA = self.NumAoA
-        self.CpStatsAreaAvg = [] # [Nfaces][Nzones][Narea][N_AoA,Npanels]
+        self.CpStatsAreaAvg = [] # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
 
         for _, fc in enumerate(self.faces):
             avgCp_f = []
@@ -2318,6 +2516,7 @@ class bldgCp(windCAD.building):
     def __str__(self):
         return self.name
 
+    """-------------------------------- Properties ------------------------------------"""
     @property
     def NumAoA(self) -> int:
         if self.AoA is None:
@@ -2354,14 +2553,85 @@ class bldgCp(windCAD.building):
         for s in stats:
             stats[s] = np.min(self.CpStats[s], axis=0)
         return stats
+
+    @property
+    def allAreasForCpAavg(self) -> dict:
+        areas = {k:np.array([]) for k in self.zoneDictKeys}
+        for _,fc in enumerate(self.faces): # self.CpStatsAreaAvg # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
+            for z, zone in enumerate(fc.zoneDict):
+                zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
+                area_z = []
+                for a, _ in enumerate(self.NominalPanelArea):
+                    area_z.extend(fc.panelAreas[z][a])
+                areas[zKey] = np.concatenate((areas[zKey], np.array(area_z)))
+        return areas
+
+    @property
+    def CpAavg_envMin_peakMin_minPerA(self) -> dict:
+        stats = {k:[] for k in self.zoneDictKeys}
+        fld = 'peakMin'
+        for f,fc in enumerate(self.faces): # self.CpStatsAreaAvg # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
+            for z, zone in enumerate(fc.zoneDict):
+                zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
+                val_z = []
+                for a, _ in enumerate(self.NominalPanelArea):
+                    val_z.append(np.min(np.array(self.CpStatsAreaAvg[f][z][a][fld]).flatten()))
+                if stats[zKey] == []:
+                    stats[zKey] = np.array(val_z)
+                else:
+                    stats[zKey] = np.minimum(stats[zKey], np.array(val_z))
+        return stats
     
+    @property
+    def CpAavg_envMin_peakMin_allA(self) -> dict:
+        stats = {k:[] for k in self.zoneDictKeys}
+        fld = 'peakMin'
+        for f,fc in enumerate(self.faces): # self.CpStatsAreaAvg # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
+            for z, zone in enumerate(fc.zoneDict):
+                zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
+                val_z = []
+                for a, _ in enumerate(self.NominalPanelArea):
+                    val_z.extend(np.min(np.array(self.CpStatsAreaAvg[f][z][a][fld]), axis=0))
+                stats[zKey].extend(val_z)
+        return stats
+    
+    @property
+    def CpAavg_envMax_peakMax_maxPerA(self) -> dict:
+        stats = {k:[] for k in self.zoneDictKeys}
+        fld = 'peakMax'
+        for f,fc in enumerate(self.faces):
+            for z, zone in enumerate(fc.zoneDict):
+                zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
+                val_z = []
+                for a, _ in enumerate(self.NominalPanelArea):
+                    val_z.append(np.max(np.array(self.CpStatsAreaAvg[f][z][a][fld]).flatten()))
+                if stats[zKey] == []:
+                    stats[zKey] = np.array(val_z)
+                else:
+                    stats[zKey] = np.maximum(stats[zKey], np.array(val_z))
+        return stats
+    
+    @property
+    def CpAavg_envMax_peakMax_allA(self) -> dict:
+        stats = {k:[] for k in self.zoneDictKeys}
+        fld = 'peakMax'
+        for f,fc in enumerate(self.faces):
+            for z, zone in enumerate(fc.zoneDict):
+                zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
+                val_z = []
+                for a, _ in enumerate(self.NominalPanelArea):
+                    val_z.extend(np.max(np.array(self.CpStatsAreaAvg[f][z][a][fld]), axis=0))
+                stats[zKey].extend(val_z)
+        return stats
+
+    """------------------------------ Data functions ----------------------------------"""
     def CpStatsAreaAvgCollected(self, mixNominalAreasFromAllZonesAndFaces=False, 
                         envelope:Literal['max','min','none']='none', 
                         extremesPerNominalArea:Literal['max','min','none']='none'):
         # [Nfaces][Nzones][Narea][Nflds][N_AoA,Npanels]
-        zNames = []
-        for z, zn in enumerate(self.zoneDict):
-            zNames.append(self.zoneDict[zn][0]+'_'+self.zoneDict[zn][1])
+        zNames = self.zoneDictKeys
+        # for z, zn in enumerate(self.zoneDict):
+        #     zNames.append(self.zoneDictKeys[zn])
         CpAavg = self.zoneDict
         for zm, zone_m in enumerate(CpAavg):
             if mixNominalAreasFromAllZonesAndFaces:
@@ -2392,8 +2662,8 @@ class bldgCp(windCAD.building):
                 return fld
 
         for f,fc in enumerate(self.faces):
-            for z,zone in enumerate(fc.zoneDict):
-                zIdx = zNames.index(fc.zoneDict[zone][0]+'_'+fc.zoneDict[zone][1])
+            for z,zKey in enumerate(fc.zoneDictKeys):
+                zIdx = zNames.index(zKey)
                 for a,_ in enumerate(fc.nominalPanelAreas):
                     for _, fld in enumerate(self.CpStatsAreaAvg[f][z][a]):
                         if mixNominalAreasFromAllZonesAndFaces:
@@ -2469,7 +2739,7 @@ class bldgCp(windCAD.building):
                 figs.append(fig)
             else:
                 axs = all_axes[p]
-                # fig = figs[p]
+                fig = figs[p]
                 
             for i in range(nPltPerPage):
                 if tapPltCount >= nPltTotal:
@@ -2579,7 +2849,7 @@ class bldgCp(windCAD.building):
             ax.axis('off')
         return
 
-    def plotAreaAveragedStat(self, fig=None, axs=None, figSize=[15,10], 
+    def plotAreaAveragedStat___to_be_decomissioned(self, fig=None, axs=None, figSize=[15,10], 
                             plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, invertYAxis=True,
                             label_min='Min', label_max='Max',
                             overlayThis_min=None, overlayLabel_min='', kwargs_overlay_min={'color':'k', 'linewidth':2, 'linestyle':'-'},
@@ -2599,8 +2869,9 @@ class bldgCp(windCAD.building):
             axs = fig.subplots(nRows, nCols, sharex=True, sharey=True)
 
         zoneDict = self.zoneDict
-        pnlA_all = self.panelAreas
-        pnlA_nom = self.NominalPanelArea
+        zoneDictKeys = self.zoneDictKeys
+        pnlA_all = self.panelAreas__to_be_redacted
+        pnlA_nom = np.array(self.NominalPanelArea)
         if plotExtremesPerNominalArea:
             areaAvgStats_min = self.CpStatsAreaAvgCollected(mixNominalAreasFromAllZonesAndFaces=True,envelope='min',extremesPerNominalArea='min')
             areaAvgStats_max = self.CpStatsAreaAvgCollected(mixNominalAreasFromAllZonesAndFaces=True,envelope='max',extremesPerNominalArea='max')
@@ -2609,13 +2880,17 @@ class bldgCp(windCAD.building):
             areaAvgStats_max = self.CpStatsAreaAvgCollected(mixNominalAreasFromAllZonesAndFaces=True,envelope='max',extremesPerNominalArea='none')
 
         if plotZoneGeom:
-            zoneCol = {zoneDict[z][0]+zoneDict[z][1]: 'w' for z in zoneDict}
+            zoneCol = {z: 'w' for z in zoneDictKeys}
 
         for I, z in enumerate(zoneDict):
-            zoneName = zoneDict[z][0] + ', ' + zoneDict[z][1]
+            zoneName = zoneDictKeys[I]
+            print(f"Plotting zone {zoneName} ({I+1} of {len(zoneDict)})")
             area = pnlA_nom*areaFactor if plotExtremesPerNominalArea else np.array(pnlA_all[z][2])*areaFactor
+            print(f"Shape of area: {np.shape(area)}")
             maxVal = np.squeeze(areaAvgStats_max[z][2]['peakMax'])
             minVal = np.squeeze(areaAvgStats_min[z][2]['peakMin'])
+            print(f"Shape of maxVal: {np.shape(maxVal)}")
+            print(f"Shape of minVal: {np.shape(minVal)}")
             
             i, j = np.unravel_index(z, axs.shape)
             ax = axs[i,j]
@@ -2630,7 +2905,7 @@ class bldgCp(windCAD.building):
                 ax.invert_yaxis()
             if plotZoneGeom:
                 zoneCol_copy = zoneCol.copy()
-                zoneCol_copy[zoneDict[z][0]+zoneDict[z][1]] = zoneShadeColor
+                zoneCol_copy[zoneName] = zoneShadeColor
                 bounds = insetBounds # if insetBounds is isinstance(insetBounds, list) else insetBounds[z]
                 ax_inset = ax.inset_axes(bounds=bounds)
                 self.plotZones(ax=ax_inset, zoneCol=zoneCol_copy, drawEdge=True, **kwargs_zonePlots)
@@ -2664,7 +2939,204 @@ class bldgCp(windCAD.building):
         if newFig:
             plt.show()
         return fig, axs
-    
+
+    def plotAreaAveragedStat(self, fig=None, axs=None,
+                            figSize=[15,10], 
+                            plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, invertYAxis=True,
+                            label_min='Min', label_max='Max',
+                            overlayThese=None, overlayFactors=None, kwargs_overlay={'color':'k', 'linewidth':2, 'linestyle':'-'},
+                            # overlayThis_min=None, overlayLabel_min='', kwargs_overlay_min={'color':'k', 'linewidth':2, 'linestyle':'-'},
+                            # overlayThis_max=None, overlayLabel_max='', kwargs_overlay_max={'color':'k', 'linewidth':2, 'linestyle':'-'},
+                            plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], zoneShadeColor='darkgrey', kwargs_zonePlots={},
+                            xLimits=None, yLimits=None, xLabel=None, yLabel=None,
+                            kwargs_min={}, kwargs_max={}, kwargs_legend={},
+                            kwargs_ax={'gridMajor':True, 'gridMinor':True}):
+        newFig = False
+        if fig is None:
+            newFig = True
+            fig = plt.figure(figsize=figSize)
+            plt.tight_layout()
+
+            NumZones = self.NumZones
+            nCols = min(nCols, NumZones)
+            nRows = int(np.ceil(NumZones/nCols))
+            axs = fig.subplots(nRows, nCols, sharex=True, sharey=True)
+
+        zoneDictKeys = self.zoneDictKeys
+        area = {z: np.array(self.NominalPanelArea) for z in zoneDictKeys} if plotExtremesPerNominalArea else self.allAreasForCpAavg
+        if plotExtremesPerNominalArea:
+            peakMax = self.CpAavg_envMax_peakMax_maxPerA
+            peakMin = self.CpAavg_envMin_peakMin_minPerA
+        else:
+            peakMax = self.CpAavg_envMax_peakMax_allA
+            peakMin = self.CpAavg_envMin_peakMin_allA
+
+        if plotZoneGeom:
+            zoneCol = {z: 'w' for z in zoneDictKeys}
+
+        for I, zKey in enumerate(zoneDictKeys):
+            zoneName = zKey
+            
+            i, j = np.unravel_index(I, axs.shape)
+            ax = axs[i,j]
+            ax.semilogx(area[zKey]*areaFactor, peakMax[zKey], '^b', label=label_max, **kwargs_max)
+            ax.semilogx(area[zKey]*areaFactor, peakMin[zKey], 'vk', label=label_min, **kwargs_min)
+            ax.axhline(0, color='k', linestyle='-', linewidth=0.7)
+            if overlayThese is not None:
+                for ii, overlay_i in enumerate(overlayThese):
+                    overlayFactor = overlayFactors[ii] if overlayFactors is not None else 1.0
+                    ax.semilogx(overlay_i['Min']['area'][zKey], np.array(overlay_i['Min']['value'][zKey])*overlayFactor, label=overlay_i['Name'], **kwargs_overlay[ii])
+                    ax.semilogx(overlay_i['Max']['area'][zKey], np.array(overlay_i['Max']['value'][zKey])*overlayFactor, **kwargs_overlay[ii])
+
+            if invertYAxis:
+                ax.invert_yaxis()
+            if plotZoneGeom:
+                zoneCol_copy = zoneCol.copy()
+                zoneCol_copy[zKey] = zoneShadeColor
+                bounds = insetBounds # if insetBounds is isinstance(insetBounds, list) else insetBounds[z]
+                ax_inset = ax.inset_axes(bounds=bounds)
+                self.plotZones(ax=ax_inset, zoneCol=zoneCol_copy, showLegend=False, drawEdge=True, **kwargs_zonePlots)
+                # ax_inset.axis('off')
+                ax_inset.axis('equal')
+                ax_inset.patch.set_facecolor('w')
+                ax_inset.patch.set_alpha(0.7)
+                ax_inset.tick_params(axis='both', which='major', length=0)
+                ax_inset.set_xticklabels('')
+                ax_inset.set_yticklabels('')
+                for spine in ax_inset.spines.values():
+                    spine.set_visible(False)
+
+            if newFig:
+                ax.set_title(zoneName)
+                if i == axs.shape[0]-1:
+                    xLabel = r'Area [$m^2$]' if xLabel is None else xLabel
+                    ax.set_xlabel(xLabel)
+                if j == 0:
+                    yLabel = r'Peak Cp' if yLabel is None else yLabel
+                    ax.set_ylabel(yLabel)
+                if i == 0 and j == 0:
+                    ax.legend(**kwargs_legend)
+                if xLimits is not None:
+                    ax.set_xlim(xLimits)
+                if yLimits is not None:
+                    ax.set_ylim(yLimits)
+
+                formatAxis(ax, **kwargs_ax)
+
+        # if there are remaining axes, remove them
+        for I in range(len(zoneDictKeys), axs.size):
+            i, j = np.unravel_index(I, axs.shape)
+            axs[i,j].axis('off')
+
+        if newFig:
+            plt.show()
+        return fig, axs
+        
+    def plotAoA_symbol(self, AoA, ax=None, figSize=[6,6], location: Literal['upper left','upper right','lower left','lower right']='lower left',
+                       explicitLocation=None, marginFactor=1.0,
+                       size=1.0, inwardArrow=True, drawDicorations=True):
+        if self.AoA_zero_deg_basisVector is None or self.AoA_rotation_direction is None:
+            raise Exception("AoA_zero_deg_basisVector and AoA_rotation_direction must be defined to plot the AoA symbol.")
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure(figsize=figSize)
+            ax = fig.add_subplot()
+        
+        bounds = self.boundingBoxPlt
+        aoaZero = self.AoA_zero_deg_basisVector
+        aoaRotDxn = self.AoA_rotation_direction
+        xRange, yRange = bounds[1]-bounds[0], bounds[3]-bounds[2]
+        basicSize = 0.05*np.mean([xRange, yRange])
+        if np.isscalar(marginFactor):
+            margin_x = marginFactor*basicSize
+            margin_y = marginFactor*basicSize
+        else:
+            margin_x = marginFactor[0]*basicSize
+            margin_y = marginFactor[1]*basicSize
+
+        if explicitLocation is None:
+            if location == 'upper left':
+                xOrig = bounds[0] + basicSize + margin_x
+                yOrig = bounds[3] - basicSize - margin_y
+            elif location == 'upper right':
+                xOrig = bounds[1] - basicSize - margin_x
+                yOrig = bounds[3] - basicSize - margin_y
+            elif location == 'lower left':
+                xOrig = bounds[0] + basicSize + margin_x
+                yOrig = bounds[2] + basicSize + margin_y
+            elif location == 'lower right':
+                xOrig = bounds[1] - basicSize - margin_x
+                yOrig = bounds[2] + basicSize + margin_y
+            else:
+                raise Exception(f"Unknown location {location}")
+        else:
+            xOrig, yOrig = explicitLocation[0], explicitLocation[1]
+
+        if drawDicorations:
+            ax.plot(xOrig, yOrig, marker='+', color='k', markersize=30*size)
+        
+        xZero = [xOrig, xOrig + aoaZero[0]*basicSize*size]
+        yZero = [yOrig, yOrig + aoaZero[1]*basicSize*size]
+        if drawDicorations:
+            ax.plot(xZero, yZero, color='k', linewidth=0.5)
+
+        zeroAngle = np.rad2deg(np.arctan2(aoaZero[1], aoaZero[0]))
+        original_aoa = AoA
+        rotnDxn = 1 if aoaRotDxn == 'ccw' else -1
+        AoA = rotnDxn*AoA + zeroAngle
+
+        r_x = np.cos(np.deg2rad(AoA))*basicSize*size
+        r_y = np.sin(np.deg2rad(AoA))*basicSize*size
+        r_x_txt, r_y_txt = r_x, r_y
+
+        if inwardArrow:
+            arr_orig_x, arr_orig_y = xOrig+r_x*1.8, yOrig+r_y*1.8
+            r_x *= -1
+            r_y *= -1
+        else:
+            arr_orig_x, arr_orig_y = xOrig, yOrig
+
+        ax.arrow(arr_orig_x, arr_orig_y, r_x, r_y,
+                    head_width=0.3*basicSize*size, head_length=0.6*basicSize*size, fc='k', ec='k')
+        ax.text(xOrig+r_x_txt*2.2, yOrig+r_y_txt*2.2,
+                f"{original_aoa}\u00b0", fontsize=12*size, ha='center', va='center')
+
+        if drawDicorations:
+            arc_orig_x, arc_orig_y = xOrig, yOrig
+            arc_radius = 1.0*basicSize*size
+            arc_start_angle = zeroAngle
+            arc_end_angle =   zeroAngle + rotnDxn*original_aoa
+            ax.add_patch(Arc((arc_orig_x, arc_orig_y), arc_radius*2, arc_radius*2, 
+                            theta1=arc_start_angle, theta2=arc_end_angle, 
+                            linewidth=0.5, zorder=0))
+        
+        if newFig:
+            ax.axis('equal')
+            plt.show()
+            return fig, ax
+
+    def plotAoA_definition(self, AoAs=[0,90,180,270], ax=None, figSize=[6,6], location: Literal['upper left','upper right','lower left','lower right']='lower left',
+                       explicitLocation=None, marginFactor=1.0, size=1.0, inwardArrow=True):
+        if self.AoA_zero_deg_basisVector is None or self.AoA_rotation_direction is None:
+            raise Exception("AoA_zero_deg_basisVector and AoA_rotation_direction must be defined to plot the AoA symbol.")
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure(figsize=figSize)
+            ax = fig.add_subplot()
+
+        for i, aoa in enumerate(AoAs):
+            if i == 0:
+                self.plotAoA_symbol(aoa, ax=ax, figSize=figSize, location=location, explicitLocation=explicitLocation, marginFactor=marginFactor, size=size, inwardArrow=inwardArrow)
+            else:
+                self.plotAoA_symbol(aoa, ax=ax, figSize=figSize, location=location, explicitLocation=explicitLocation, marginFactor=marginFactor, size=size, inwardArrow=inwardArrow, drawDicorations=False)
+
+        if newFig:
+            ax.axis('equal')
+            plt.show()
+            return fig, ax
+
 class BldgCps():
     def __init__(self) -> None:
         self._members = []
@@ -2673,3 +3145,4 @@ class BldgCps():
 
     def fold(self):
         pass
+
