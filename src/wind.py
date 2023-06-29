@@ -557,34 +557,71 @@ def NBCC2020_CpCg(Figure:Literal['4.1.7.6.-A', '4.1.7.6.-B', '4.1.7.6.-C', '4.1.
 
             CpCg['Min'] = {}
             CpCg['Min']['area'] = {}
-            CpCg['Min']['area']['NBCC 2020, Zone c'] = [0.1, 1, 10, 100]
-            CpCg['Min']['area']['NBCC 2020, Zone s'] = [0.1, 2, 10, 100]
-            CpCg['Min']['area']['NBCC 2020, Zone r'] = [0.1, 0.85, 10, 100]
-            CpCg['Min']['area']['NBCC 2020, Zone e'] = [0.5, 1, 50, 200]
-            CpCg['Min']['area']['NBCC 2020, Zone w'] = [0.5, 1, 50, 200]
+            CpCg['Min']['area']["NBCC 2020, Zone c"] = [0.1, 1, 10, 100]
+            CpCg['Min']['area']["NBCC 2020, Zone s"] = [0.1, 2, 10, 100]
+            CpCg['Min']['area']["NBCC 2020, Zone r"] = [0.1, 0.85, 10, 100]
+            CpCg['Min']['area']["NBCC 2020, Zone e"] = [0.5, 1, 50, 200]
+            CpCg['Min']['area']["NBCC 2020, Zone w"] = [0.5, 1, 50, 200]
 
             CpCg['Min']['value'] = {}
-            CpCg['Min']['value']['NBCC 2020, Zone c'] = [-5, -5, -4, -4]
-            CpCg['Min']['value']['NBCC 2020, Zone s'] = [-3.6, -3.6, -2.65, -2.65]
-            CpCg['Min']['value']['NBCC 2020, Zone r'] = [-2.5, -2.5, -2, -2]
-            CpCg['Min']['value']['NBCC 2020, Zone e'] = [-2.1, -2.1, -1.5, -1.5]
-            CpCg['Min']['value']['NBCC 2020, Zone w'] = [-1.8, -1.8, -1.5, -1.5]
+            CpCg['Min']['value']["NBCC 2020, Zone c"] = [-5, -5, -4, -4]
+            CpCg['Min']['value']["NBCC 2020, Zone s"] = [-3.6, -3.6, -2.65, -2.65]
+            CpCg['Min']['value']["NBCC 2020, Zone r"] = [-2.5, -2.5, -2, -2]
+            CpCg['Min']['value']["NBCC 2020, Zone e"] = [-2.1, -2.1, -1.5, -1.5]
+            CpCg['Min']['value']["NBCC 2020, Zone w"] = [-1.8, -1.8, -1.5, -1.5]
 
             CpCg['Max'] = {}
             CpCg['Max']['area'] = {}
-            CpCg['Max']['area']['NBCC 2020, Zone c'] = [0.1, 1, 8.5, 100]
-            CpCg['Max']['area']['NBCC 2020, Zone s'] = [0.1, 1, 8.5, 100]
-            CpCg['Max']['area']['NBCC 2020, Zone r'] = [0.1, 1, 8.5, 100]
-            CpCg['Max']['area']['NBCC 2020, Zone e'] = [0.5, 1, 50, 200]
-            CpCg['Max']['area']['NBCC 2020, Zone w'] = [0.5, 1, 50, 200]
+            CpCg['Max']['area']["NBCC 2020, Zone c"] = [0.1, 1, 8.5, 100]
+            CpCg['Max']['area']["NBCC 2020, Zone s"] = [0.1, 1, 8.5, 100]
+            CpCg['Max']['area']["NBCC 2020, Zone r"] = [0.1, 1, 8.5, 100]
+            CpCg['Max']['area']["NBCC 2020, Zone e"] = [0.5, 1, 50, 200]
+            CpCg['Max']['area']["NBCC 2020, Zone w"] = [0.5, 1, 50, 200]
 
             CpCg['Max']['value'] = {}
-            CpCg['Max']['value']['NBCC 2020, Zone c'] = [0.8, 0.8, 0.5, 0.5]
-            CpCg['Max']['value']['NBCC 2020, Zone s'] = [0.8, 0.8, 0.5, 0.5]
-            CpCg['Max']['value']['NBCC 2020, Zone r'] = [0.8, 0.8, 0.5, 0.5]
-            CpCg['Max']['value']['NBCC 2020, Zone e'] = [1.75, 1.75, 1.3, 1.3]
-            CpCg['Max']['value']['NBCC 2020, Zone w'] = [1.75, 1.75, 1.3, 1.3]
+            CpCg['Max']['value']["NBCC 2020, Zone c"] = [0.8, 0.8, 0.5, 0.5]
+            CpCg['Max']['value']["NBCC 2020, Zone s"] = [0.8, 0.8, 0.5, 0.5]
+            CpCg['Max']['value']["NBCC 2020, Zone r"] = [0.8, 0.8, 0.5, 0.5]
+            CpCg['Max']['value']["NBCC 2020, Zone e"] = [1.75, 1.75, 1.3, 1.3]
+            CpCg['Max']['value']["NBCC 2020, Zone w"] = [1.75, 1.75, 1.3, 1.3]
+    elif Figure == '4.1.7.6.-F':
+        if subfig == 'a':
+            CpCg = {}
+            CpCg['Name'] = 'NBCC 2020'
 
+            CpCg['Min'] = {}
+            CpCg['Min']['area'] = {}
+            CpCg['Min']['area']["NBCC 2020, Zone c"] = [0.1, 1, 10, 100]
+            CpCg['Min']['area']["NBCC 2020, Zone s'"] = [0.1, 2, 10, 100]
+            CpCg['Min']['area']["NBCC 2020, Zone s"] = [0.1, 2, 10, 100]
+            CpCg['Min']['area']["NBCC 2020, Zone r"] = [0.1, 0.85, 10, 100]
+            CpCg['Min']['area']["NBCC 2020, Zone e"] = [0.5, 1, 50, 200]
+            CpCg['Min']['area']["NBCC 2020, Zone w"] = [0.5, 1, 50, 200]
+
+            CpCg['Min']['value'] = {}
+            CpCg['Min']['value']["NBCC 2020, Zone c"] = [-5, -5, -4, -4]
+            CpCg['Min']['value']["NBCC 2020, Zone s'"] = [-3.6, -3.6, -2.65, -2.65]
+            CpCg['Min']['value']["NBCC 2020, Zone s"] = [-3.6, -3.6, -2.65, -2.65]
+            CpCg['Min']['value']["NBCC 2020, Zone r"] = [-2.5, -2.5, -2, -2]
+            CpCg['Min']['value']["NBCC 2020, Zone e"] = [-2.1, -2.1, -1.5, -1.5]
+            CpCg['Min']['value']["NBCC 2020, Zone w"] = [-1.8, -1.8, -1.5, -1.5]
+
+            CpCg['Max'] = {}
+            CpCg['Max']['area'] = {}
+            CpCg['Max']['area']["NBCC 2020, Zone c"] = [0.1, 1, 8.5, 100]
+            CpCg['Max']['area']["NBCC 2020, Zone s'"] = [0.1, 1, 8.5, 100]
+            CpCg['Max']['area']["NBCC 2020, Zone s"] = [0.1, 1, 8.5, 100]
+            CpCg['Max']['area']["NBCC 2020, Zone r"] = [0.1, 1, 8.5, 100]
+            CpCg['Max']['area']["NBCC 2020, Zone e"] = [0.5, 1, 50, 200]
+            CpCg['Max']['area']["NBCC 2020, Zone w"] = [0.5, 1, 50, 200]
+
+            CpCg['Max']['value'] = {}
+            CpCg['Max']['value']["NBCC 2020, Zone c"] = [0.8, 0.8, 0.5, 0.5]
+            CpCg['Max']['value']["NBCC 2020, Zone s'"] = [0.8, 0.8, 0.5, 0.5]
+            CpCg['Max']['value']["NBCC 2020, Zone s"] = [0.8, 0.8, 0.5, 0.5]
+            CpCg['Max']['value']["NBCC 2020, Zone r"] = [0.8, 0.8, 0.5, 0.5]
+            CpCg['Max']['value']["NBCC 2020, Zone e"] = [1.75, 1.75, 1.3, 1.3]
+            CpCg['Max']['value']["NBCC 2020, Zone w"] = [1.75, 1.75, 1.3, 1.3]
     return CpCg
 
 def ASCE7_22_GCp(Figure:Literal['30.3-2A', '30.3-2B', '30.3-2C', '30.3-2D', '30.3-2E', '30.3-2F', '30.3-2G'], subfig='a'):
@@ -628,33 +665,33 @@ def ASCE7_22_GCp(Figure:Literal['30.3-2A', '30.3-2B', '30.3-2C', '30.3-2D', '30.
 
             GCp['Min'] = {}
             GCp['Min']['area'] = {}
-            GCp['Min']['area']['NBCC 2020, Zone r'] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Min']['area']['NBCC 2020, Zone s'] = [0.1, 0.9290304, 9.290304, 100]
-            GCp['Min']['area']['NBCC 2020, Zone c'] = [0.1, 0.9290304, 9.290304, 100]
-            GCp['Min']['area']['NBCC 2020, Zone w'] = [0.1, 0.9290304, 46.45152, 100]
-            GCp['Min']['area']['NBCC 2020, Zone e'] = [0.1, 0.9290304, 46.45152, 100]
+            GCp['Min']['area']["NBCC 2020, Zone r"] = [0.1, 0.9290304, 18.580608, 100]
+            GCp['Min']['area']["NBCC 2020, Zone s"] = [0.1, 0.9290304, 9.290304, 100]
+            GCp['Min']['area']["NBCC 2020, Zone c"] = [0.1, 0.9290304, 9.290304, 100]
+            GCp['Min']['area']["NBCC 2020, Zone w"] = [0.1, 0.9290304, 46.45152, 100]
+            GCp['Min']['area']["NBCC 2020, Zone e"] = [0.1, 0.9290304, 46.45152, 100]
 
             GCp['Min']['value'] = {}
-            GCp['Min']['value']['NBCC 2020, Zone r'] = [-1.5, -1.5, -0.8, -0.8]
-            GCp['Min']['value']['NBCC 2020, Zone s'] = [-2.5, -2.5, -1.2, -1.2]
-            GCp['Min']['value']['NBCC 2020, Zone c'] = [-3.0, -3.0, -1.4, -1.4]
-            GCp['Min']['value']['NBCC 2020, Zone w'] = [-1.1, -1.1, -0.8, -0.8]
-            GCp['Min']['value']['NBCC 2020, Zone e'] = [-1.4, -1.4, -0.8, -0.8]
+            GCp['Min']['value']["NBCC 2020, Zone r"] = [-1.5, -1.5, -0.8, -0.8]
+            GCp['Min']['value']["NBCC 2020, Zone s"] = [-2.5, -2.5, -1.2, -1.2]
+            GCp['Min']['value']["NBCC 2020, Zone c"] = [-3.0, -3.0, -1.4, -1.4]
+            GCp['Min']['value']["NBCC 2020, Zone w"] = [-1.1, -1.1, -0.8, -0.8]
+            GCp['Min']['value']["NBCC 2020, Zone e"] = [-1.4, -1.4, -0.8, -0.8]
 
             GCp['Max'] = {}
             GCp['Max']['area'] = {}
-            GCp['Max']['area']['NBCC 2020, Zone r'] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Max']['area']['NBCC 2020, Zone s'] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Max']['area']['NBCC 2020, Zone c'] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Max']['area']['NBCC 2020, Zone w'] = [0.1, 0.9290304, 46.45152, 100]
-            GCp['Max']['area']['NBCC 2020, Zone e'] = [0.1, 0.9290304, 46.45152, 100]
+            GCp['Max']['area']["NBCC 2020, Zone r"] = [0.1, 0.9290304, 18.580608, 100]
+            GCp['Max']['area']["NBCC 2020, Zone s"] = [0.1, 0.9290304, 18.580608, 100]
+            GCp['Max']['area']["NBCC 2020, Zone c"] = [0.1, 0.9290304, 18.580608, 100]
+            GCp['Max']['area']["NBCC 2020, Zone w"] = [0.1, 0.9290304, 46.45152, 100]
+            GCp['Max']['area']["NBCC 2020, Zone e"] = [0.1, 0.9290304, 46.45152, 100]
 
             GCp['Max']['value'] = {}
-            GCp['Max']['value']['NBCC 2020, Zone r'] = [0.6, 0.6, 0.3, 0.3]
-            GCp['Max']['value']['NBCC 2020, Zone s'] = [0.6, 0.6, 0.3, 0.3]
-            GCp['Max']['value']['NBCC 2020, Zone c'] = [0.6, 0.6, 0.3, 0.3]
-            GCp['Max']['value']['NBCC 2020, Zone w'] = [1.0, 1.0, 0.7, 0.7]
-            GCp['Max']['value']['NBCC 2020, Zone e'] = [1.0, 1.0, 0.7, 0.7]
+            GCp['Max']['value']["NBCC 2020, Zone r"] = [0.6, 0.6, 0.3, 0.3]
+            GCp['Max']['value']["NBCC 2020, Zone s"] = [0.6, 0.6, 0.3, 0.3]
+            GCp['Max']['value']["NBCC 2020, Zone c"] = [0.6, 0.6, 0.3, 0.3]
+            GCp['Max']['value']["NBCC 2020, Zone w"] = [1.0, 1.0, 0.7, 0.7]
+            GCp['Max']['value']["NBCC 2020, Zone e"] = [1.0, 1.0, 0.7, 0.7]
     return GCp
 
 #===============================================================================
@@ -1514,6 +1551,27 @@ class profile:
                                 alwaysShowFig=alwaysShowFig
                                 )   
 
+    def plotRefHeightStatsTable(self,
+                                fig=None,
+                                ax=None,
+                                precision=2,):
+        if self.stats is None:
+            return
+        if fig is None:
+            fig = plt.figure()
+        if ax is None:
+            ax = plt.subplot()
+        ax.axis('off')
+        ax.axis('tight')
+        cell_text = []
+        for key in self.stats.keys():
+            cell_text.append([key, np.round(self.stats[key][self.H_idx], precision)])
+        ax.table(cellText=cell_text,
+                 colLabels=['Field','Value'],
+                 loc='center')
+        fig.tight_layout()
+        plt.show()
+
 class Profiles:
     def __init__(self, profiles=[]):
         self._currentIndex = 0
@@ -1839,6 +1897,36 @@ class Profiles:
                         plotType=plotType,
                         drawXlineAt_rf1=drawXlineAt_rf1
                         )
+
+    def plotRefHeightStatsTable(self,
+                                fig=None,figsize=[15,5],ax=None,precision=2,
+                                fontSz=None, normalize=True,
+                                kwargs_table={'align':'center', 
+                                              'loc':'center',
+                                              'cellLoc': 'center',
+                                              'bbox': [0.0, 0.0, 1.0, 1.0]}):
+        if fig is None:
+            fig = plt.figure(figsize=figsize)
+        if ax is None:
+            ax = plt.subplot()
+        ax.axis('off')
+        ax.axis('tight')
+
+        # each profile will have its own column and each field will have its own row. If there is missing value or non-existent field, it will be filled with ' '
+        cell_text = []
+        for key in self.profiles[0].stats.keys():
+            cell_text.append([key, *[np.round(prof.stats[key][prof.H_idx], precision) if key in prof.stats.keys() else ' ' for prof in self.profiles]])
+
+        table = ax.table(cellText=cell_text,
+                    colLabels=['Field',*[prof.name for prof in self.profiles]],
+                    **kwargs_table)
+        if fontSz is not None:
+            table.auto_set_font_size(False)
+            table.set_fontsize(fontSz)
+
+        fig.tight_layout()
+        plt.show()
+
 
 class ESDU74:
     __Omega = 72.7e-6            # Angular rate of rotation of the earth in [rad/s].  ESDU 74031 sect. A.1
@@ -2940,13 +3028,13 @@ class bldgCp(windCAD.building):
             plt.show()
         return fig, axs
 
-    def plotAreaAveragedStat(self, fig=None, axs=None,
-                            figSize=[15,10], 
+    def plotCandC_load(self, fig=None, axs=None,
+                            figSize=[15,10], sharex=True, sharey=True,
                             plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, invertYAxis=True,
                             label_min='Min', label_max='Max',
                             overlayThese=None, overlayFactors=None, kwargs_overlay={'color':'k', 'linewidth':2, 'linestyle':'-'},
-                            # overlayThis_min=None, overlayLabel_min='', kwargs_overlay_min={'color':'k', 'linewidth':2, 'linestyle':'-'},
-                            # overlayThis_max=None, overlayLabel_max='', kwargs_overlay_max={'color':'k', 'linewidth':2, 'linestyle':'-'},
+                            subplotLabels=None, subplotLabels_xy=[0.05,0.95], kwargs_subplotLabels={'fontsize':14},
+                            legend_ax_idx=0,
                             plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], zoneShadeColor='darkgrey', kwargs_zonePlots={},
                             xLimits=None, yLimits=None, xLabel=None, yLabel=None,
                             kwargs_min={}, kwargs_max={}, kwargs_legend={},
@@ -2960,7 +3048,7 @@ class bldgCp(windCAD.building):
             NumZones = self.NumZones
             nCols = min(nCols, NumZones)
             nRows = int(np.ceil(NumZones/nCols))
-            axs = fig.subplots(nRows, nCols, sharex=True, sharey=True)
+            axs = fig.subplots(nRows, nCols, sharex=sharex, sharey=sharey)
 
         zoneDictKeys = self.zoneDictKeys
         area = {z: np.array(self.NominalPanelArea) for z in zoneDictKeys} if plotExtremesPerNominalArea else self.allAreasForCpAavg
@@ -3006,6 +3094,9 @@ class bldgCp(windCAD.building):
                 for spine in ax_inset.spines.values():
                     spine.set_visible(False)
 
+            if subplotLabels is not None:
+                ax.annotate(subplotLabels[I], xy=subplotLabels_xy, xycoords='axes fraction', **kwargs_subplotLabels)
+
             if newFig:
                 ax.set_title(zoneName)
                 if i == axs.shape[0]-1:
@@ -3014,8 +3105,6 @@ class bldgCp(windCAD.building):
                 if j == 0:
                     yLabel = r'Peak Cp' if yLabel is None else yLabel
                     ax.set_ylabel(yLabel)
-                if i == 0 and j == 0:
-                    ax.legend(**kwargs_legend)
                 if xLimits is not None:
                     ax.set_xlim(xLimits)
                 if yLimits is not None:
@@ -3023,6 +3112,9 @@ class bldgCp(windCAD.building):
 
                 formatAxis(ax, **kwargs_ax)
 
+        handles, labels = axs[0,0].get_legend_handles_labels()
+        axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles, labels, **kwargs_legend)
+        
         # if there are remaining axes, remove them
         for I in range(len(zoneDictKeys), axs.size):
             i, j = np.unravel_index(I, axs.shape)

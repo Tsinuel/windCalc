@@ -1469,7 +1469,7 @@ class Faces:
 
     def plotZones(self, ax=None, zoneCol=None, drawEdge=True, fill=True, showLegend=True,
                   kwargs_Edge={'color':'k', 'lw':0.5, 'ls':'-'}, 
-                  kwargs_Fill={},
+                  kwargs_Fill={'alpha':0.7,},
                   kwargs_Legend={'loc':'upper left', 'bbox_to_anchor':(1.05, 1), 'borderaxespad':0.}):
         if zoneCol is None:
             nCol = len(self.zoneDict)
@@ -1487,17 +1487,18 @@ class Faces:
             fc.plotZones(ax=ax, zoneCol=zoneCol, drawEdge=drawEdge, fill=fill, showLegend=False, kwargs_Edge=kwargs_Edge, kwargs_Fill=kwargs_Fill)
         if newFig:
             ax.axis('equal')
+        patches = []
+        for i,z in enumerate(zoneCol):
+            patches.append(mpatches.Patch(color=zoneCol[z], label=z))
         if showLegend:
-            patches = []
-            for i,z in enumerate(zoneCol):
-                patches.append(mpatches.Patch(color=zoneCol[z], label=z))
             lg = ax.legend(handles=patches, **kwargs_Legend)
         else:
             lg = None
-        return zoneCol, lg
+
+        return zoneCol, lg, patches
 
     def plotPanels(self, ax=None, aIdx=0, 
-                   kwargs_Edge={'color':'g', 'lw':0.5, 'ls':'-', 'marker':'None', 'markersize':3},
+                   kwargs_Edge={'color':'b', 'lw':0.5, 'ls':'-', 'marker':'None', 'markersize':3},
                    ):
         newFig = False
         if ax is None:
@@ -1508,6 +1509,39 @@ class Faces:
             fc.plotPanels(ax=ax, aIdx=aIdx, kwargs_Edge=kwargs_Edge)
         if newFig:
             ax.axis('equal')
+
+    def plotPanels_AllAreas(self, 
+                    figsize=(15,5), fig=None, axs=None, nCols=3,
+                    areaUnit='', areaFactor=1.0, areaFmt="{:.2f}",
+                    plotEdges=True, plotTaps=False, plotZones=True,
+                    kwargs_Edge={'color':'b', 'lw':0.5, 'ls':'-', 'marker':'None', 'markersize':3},
+                    ):
+        newFig = False
+        areas = self.NominalPanelArea
+        if axs is None:
+            newFig = True
+            nRows = int(np.ceil(len(areas)/nCols))
+            fig, axs = plt.subplots(nRows, nCols, figsize=figsize)
+            axs = axs.flatten()
+
+        for a,area in enumerate(areas):
+            self.plotPanels(ax=axs[a], aIdx=a, kwargs_Edge=kwargs_Edge)
+            if plotEdges:
+                self.plotEdges(ax=axs[a], showName=False)
+            if plotTaps:
+                self.plotTaps(ax=axs[a], showTapNo=False)
+            if plotZones:
+                self.plotZones(ax=axs[a], showLegend=False)
+            area_string = areaFmt.format(areaFactor*area)
+            axs[a].set_title(f"Area: {area_string} {areaUnit}")
+            
+        if newFig:
+            for a in range(len(axs)):
+                axs[a].axis('equal')
+                axs[a].axis('off')
+            plt.tight_layout()
+            plt.show()
+        return fig, axs
 
     def plotTapField(self, field, ax=None, dx=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both'):
         newFig = False

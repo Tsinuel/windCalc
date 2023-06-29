@@ -3,6 +3,33 @@
 Created on Sat Jun 25 16:49:36 2022
 
 @author: Tsinuel Geleta
+
+This module contains functions for reading and processing OpenFOAM data.
+
+The module is part of the windCalc package.
+
+Functions
+---------
+meshSizeFromCutoffFreq : Calculate the mesh size from the cutoff frequency and the spectral densities of the velocity components.
+readProfiles : Read profiles from a file.
+readBDformattedFile : Read a file in the format of boundaryData. Can be points or velocity.
+writeBDformattedFile : Write a file in the format of boundaryData. Can be points or velocity.
+getProfileScaleFactor : Calculate the scale factor for a profile.
+scaleVelocity : Scale velocity components.
+readInflowDict : Read the inflow dictionary.
+getClosest2DcoordsTo : Get the closest 2D coordinates to a given set of coordinates.
+scaleInflowData : Scale inflow data.
+extractSampleProfileFromInflow : Extract a sample profile from inflow data.
+readProbe : Read probe data from an OpenFOAM case.
+processVelProfile : Process velocity profiles.
+readVelProfile : Read velocity profiles.
+readSurfacePressure : Read surface pressure data.
+
+Classes
+-------
+foamCase : A class for handling OpenFOAM cases.
+inflowTuner : A class for scaling inflow data.
+
 """
 import numpy as np
 import os
@@ -22,13 +49,48 @@ import windPlotting as wPlt
 TIME_STEP_TOLERANCE = 1e-7
 MAX_DATA_LIMIT = 1e+50
 
-
-__showPlots = False
 __precision = 6
 
 #===============================================================================
 #=============================  FUNCTIONS  =====================================
 #===============================================================================
+
+#---------------------------  General CFD  -------------------------------------
+def meshSizeFromCutoffFreq(nc, Suu, Svv, Sww):
+    """
+    Calculate the mesh size from the cutoff frequency and the spectral densities
+    of the velocity components.
+
+    Parameters
+    ----------
+    fc : float
+        The cutoff frequency.
+    Suu : np.array(float)
+        The spectral density of the longitudinal velocity component.
+    Svv : np.array(float)
+        The spectral density of the lateral velocity component.
+    Sww : np.array(float)
+        The spectral density of the vertical velocity component.
+
+    Returns
+    -------
+    dx : float
+        The mesh size.
+
+    References
+    ----------
+    [1]  Geleta, T.N., Bitsuamlak, G.T., 2022. Validation metrics and turbulence 
+        frequency limits for LES-based wind load evaluation for low-rise 
+        buildings. J. Wind Eng. Ind. Aerodyn. 231, 105210. 
+        https://doi.org/10.1016/j.jweia.2022.105210
+    """
+    Suu = np.asarray(Suu)
+    Svv = np.asarray(Svv)
+    Sww = np.asarray(Sww)
+    
+    dx = np.sqrt( (np.pi/(2*nc)) * (Suu+Svv+Sww) )
+    
+    return dx
 
 #-----------------------  Inflow data handlers  --------------------------------
 def readProfiles(file,requiredFields):
@@ -409,9 +471,7 @@ def extractSampleProfileFromInflow(inletDir,outPath,figFile,tMax,H):
     #                   pltFile=figFile)
     pass
 
-#===============================================================================
-#=================  Probe readers and related functions  =======================
-#===============================================================================
+#-----------------  Probe readers and related functions  -----------------------
 def __readProbe_singleT(file,field):
     """
     Read time-history data of a field from a single OpenFOAM probe file.
