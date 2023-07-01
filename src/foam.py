@@ -1074,8 +1074,6 @@ class inflowTuner:
             scaledTables.append(scaledTable)
         return scaledTables, factors, names
 
-
-
     def writeProfile(self, rnd=0, dir=None, name='profile', figsize=[15,15], zLim=[0,10], debugMode=False, applySmoothing=True):
         def plotThese(profs:List[pd.DataFrame]=[], names=[], ratio:pd.DataFrame=None, mainTitle=None, markers=None, color=None, lwgts=None, lss=None):
             if not debugMode:

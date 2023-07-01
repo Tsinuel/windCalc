@@ -1493,7 +1493,7 @@ class Faces:
         if showLegend:
             lg = ax.legend(handles=patches, **kwargs_Legend)
         else:
-            lg = None
+            lg = None 
 
         return zoneCol, lg, patches
 
