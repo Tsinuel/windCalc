@@ -33,6 +33,7 @@ inflowTuner : A class for scaling inflow data.
 """
 import numpy as np
 import os
+import glob
 import warnings
 import pandas as pd
 import scipy.interpolate as scintrp
@@ -92,24 +93,7 @@ def meshSizeFromCutoffFreq(nc, Suu, Svv, Sww):
     
     return dx
 
-#-----------------------  Inflow data handlers  --------------------------------
-def readProfiles(file,requiredFields):
-    if ~os.path.exists(file):
-        FileNotFoundError()
-    profiles = pd.read_csv(file)
-    
-    if 'Z' not in profiles:
-        if 'z' in profiles:
-            profiles.rename(columns={'z':'Z'})
-        else:
-            raise Exception("All profiles must have Z column. Check profile:"+ file)
-    
-    for f in requiredFields:
-        if f not in profiles:
-            raise Exception("The profile column '"+ f +"' is listed in 'requiredFields' but not found in the profile: "+file)
-    
-    return profiles
-
+#-------------------------------- IO  ------------------------------------------
 def readBDformattedFile(file):
     # file in the format of boundaryData. Can be points or velocity
     entries = [line.split() for line in open(file)]
@@ -135,341 +119,145 @@ def writeBDformattedFile(file,vect):
     f.write(")")
     f.close()    
 
-def getProfileScaleFactor(Z_intrp, origProf, targProf, scaleBy, scalingFile=None, figFile=''):
-    
-    def plotProf(Z_calc, orig, targ, fCalc, Z_intrp, fIntrp, name, pdf):
-        if pdf == '':
-            return
-        fig = plt.figure() 
-        fig.add_subplot(1,2,1)
-        plt.plot(orig,Z_calc,'k-',label='orig')
-        plt.plot(targ,Z_calc,'r-',label='target')
-        plt.xlabel(name)
-        plt.ylabel('Z')
-        plt.legend()
-        
-        fig.add_subplot(1,2,2)
-        plt.plot(fCalc,Z_calc,'dk',label='Calculated')
-        plt.plot(fIntrp[::50],Z_intrp[::50],'.r',label='Interpolated',markersize=2)
-        plt.xlabel('Correction factor (Targ/Orig)')
-        plt.ylabel('Z')
-        plt.legend()
-        # plt.show()
-        pdf.savefig(fig)
-        plt.clf()
-        
-    if scalingFile is not None:
-        scaleFctrs = readProfiles(scalingFile, ["U", "Iu", "Iv", "Iw"])
-        fU_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.U, fill_value='extrapolate')
-        fIu_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.Iu, fill_value='extrapolate')
-        fIv_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.Iv, fill_value='extrapolate')
-        fIw_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.Iw, fill_value='extrapolate')
+def readVTKfile(vtkFile, fieldName, showLog=True):
+    import vtk
+    from vtk.util.numpy_support import vtk_to_numpy
 
+    reader = vtk.vtkPolyDataReader()
+    reader.SetFileName(vtkFile)
+    reader.ReadAllFieldsOn()
+    reader.Update()
+    data = reader.GetOutput()
+    if showLog:
+        print("Reading field '"+fieldName+"' from file: "+vtkFile)
+        print("    No. of points: "+str(data.GetNumberOfPoints()))
+        print("    No. of cells: "+str(data.GetNumberOfCells()))
+        print("    No. of arrays: "+str(data.GetPointData().GetNumberOfArrays()))
+
+    if fieldName == 'p':
+        field = data.GetPointData().GetScalars('p')
+    elif fieldName == 'U':
+        field = data.GetPointData().GetVectors('U')
     else:
-        Z_calc = np.unique(np.sort(np.append(np.asarray(origProf.Z), np.asarray(targProf.Z))))
-        
-        if 'U' in scaleBy:
-            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.U),fill_value='extrapolate')
-            orig = intrp(Z_calc)
-            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.U),fill_value='extrapolate')
-            targ = intrp(Z_calc)
-            fU_calc = targ/orig
-            intrp = scintrp.interp1d(Z_calc, fU_calc, fill_value='extrapolate')
-            fU_intrp = intrp(Z_intrp)
-            plotProf(Z_calc,orig,targ,fU_calc, Z_intrp, fU_intrp,'U',figFile)
-        else:
-            fU_intrp = np.ones(Z_intrp.shape())
-        
-        if 'Iu' in scaleBy:
-            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iu),fill_value='extrapolate')
-            orig = intrp(Z_calc)
-            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iu),fill_value='extrapolate')
-            targ = intrp(Z_calc)
-            fIu_calc = targ/orig
-            intrp = scintrp.interp1d(Z_calc, fIu_calc, fill_value='extrapolate')
-            fIu_intrp = intrp(Z_intrp)
-            plotProf(Z_calc,orig,targ,fIu_calc, Z_intrp, fIu_intrp,'Iu',figFile)
-        else:
-            fIu_intrp = np.ones(Z_intrp.shape())
-    
-        if 'Iv' in scaleBy:
-            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iv),fill_value='extrapolate')
-            orig = intrp(Z_calc)
-            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iv),fill_value='extrapolate')
-            targ = intrp(Z_calc)
-            fIv_calc = targ/orig
-            intrp = scintrp.interp1d(Z_calc, fIv_calc, fill_value='extrapolate')
-            fIv_intrp = intrp(Z_intrp)
-            plotProf(Z_calc,orig,targ,fIv_calc, Z_intrp, fIv_intrp,'Iv',figFile)
-        else:
-            fIv_intrp = np.ones(Z_intrp.shape())
-        
-        if 'Iw' in scaleBy:
-            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iw),bounds_error=False,fill_value=(origProf.Iw[0],origProf.iloc[-1].Iw))
-            orig = intrp(Z_calc)
-            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iw),bounds_error=False,fill_value=(targProf.Iw[0],targProf.iloc[-1].Iw))
-            targ = intrp(Z_calc)
-            fIw_calc = targ/orig
-            intrp = scintrp.interp1d(Z_calc, fIw_calc, fill_value='extrapolate')
-            fIw_intrp = intrp(Z_intrp)
-            plotProf(Z_calc,orig,targ,fIw_calc, Z_intrp, fIw_intrp,'Iw',figFile)
-        else:
-            fIw_intrp = np.ones(Z_intrp.shape())
-    
-    return fU_intrp,fIu_intrp,fIv_intrp,fIw_intrp
+        raise Exception("The field '"+fieldName+"' is not available in the file: "+vtkFile)
+    points = data.GetPoints().GetData()
+    points = vtk_to_numpy(points)
+    field = vtk_to_numpy(field)
+    if showLog:
+        print("    Shape of points: "+str(np.shape(points)))
+        print("    Shape of the field: "+str(np.shape(field)))
+    return points, field
 
-def scaleVelocity(UofT,VofT,WofT,
-                  Z, scaleBy,
-                  origUofZ, fU, fIu, fIv, fIw,
-                  figFile=''):
-    
-    U_MeanCorr = fU*UofT
-    U_old = fU*origUofZ(Z)
-    U_new = U_old + fIu*(U_MeanCorr-U_old)
-    
-    V_new = fU*fIv*VofT
-    
-    W_new = fU*fIw*WofT
-        
-    if len(figFile) > 0:
-        pdf = PdfPages(figFile)       
-        fig = pdf.figure() 
-        fig.add_subplot(1,1,1)
-        plt.plot(UofT,Z,'.k',label='orig',ms=1)
-        plt.plot(U_new,Z,'.r',label='scaled',ms=1)
-        # plt.plot(U_old,Z,'xb',label='meanU-old',ms=1)
-        # plt.plot(fUofZ(Z)*U_old,Z,'xg',label='meanU-new',ms=1)
-        plt.xlabel('U')
-        plt.ylabel('Z')
-        plt.legend()
-        # pdf.savefig(fig)
-        # plt.clf()
-        
-        fig.add_subplot(1,1,1)
-        plt.plot(VofT,Z,'.k',label='orig',ms=1)
-        plt.plot(V_new,Z,'.r',label='scaled',ms=1)
-        plt.xlabel('V')
-        plt.ylabel('Z')
-        plt.legend()
-        # pdf.savefig(fig)
-        # plt.clf()
-        
-        fig.add_subplot(1,1,1)
-        plt.plot(WofT,Z,'.k',label='orig',ms=1)
-        plt.plot(W_new,Z,'.r',label='scaled',ms=1)
-        plt.xlabel('W')
-        plt.ylabel('Z')
-        plt.legend()
-        pdf.savefig(fig)
-        plt.clf()
-        
-        pdf.close()
+def readRAWfile(file, numHeader=2, showLog=True):
+    # space delimited column file with the following header:
+    # U  POINT_DATA 266505
+    #  x  y  z  U_x  U_y  U_z
+    with open(file) as f:
+        first_line = f.readline()
+        second_line = f.readline()
+    nCols = len(second_line.split())-1
+    nRows = int(first_line.split()[-1])
+    if showLog:
+        print("Reading file: "+file)
+        print("    No. of columns: "+str(nCols))
+        print("    No. of rows: "+str(nRows))
+    data = pd.read_csv(file, skiprows=numHeader, sep=' ', header=None, names=second_line.split()[1:])
+    if showLog:
+        print("    Shape of the data: "+str(np.shape(data)))
+    return data
 
-    return U_new, V_new, W_new
-
-def readInflowDict(infFile):
-    inflDict = {}
-    dictFile = [line.split() for line in open(infFile)]
+#-----------------------  Inflow data handlers  --------------------------------
+def convertSectionSampleToBoundaryDataInflow(caseDir, sectionName, fileName, 
+                                             outDir=None, 
+                                             shiftTimeBy=None, 
+                                             overwrite=False,
+                                             pointDistanceTolerance=1e-6,
+                                             timeOutputPrecision=6,
+                                             showLog=True, 
+                                             detailedLog=False):
+    if not os.path.exists(caseDir):
+        raise Exception("The case directory '"+caseDir+"' does not exist.")
+    sectDir = caseDir+"/postProcessing/"+sectionName+"/"
+    if not os.path.exists(sectDir):
+        raise Exception("The section directory '"+sectDir+"' does not exist.")
+    if outDir is None:
+        outDir = caseDir+"/constant/boundaryData/inlet/"
+    os.makedirs(outDir, exist_ok=True)
+    if showLog:
+        print("Converting section sample to boundaryData inflow.")
+        print("    Reading section sample from: "+sectDir+fileName)
+        print("    Writing boundaryData inflow to: "+outDir)
     
-    for d in dictFile:
-        if d == []:
-            continue
-        elif d[0] == 'inflowDir':
-            inflDict["inflowDir"] = d[1]
-        elif d[0] == 'inflowFormat':
-            inflDict["inflowFormat"] = d[1]
-        elif d[0] == 'outputDir':
-            inflDict["outputDir"] = d[1]
-        elif d[0] == 'targProfFile':
-            inflDict["targProfFile"] = d[1]
-        elif d[0] == 'origProfFile':
-            inflDict["origProfFile"] = d[1]
-        elif d[0] == 'scaleFactorFile':
-            inflDict["scaleFactorFile"] = d[1]
-        elif d[0] == 'dt':
-            inflDict["dt"] = float(d[1])
-        elif d[0] == 'precision':
-            inflDict["precision"] = int(d[1])
-        elif d[0] == 'lengthScale':
-            inflDict["lScl"] = float(d[1])
-        elif d[0] == 'timeScale':
-            inflDict["tScl"] = float(d[1])
-        elif d[0] == 'scaleBy':
-            inflDict["scaleBy"] = d[1:]
-        else:
-            continue
-        
-    return inflDict
-
-def getClosest2DcoordsTo(X,Y,Zin):
-    from scipy import spatial
-    coords = []
-    for x, y in zip(X, Y):
-        coords.append((x,y))
-    inletPlane = spatial.KDTree(coords)
-    
-    pts = []    
-    for z in Zin:
-        pts.append((0,z))
-        
-    idx = inletPlane.query(pts)[1]
-    
-    return idx
-
-def scaleInflowData(caseDir,tMin,tMax,H,writeInflow=True,smplName=''):
-    
-    # caseDir = 'D:/tempData_depot/simData_CandC/ttuPSpcOP15.7'
-    inflDict = readInflowDict(caseDir+'/system/scaleInflowDict')
-    if smplName == '':
-        smplName = 'inflowScaling_'+str(tMin)+'_to_'+str(tMax)
-    if not os.path.exists(inflDict["outputDir"]+'/inlet'):
-        os.makedirs(inflDict["outputDir"]+'/inlet')
-    pdfDoc = PdfPages(inflDict["outputDir"]+'/'+smplName+'.pdf')
-    
-    
-    ptsFile = inflDict["inflowDir"] + '/inlet/points'
-    points = readBDformattedFile(ptsFile)
-    points.columns = ['X','Y','Z']
-    
-    Z_smpl = np.linspace(0.001,max(points.Z)-0.01,100)
-    idx = getClosest2DcoordsTo(points.Y,points.Z,Z_smpl)
-    Z_smpl = np.asarray(points.Z[idx],dtype=float)
-
-    
-    
-    # prep for scaling
-    origProf = readProfiles(inflDict["origProfFile"], inflDict["scaleBy"])
-    targProf = readProfiles(inflDict["targProfFile"], inflDict["scaleBy"])
-    # origProf.Z = origProf.Z*inflDict["lScl"]
-    fU,fIu,fIv,fIw = getProfileScaleFactor(points.Z, origProf, targProf, inflDict["scaleBy"],scalingFile=inflDict["scaleFactorFile"], figFile=pdfDoc)
-    
-    origUofZ = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.U),fill_value='extrapolate')
-    
-    
-    inletDir = inflDict["inflowDir"]+'/inlet'
-    times = [ name for name in os.listdir(inletDir) if os.path.isdir(os.path.join(inletDir, name)) ]
+    times = [ name for name in os.listdir(sectDir) if os.path.isdir(os.path.join(sectDir, name)) ]
     times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
-    
-    file = inflDict["outputDir"]+'/inlet/points'
-    vect = np.transpose(np.asarray((points.X, points.Y, points.Z)))
-    if writeInflow:
-        writeBDformattedFile(file,vect)
+    times = [x[0] for x in times]
+    if len(times) == 0:
+        print("    No time directories found in: "+sectDir)
+        return
+    pointsFile = outDir+"points"
+    if os.path.exists(pointsFile):
+        points_old = readBDformattedFile(pointsFile)
+    pointsFileHandled = False
+    shiftTimeBy = -1.0*float(times[0]) if shiftTimeBy is None else shiftTimeBy
 
-    Vsmpl_in = []
-    Vsmpl_out = []
+    if showLog:
+        print("    Shifting time by: "+str(shiftTimeBy))
     for t in times:
-        if (t[1] < tMin or t[1] > tMax):
+        t_out = str(round(float(t)+shiftTimeBy,timeOutputPrecision))
+        timeDir_out = outDir+t_out+"/"
+        if os.path.exists(timeDir_out) and not overwrite:
+            print("    Skipping existing time step: "+t_out+"/U")
             continue
-        tNew = str(round(t[1]*inflDict["tScl"],__precision))
-        if writeInflow:
-            if os.path.exists(inflDict["outputDir"]+'/inlet/'+tNew):
-                print("--- skipping \t t-old = "+t[0]+"\t\t--> t-new = "+tNew)
-                continue
-            else:
-                os.makedirs(inflDict["outputDir"]+'/inlet/'+tNew)
-        velFile = inletDir+'/'+t[0]+'/U'
-        if not os.path.exists(velFile):
-            print("--- File not found! " + velFile)
+        file = glob.glob(os.path.join(sectDir, t, fileName+".*"))
+        if len(file) == 0:
+            print("    The file '"+sectDir+t+"/"+fileName+"' does not exist.")
             continue
-        vel = readBDformattedFile(velFile)
-        vel.columns = ['u','v','w']
-
-        U,V,W = scaleVelocity(vel.u, vel.v, vel.w,
-                                points.Z, inflDict["scaleBy"],
-                                origUofZ, fU(points.Z), fIu(points.Z), fIv(points.Z), fIw(points.Z))
-        file = inflDict["outputDir"]+'/inlet/'+tNew+'/U'
-        vect = np.transpose(np.asarray((U, V, W)))
-        
-        if len(Vsmpl_in) == 0:
-            Vsmpl_in = np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3])
-            Vsmpl_out = np.reshape(np.asarray(vect[idx,:]),[1,-1,3])
+        if len(file) > 1:
+            print("    Multiple files found for '"+sectDir+t+"/"+fileName+"'.")
+            print("    The first file will be used.")
+        file = file[0]
+        ext = os.path.splitext(file)[1]
+        if ext == '.vtk':
+            points, vel = readVTKfile(file, 'U', showLog=detailedLog)
+        elif ext == '.raw':
+            data = readRAWfile(file, showLog=detailedLog)
+            points = data[['x','y','z']].to_numpy()
+            vel = data[['U_x','U_y','U_z']].to_numpy()
         else:
-            Vsmpl_in = np.append(Vsmpl_in, np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3]), axis=0)
-            Vsmpl_out = np.append(Vsmpl_out, np.reshape(np.asarray(vect[idx,:]),[1,-1,3]), axis=0)
-        
-        if writeInflow:
-            writeBDformattedFile(file,vect)
-        
-        print("Scaling \t t-old = "+t[0]+"\t\t--> t-new = "+tNew)
-            
-    sfix = datetime.now().strftime("%Y-%m-%d_%H:%M")
-    sfix = str(tMin)+'_to_'+str(tMax)
-    dt = times[1][1]-times[0][1]
-    velUnscaled = wind.profile(name="Unscaled",Z=Z_smpl,dt=dt,H=H,
-                    UofT=np.transpose(Vsmpl_in[:,:,0]),
-                    VofT=np.transpose(Vsmpl_in[:,:,1]),
-                    WofT=np.transpose(Vsmpl_in[:,:,2]))
-    velUnscaled.writeToFile(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
-
-    dt = round(times[1][1] * inflDict["tScl"], __precision)  - round(times[0][1] * inflDict["tScl"], __precision)
-    velScaled = wind.profile(name="Scaled",Z=Z_smpl,dt=dt,H=H,
-                    UofT=np.transpose(Vsmpl_out[:,:,0]),
-                    VofT=np.transpose(Vsmpl_out[:,:,1]),
-                    WofT=np.transpose(Vsmpl_out[:,:,2]))
-    velScaled.writeToFile(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
- 
-    if writeInflow:
-        inflowDictFile = open(inflDict["outputDir"]+'/inflowDict', 'w')
-        inflowDictFile.write("""/*--------------------------------*- C++ -*----------------------------------*
-| =========                |                                                 |
-| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \    /   O peration     | Version:  4.1                                   |
-|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
-|    \/     M anipulation  |                                                 |
-\*---------------------------------------------------------------------------*/
-
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-""")
-        inflowDictFile.write("maxInflowTime\t\t"+str(tNew)+";\n\n")
-        inflowDictFile.write("// ************************************************************************* //\n")
-        inflowDictFile.close()
-
-    pdfDoc.close()
-
-    return velUnscaled, velScaled
-
-def extractSampleProfileFromInflow(inletDir,outPath,figFile,tMax,H):
-    
-    points = readBDformattedFile(inletDir + '/points')
-    points.columns = ['X','Y','Z']
-    
-    Z = np.linspace(0.001,max(points.Z)-0.01,100)
-    idx = getClosest2DcoordsTo(points.Y,points.Z,Z)
-    Z = np.asarray(points.Z[idx],dtype=float)
-        
-    times = [ name for name in os.listdir(inletDir) if os.path.isdir(os.path.join(inletDir, name)) ]
-    times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
-    
-    velOfT = []
-    for t in times:
-        velFile = inletDir+'/'+t[0]+'/U'
-        vel = readBDformattedFile(velFile)
-        vel.columns = ['u','v','w']
-        
-        if len(velOfT) == 0:
-            velOfT = np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3])
+            raise NotImplementedError("The file extension '"+ext+"' is not supported.")
+        if not pointsFileHandled:
+            if overwrite or not os.path.exists(pointsFile):
+                writeBDformattedFile(pointsFile, points)
+                points_old = points
+            pointsFileHandled = True
+            if showLog:
+                print("    Writing points to: "+pointsFile)
+                print("    Writing velocity to: <output_dir> = "+outDir)
         else:
-            velOfT = np.append(velOfT, np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3]), axis=0)
-        print("t = "+t[0])
-        if t[1] > tMax:
-            break
-    
-    np.savetxt(outPath+"_UofT.csv",velOfT[:,:,0],delimiter=",")
-    np.savetxt(outPath+"_VofT.csv",velOfT[:,:,1],delimiter=",")
-    np.savetxt(outPath+"_WofT.csv",velOfT[:,:,2],delimiter=",")
-    # ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z, 
-    #                                                                                velOfT, 
-    #                                                                                times[1][1]-times[0][1], 
-    #                                                                                H)
-    
-    # wPlt.plotProfiles([Z],
-    #                   [U],
-    #                   TI=[TI], 
-    #                   L=[L],
-    #                   plotNames=(),
-    #                   pltFile=figFile)
-    pass
+            if not np.array_equal(points, points_old):
+                # throw error if the number of points does not match
+                if not len(points) == len(points_old):
+                    raise Exception("The number of points in the file '"+sectDir+t+"/"+fileName+ext+"' do not match with the number of points in the file '"+pointsFile+"'.")
+                if showLog:
+                    print("    Reordering velocity to match the points in existing 'points' file.")
+                from scipy.spatial import KDTree
+                tree = KDTree(points)
+                distance,idx = tree.query(points_old)
+                # check the maximum distance between the points
+                if max(distance) > pointDistanceTolerance:
+                    raise Exception("The points in the file '"+sectDir+t+"/"+fileName+ext+"' do not match with the points in the file '"+pointsFile+"'.")
+                if showLog:
+                    print("      Distance between the points: max = "+str(max(distance))+", mean = "+str(np.mean(distance)))
+                points = points[idx,:]
+                vel = vel[idx,:]
+        if overwrite or not os.path.exists(timeDir_out):
+            os.makedirs(timeDir_out, exist_ok=True)
+            writeBDformattedFile(timeDir_out+"U", vel)
+            if showLog:
+                print("    "+t+"/"+fileName+ext+" \t-->  "+t_out+"/U")
+        else:
+            if showLog:
+                print("    Skipping existing time step: "+t_out+"/U")
 
 #-----------------  Probe readers and related functions  -----------------------
 def __readProbe_singleT(file,field):
@@ -624,7 +412,7 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None
         
     dt = np.diff(np.unique(np.sort(T)))
     if showLog:
-        print(f"      Deviation from fixed time step is: {max(dt)-min(dt)}")
+        print(f"      Deviation from fixed time step: mean = {np.mean(np.abs(dt))}, max = {max(np.abs(dt))}, standard deviation = {np.std(dt)}")
     if max(dt)-min(dt) > TIME_STEP_TOLERANCE:
         msg = f"WARNING! Non-uniform time step detected in '{probeName}'. The highest difference in time step is: {max(dt)-min(dt)}"
         warnings.warn(msg)
@@ -657,7 +445,8 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None
         elif field == 'U':
             removeIdx = np.where(np.prod(np.prod(abs(data) > MAX_DATA_LIMIT,axis=2),axis=0))
         if showLog:
-            print(f"      Removing {len(removeIdx[0])} out-of-domain probes.")
+            if len(removeIdx[0]) > 0:
+                print(f"      Removing {len(removeIdx[0])} out-of-domain probes.")
         probes = np.delete(probes,removeIdx,0)
         data = np.delete(data,removeIdx,1)
         
@@ -724,7 +513,10 @@ def readVelProfile(caseDir, probeName,
                     shiftTimeToZero=True,
                     readPressure=True,
                     H=None,
-                    showLog=True
+                    showLog=True, 
+                    writeToFile=False,
+                    outDir=None,
+                    readFromNPY_file=False,
                     ):
     '''
     Read velocity profile from an OpenFOAM case.
@@ -764,13 +556,29 @@ def readVelProfile(caseDir, probeName,
     '''
     caseName = os.path.abspath(caseDir).split(os.sep)[-1]
     postProcDir = caseDir+"/postProcessing/"
-    outDir = caseDir+"/_processed/"
-    os.makedirs(outDir, exist_ok=True)
+    if writeToFile or readFromNPY_file:
+        if outDir is None:
+            outDir = caseDir+"/_processed/"
+        os.makedirs(outDir, exist_ok=True)
     if showLog:
         print("Processing OpenFOAM case:\t"+caseDir)
         print("Probe read from:\t\t"+postProcDir+probeName)
         print("  >> Reading probe data ...")
-    probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
+    if not readFromNPY_file:
+        probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
+        if writeToFile:
+            if showLog:
+                print("  >> Writing data to NPY file.")
+                print("             << Done!")
+            np.save(outDir+probeName+"_vel.npy",vel)
+            np.save(outDir+probeName+"_probes.npy",probes)
+            np.save(outDir+probeName+"_time.npy",time)
+    else:
+        if showLog:
+            print("  >> Reading data from NPY file.")
+        vel = np.load(outDir+probeName+"_vel.npy")
+        probes = np.load(outDir+probeName+"_probes.npy")
+        time = np.load(outDir+probeName+"_time.npy")
     if showLog:
         print("             << Done!")
     
@@ -792,9 +600,21 @@ def readVelProfile(caseDir, probeName,
         times = [ name for name in os.listdir(sampleDir) if os.path.isdir(os.path.join(sampleDir, name)) ]
         contains_p = [name for name in times if os.path.exists(sampleDir+name+"/p")] 
         if any(contains_p):
-            _,time_p,pressure = readSurfacePressure(caseDir=caseDir, probeName=probeName, trimTimeSegs=trimTimeSegs, shiftTimeToZero=shiftTimeToZero,
-                                                            showLog=showLog)
-            pressure = np.transpose(pressure)
+            if not readFromNPY_file:
+                _,time_p,pressure = readSurfacePressure(caseDir=caseDir, probeName=probeName, trimTimeSegs=trimTimeSegs, shiftTimeToZero=shiftTimeToZero,
+                                                                showLog=showLog)
+                pressure = np.transpose(pressure)
+                if writeToFile:
+                    if showLog:
+                        print("  >> Writing data to NPY file.")
+                        print("             << Done!")
+                    np.save(outDir+probeName+"_pressure.npy",pressure)
+                    np.save(outDir+probeName+"_time_p.npy",time_p)
+            else:
+                if showLog:
+                    print("  >> Reading data from NPY file.")
+                pressure = np.load(outDir+probeName+"_pressure.npy")
+                time_p = np.load(outDir+probeName+"_time_p.npy")
         else:
             pressure = None
             time_p = None
@@ -1074,7 +894,10 @@ class inflowTuner:
             scaledTables.append(scaledTable)
         return scaledTables, factors, names
 
-    def writeProfile(self, rnd=0, dir=None, name='profile', figsize=[15,15], zLim=[0,10], debugMode=False, applySmoothing=True):
+    def writeProfile(self, rounds=0, dir=None, name='profile', figsize=[15,15], zLim=[0,10], debugMode=False, applySmoothing=True, compensateFor_xLi_in_Ii=False,
+                     zMax_scaling=None, zMin_scaling=None, scale_xLi=True, applyLimitedSmoothing=False,
+                     smoothWindow=[50, 50, 50, 50, 200, 150, 200], kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True,
+                                                                                     'paddingFactor':2, 'paddingMode':'edge'},):
         def plotThese(profs:List[pd.DataFrame]=[], names=[], ratio:pd.DataFrame=None, mainTitle=None, markers=None, color=None, lwgts=None, lss=None):
             if not debugMode:
                 return
@@ -1103,7 +926,7 @@ class inflowTuner:
                     ax2.set_xlabel('ratio')
                     ax2.axvline(1.0, c='k', ls='--', lw=1)
                 ax.set_xlabel(flds[ii])
-                ax.set_ylabel('Z')
+                ax.set_ylabel('Z/H')
                 ax.set_ylim(zLim)
                 wind.formatAxis(ax)
             # show all legends from ax and ax2 in one legend
@@ -1131,16 +954,15 @@ class inflowTuner:
             prof_out['xLw'] = np.interp(Z, prof.Z, prof.xLw) #, left=prof.xLw[0], right=prof.xLw[-1])
             return prof_out
         
-        def smooth_profile(prof, smoothWindow=[50, 50, 50, 50, 200, 150, 200], kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True, 
-                                                                                        'paddingFactor':2, 'paddingMode':'edge'}):
+        def smooth_profile(prof,imin=0, imax=-1, smoothWindow=smoothWindow, kwargs_smooth=kwargs_smooth):
             prof_out = prof.copy()
-            prof_out['U'] = wind.smooth(prof['U'], smoothWindow[0], **kwargs_smooth)
-            prof_out['Iu'] = wind.smooth(prof['Iu'], smoothWindow[1], **kwargs_smooth)
-            prof_out['Iv'] = wind.smooth(prof['Iv'], smoothWindow[2], **kwargs_smooth)
-            prof_out['Iw'] = wind.smooth(prof['Iw'], smoothWindow[3], **kwargs_smooth)
-            prof_out['xLu'] = wind.smooth(prof['xLu'], smoothWindow[4], **kwargs_smooth)
-            prof_out['xLv'] = wind.smooth(prof['xLv'], smoothWindow[5], **kwargs_smooth)
-            prof_out['xLw'] = wind.smooth(prof['xLw'], smoothWindow[6], **kwargs_smooth)
+            prof_out['U'][imin:imax] = wind.smooth(prof['U'][imin:imax], smoothWindow[0], **kwargs_smooth)
+            prof_out['Iu'][imin:imax] = wind.smooth(prof['Iu'][imin:imax], smoothWindow[1], **kwargs_smooth)
+            prof_out['Iv'][imin:imax] = wind.smooth(prof['Iv'][imin:imax], smoothWindow[2], **kwargs_smooth)
+            prof_out['Iw'][imin:imax] = wind.smooth(prof['Iw'][imin:imax], smoothWindow[3], **kwargs_smooth)
+            prof_out['xLu'][imin:imax] = wind.smooth(prof['xLu'][imin:imax], smoothWindow[4], **kwargs_smooth)
+            prof_out['xLv'][imin:imax] = wind.smooth(prof['xLv'][imin:imax], smoothWindow[5], **kwargs_smooth)
+            prof_out['xLw'][imin:imax] = wind.smooth(prof['xLw'][imin:imax], smoothWindow[6], **kwargs_smooth)
             return prof_out
 
         def prof_ratio(prof_target, prof_attempt, zMaxCommon=None, zMinCommon=None):
@@ -1157,27 +979,35 @@ class inflowTuner:
             ratio['xLu'] = prof_target['xLu']/prof_attempt['xLu']
             ratio['xLv'] = prof_target['xLv']/prof_attempt['xLv']
             ratio['xLw'] = prof_target['xLw']/prof_attempt['xLw']
-            if zMaxCommon is not None:
-                idx = np.argmin(np.abs(ratio['Z'] - zMaxCommon))
-                ratio['U'][idx:] = 1.0
-                ratio['Iu'][idx:] = 1.0
-                ratio['Iv'][idx:] = 1.0
-                ratio['Iw'][idx:] = 1.0
-                ratio['xLu'][idx:] = 1.0
-                ratio['xLv'][idx:] = 1.0
-                ratio['xLw'][idx:] = 1.0
-            if zMinCommon is not None:
-                idx = np.argmin(np.abs(ratio['Z'] - zMinCommon))
-                ratio['U'][:idx] = 1.0
-                ratio['Iu'][:idx] = 1.0
-                ratio['Iv'][:idx] = 1.0
-                ratio['Iw'][:idx] = 1.0
-                ratio['xLu'][:idx] = 1.0
-                ratio['xLv'][:idx] = 1.0
-                ratio['xLw'][:idx] = 1.0
+
+            if zMinCommon is None:
+                imin = 0
+            else:
+                imin = np.argmin(np.abs(ratio['Z'] - zMinCommon))
+                ratio['U'][:imin] = ratio['U'][imin]
+                ratio['Iu'][:imin] = ratio['Iu'][imin]
+                ratio['Iv'][:imin] = ratio['Iv'][imin]
+                ratio['Iw'][:imin] = ratio['Iw'][imin]
+                ratio['xLu'][:imin] = ratio['xLu'][imin]
+                ratio['xLv'][:imin] = ratio['xLv'][imin]
+                ratio['xLw'][:imin] = ratio['xLw'][imin]
+            if zMaxCommon is None:
+                imax = -1
+            else:
+                imax = np.argmin(np.abs(ratio['Z'] - zMaxCommon))
+                ratio['U'][imax:] = ratio['U'][imax]
+                ratio['Iu'][imax:] = ratio['Iu'][imax]
+                ratio['Iv'][imax:] = ratio['Iv'][imax]
+                ratio['Iw'][imax:] = ratio['Iw'][imax]
+                ratio['xLu'][imax:] = ratio['xLu'][imax]
+                ratio['xLv'][imax:] = ratio['xLv'][imax]
+                ratio['xLw'][imax:] = ratio['xLw'][imax]
 
             if applySmoothing:
-                ratio = smooth_profile(ratio)
+                if applyLimitedSmoothing:
+                    ratio = smooth_profile(ratio, imin, imax)
+                else:
+                    ratio = smooth_profile(ratio)
             return ratio
 
         def profileObj_to_df(prof):
@@ -1199,36 +1029,56 @@ class inflowTuner:
                 prof = interpToZ(prof, Z)
             prof_out = prof.copy()
             prof_out['U'] *= ratio['U']
-            prof_out['Iu'] *= ratio['Iu']
-            prof_out['Iv'] *= ratio['Iv']
-            prof_out['Iw'] *= ratio['Iw']
+            if compensateFor_xLi_in_Ii:
+                prof_out['Iu'] *= ratio['Iu']/ratio['xLu']
+                prof_out['Iv'] *= ratio['Iv']/ratio['xLv']
+                prof_out['Iw'] *= ratio['Iw']/ratio['xLw']
+            else:
+                prof_out['Iu'] *= ratio['Iu']
+                prof_out['Iv'] *= ratio['Iv']
+                prof_out['Iw'] *= ratio['Iw']
             prof_out['xLu'] *= ratio['xLu']
             prof_out['xLv'] *= ratio['xLv']
             prof_out['xLw'] *= ratio['xLw']
             return prof_out
 
-        target_0 = self.targetProfileTable(smoothWindow=[50, 50, 50, 50, 200, 150, 200], castToUniform=True, kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True, 
-                                                                                        'paddingFactor':2, 'paddingMode':'edge'})
-        if rnd == 0:
-            prof = target_0
-        else:
-            prof_latest_incident = profileObj_to_df(self.incidents.profiles[rnd-1])
-            ratio = prof_ratio(target_0, prof_latest_incident, 
-                               zMaxCommon=min(np.array(prof_latest_incident['Z'])[-1], np.array(target_0['Z'])[-1]),
-                               zMinCommon=max(np.array(prof_latest_incident['Z'])[0], np.array(target_0['Z'])[0]))
-            prof = scale_profile(target_0, ratio)
+        target_0 = self.targetProfileTable(smoothWindow=smoothWindow, castToUniform=True, kwargs_smooth=kwargs_smooth)
+        r = 0
+        profs_in = [target_0,]
+        profs_out = []
+        ratios = [target_0/target_0]
+        ratios[0] = ratios[0].fillna(1.0)
+        scale_xLi = [scale_xLi,]*(rounds+1) if np.isscalar(scale_xLi) else scale_xLi
+
+        while r < rounds:
+            profs_out.append(profileObj_to_df(self.incidents.profiles[r]))
+            zMax_scaling = 0.8*min(np.array(profs_out[r]['Z'])[-1], np.array(target_0['Z'])[-1]) if zMax_scaling is None else zMax_scaling
+            zMin_scaling = 1.2*max(np.array(profs_out[r]['Z'])[0], np.array(target_0['Z'])[0]) if zMin_scaling is None else zMin_scaling
+            ratios.append(prof_ratio(profs_in[r], profs_out[r], zMaxCommon=zMax_scaling, zMinCommon=zMin_scaling ))
+            ratios[r+1] = scale_profile(ratios[r], ratios[r+1])
+            if not scale_xLi[r]: 
+                ratios[r+1]['xLu'] = 1.0
+                ratios[r+1]['xLv'] = 1.0
+                ratios[r+1]['xLw'] = 1.0
+            profs_in.append(scale_profile(profs_in[0], ratios[r+1]))
+            r += 1
+        prof_latest_incident = profileObj_to_df(self.incidents.profiles[r-1])
+        ratio = ratios[-1]
+        prof = profs_in[-1]
+
 
         if dir is not None:
             if not os.path.exists(dir):
-                os.mkdir(dir)
+                os.makedirs(dir)
             prof.to_csv(dir+'/'+name, index=False, sep=' ', float_format='%.6e', header=False)
+            print('Profile written to: '+dir+'/'+name)
 
         if debugMode:
             toPlot = [profileObj_to_df(self.target), target_0]
             names = ['target'+' ('+self.target.name+')', 'target(smooth)']
-            if rnd > 0:
+            if r > 0:
                 toPlot.append(prof_latest_incident)
-                names.append('latest EDS ('+self.incidents.profiles[rnd-1].name+')')
+                names.append('latest EDS ('+self.incidents.profiles[r-1].name+')')
             toPlot.append(prof)
             names.append('next_prof')
             plotThese(profs=toPlot, names=names, ratio=ratio, mainTitle='Scaling', color=['k', 'k', 'b', 'r'], lwgts=[1, 2, 2, 3], lss=['None', '-', '-', '-'], 
@@ -1269,15 +1119,15 @@ class inflowTuner:
         
     def plotSpectra(self, figSize=[15,5], lw = 1.5, ms=3,
                     xLimits='auto', yLimits='auto', includeInflows=True, includeIncidents=True,
-                    kwargs_plt=None, kwargs_Spect={},):
+                    kwargs_plt=None, ):
         longListOfColors = ['r', 'b', 'g', 'm', 'k', 'c', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'lime', 'teal', 'navy', ]
         if kwargs_plt is None:
             kwargs_plt = []
             kwargs_plt.append({'color':'k', 'lw':1, 'ls':'None', 'marker':'o', 'ms':ms})
-            if self.inflows is not None:
+            if self.inflows is not None and includeInflows:
                 for i, prof in enumerate(self.inflows.profiles):
                     kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'--'})
-            if self.incidents is not None:
+            if self.incidents is not None and includeIncidents:
                 for i, prof in enumerate(self.incidents.profiles):
                     kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'-'})
         
@@ -1290,5 +1140,359 @@ class inflowTuner:
             profs.extend(self.incidents.profiles)
         profs = wind.Profiles(profs)
 
-        profs.plotSpectra(figSize=figSize, xLimits=xLimits, yLimits=yLimits, **kwargs_Spect)
+        profs.plotSpectra(figSize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_ax=kwargs_plt)
+
+#===============================================================================
+#=============================== GRAVEYARD =====================================
+#===============================================================================
+def readProfiles(file,requiredFields):
+    if ~os.path.exists(file):
+        FileNotFoundError()
+    profiles = pd.read_csv(file)
+    
+    if 'Z' not in profiles:
+        if 'z' in profiles:
+            profiles.rename(columns={'z':'Z'})
+        else:
+            raise Exception("All profiles must have Z column. Check profile:"+ file)
+    
+    for f in requiredFields:
+        if f not in profiles:
+            raise Exception("The profile column '"+ f +"' is listed in 'requiredFields' but not found in the profile: "+file)
+    
+    return profiles
+
+def getProfileScaleFactor(Z_intrp, origProf, targProf, scaleBy, scalingFile=None, figFile=''):
+    
+    def plotProf(Z_calc, orig, targ, fCalc, Z_intrp, fIntrp, name, pdf):
+        if pdf == '':
+            return
+        fig = plt.figure() 
+        fig.add_subplot(1,2,1)
+        plt.plot(orig,Z_calc,'k-',label='orig')
+        plt.plot(targ,Z_calc,'r-',label='target')
+        plt.xlabel(name)
+        plt.ylabel('Z')
+        plt.legend()
         
+        fig.add_subplot(1,2,2)
+        plt.plot(fCalc,Z_calc,'dk',label='Calculated')
+        plt.plot(fIntrp[::50],Z_intrp[::50],'.r',label='Interpolated',markersize=2)
+        plt.xlabel('Correction factor (Targ/Orig)')
+        plt.ylabel('Z')
+        plt.legend()
+        # plt.show()
+        pdf.savefig(fig)
+        plt.clf()
+        
+    if scalingFile is not None:
+        scaleFctrs = readProfiles(scalingFile, ["U", "Iu", "Iv", "Iw"])
+        fU_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.U, fill_value='extrapolate')
+        fIu_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.Iu, fill_value='extrapolate')
+        fIv_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.Iv, fill_value='extrapolate')
+        fIw_intrp = scintrp.interp1d(scaleFctrs.Z, scaleFctrs.Iw, fill_value='extrapolate')
+
+    else:
+        Z_calc = np.unique(np.sort(np.append(np.asarray(origProf.Z), np.asarray(targProf.Z))))
+        
+        if 'U' in scaleBy:
+            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.U),fill_value='extrapolate')
+            orig = intrp(Z_calc)
+            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.U),fill_value='extrapolate')
+            targ = intrp(Z_calc)
+            fU_calc = targ/orig
+            intrp = scintrp.interp1d(Z_calc, fU_calc, fill_value='extrapolate')
+            fU_intrp = intrp(Z_intrp)
+            plotProf(Z_calc,orig,targ,fU_calc, Z_intrp, fU_intrp,'U',figFile)
+        else:
+            fU_intrp = np.ones(Z_intrp.shape())
+        
+        if 'Iu' in scaleBy:
+            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iu),fill_value='extrapolate')
+            orig = intrp(Z_calc)
+            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iu),fill_value='extrapolate')
+            targ = intrp(Z_calc)
+            fIu_calc = targ/orig
+            intrp = scintrp.interp1d(Z_calc, fIu_calc, fill_value='extrapolate')
+            fIu_intrp = intrp(Z_intrp)
+            plotProf(Z_calc,orig,targ,fIu_calc, Z_intrp, fIu_intrp,'Iu',figFile)
+        else:
+            fIu_intrp = np.ones(Z_intrp.shape())
+    
+        if 'Iv' in scaleBy:
+            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iv),fill_value='extrapolate')
+            orig = intrp(Z_calc)
+            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iv),fill_value='extrapolate')
+            targ = intrp(Z_calc)
+            fIv_calc = targ/orig
+            intrp = scintrp.interp1d(Z_calc, fIv_calc, fill_value='extrapolate')
+            fIv_intrp = intrp(Z_intrp)
+            plotProf(Z_calc,orig,targ,fIv_calc, Z_intrp, fIv_intrp,'Iv',figFile)
+        else:
+            fIv_intrp = np.ones(Z_intrp.shape())
+        
+        if 'Iw' in scaleBy:
+            intrp = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.Iw),bounds_error=False,fill_value=(origProf.Iw[0],origProf.iloc[-1].Iw))
+            orig = intrp(Z_calc)
+            intrp = scintrp.interp1d(np.asarray(targProf.Z), np.asarray(targProf.Iw),bounds_error=False,fill_value=(targProf.Iw[0],targProf.iloc[-1].Iw))
+            targ = intrp(Z_calc)
+            fIw_calc = targ/orig
+            intrp = scintrp.interp1d(Z_calc, fIw_calc, fill_value='extrapolate')
+            fIw_intrp = intrp(Z_intrp)
+            plotProf(Z_calc,orig,targ,fIw_calc, Z_intrp, fIw_intrp,'Iw',figFile)
+        else:
+            fIw_intrp = np.ones(Z_intrp.shape())
+    
+    return fU_intrp,fIu_intrp,fIv_intrp,fIw_intrp
+
+def scaleVelocity(UofT,VofT,WofT,
+                  Z, scaleBy,
+                  origUofZ, fU, fIu, fIv, fIw,
+                  figFile=''):
+    
+    U_MeanCorr = fU*UofT
+    U_old = fU*origUofZ(Z)
+    U_new = U_old + fIu*(U_MeanCorr-U_old)
+    
+    V_new = fU*fIv*VofT
+    
+    W_new = fU*fIw*WofT
+        
+    if len(figFile) > 0:
+        pdf = PdfPages(figFile)       
+        fig = pdf.figure() 
+        fig.add_subplot(1,1,1)
+        plt.plot(UofT,Z,'.k',label='orig',ms=1)
+        plt.plot(U_new,Z,'.r',label='scaled',ms=1)
+        # plt.plot(U_old,Z,'xb',label='meanU-old',ms=1)
+        # plt.plot(fUofZ(Z)*U_old,Z,'xg',label='meanU-new',ms=1)
+        plt.xlabel('U')
+        plt.ylabel('Z')
+        plt.legend()
+        # pdf.savefig(fig)
+        # plt.clf()
+        
+        fig.add_subplot(1,1,1)
+        plt.plot(VofT,Z,'.k',label='orig',ms=1)
+        plt.plot(V_new,Z,'.r',label='scaled',ms=1)
+        plt.xlabel('V')
+        plt.ylabel('Z')
+        plt.legend()
+        # pdf.savefig(fig)
+        # plt.clf()
+        
+        fig.add_subplot(1,1,1)
+        plt.plot(WofT,Z,'.k',label='orig',ms=1)
+        plt.plot(W_new,Z,'.r',label='scaled',ms=1)
+        plt.xlabel('W')
+        plt.ylabel('Z')
+        plt.legend()
+        pdf.savefig(fig)
+        plt.clf()
+        
+        pdf.close()
+
+    return U_new, V_new, W_new
+
+def readInflowDict(infFile):
+    inflDict = {}
+    dictFile = [line.split() for line in open(infFile)]
+    
+    for d in dictFile:
+        if d == []:
+            continue
+        elif d[0] == 'inflowDir':
+            inflDict["inflowDir"] = d[1]
+        elif d[0] == 'inflowFormat':
+            inflDict["inflowFormat"] = d[1]
+        elif d[0] == 'outputDir':
+            inflDict["outputDir"] = d[1]
+        elif d[0] == 'targProfFile':
+            inflDict["targProfFile"] = d[1]
+        elif d[0] == 'origProfFile':
+            inflDict["origProfFile"] = d[1]
+        elif d[0] == 'scaleFactorFile':
+            inflDict["scaleFactorFile"] = d[1]
+        elif d[0] == 'dt':
+            inflDict["dt"] = float(d[1])
+        elif d[0] == 'precision':
+            inflDict["precision"] = int(d[1])
+        elif d[0] == 'lengthScale':
+            inflDict["lScl"] = float(d[1])
+        elif d[0] == 'timeScale':
+            inflDict["tScl"] = float(d[1])
+        elif d[0] == 'scaleBy':
+            inflDict["scaleBy"] = d[1:]
+        else:
+            continue
+        
+    return inflDict
+
+def getClosest2DcoordsTo(X,Y,Zin):
+    from scipy import spatial
+    coords = []
+    for x, y in zip(X, Y):
+        coords.append((x,y))
+    inletPlane = spatial.KDTree(coords)
+    
+    pts = []    
+    for z in Zin:
+        pts.append((0,z))
+        
+    idx = inletPlane.query(pts)[1]
+    
+    return idx
+
+def scaleInflowData(caseDir,tMin,tMax,H,writeInflow=True,smplName=''):
+    
+    # caseDir = 'D:/tempData_depot/simData_CandC/ttuPSpcOP15.7'
+    inflDict = readInflowDict(caseDir+'/system/scaleInflowDict')
+    if smplName == '':
+        smplName = 'inflowScaling_'+str(tMin)+'_to_'+str(tMax)
+    if not os.path.exists(inflDict["outputDir"]+'/inlet'):
+        os.makedirs(inflDict["outputDir"]+'/inlet')
+    pdfDoc = PdfPages(inflDict["outputDir"]+'/'+smplName+'.pdf')
+    
+    ptsFile = inflDict["inflowDir"] + '/inlet/points'
+    points = readBDformattedFile(ptsFile)
+    points.columns = ['X','Y','Z']
+    
+    Z_smpl = np.linspace(0.001,max(points.Z)-0.01,100)
+    idx = getClosest2DcoordsTo(points.Y,points.Z,Z_smpl)
+    Z_smpl = np.asarray(points.Z[idx],dtype=float)
+
+    
+    
+    # prep for scaling
+    origProf = readProfiles(inflDict["origProfFile"], inflDict["scaleBy"])
+    targProf = readProfiles(inflDict["targProfFile"], inflDict["scaleBy"])
+    # origProf.Z = origProf.Z*inflDict["lScl"]
+    fU,fIu,fIv,fIw = getProfileScaleFactor(points.Z, origProf, targProf, inflDict["scaleBy"],scalingFile=inflDict["scaleFactorFile"], figFile=pdfDoc)
+    
+    origUofZ = scintrp.interp1d(np.asarray(origProf.Z), np.asarray(origProf.U),fill_value='extrapolate')
+    
+    
+    inletDir = inflDict["inflowDir"]+'/inlet'
+    times = [ name for name in os.listdir(inletDir) if os.path.isdir(os.path.join(inletDir, name)) ]
+    times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
+    
+    file = inflDict["outputDir"]+'/inlet/points'
+    vect = np.transpose(np.asarray((points.X, points.Y, points.Z)))
+    if writeInflow:
+        writeBDformattedFile(file,vect)
+
+    Vsmpl_in = []
+    Vsmpl_out = []
+    for t in times:
+        if (t[1] < tMin or t[1] > tMax):
+            continue
+        tNew = str(round(t[1]*inflDict["tScl"],__precision))
+        if writeInflow:
+            if os.path.exists(inflDict["outputDir"]+'/inlet/'+tNew):
+                print("--- skipping \t t-old = "+t[0]+"\t\t--> t-new = "+tNew)
+                continue
+            else:
+                os.makedirs(inflDict["outputDir"]+'/inlet/'+tNew)
+        velFile = inletDir+'/'+t[0]+'/U'
+        if not os.path.exists(velFile):
+            print("--- File not found! " + velFile)
+            continue
+        vel = readBDformattedFile(velFile)
+        vel.columns = ['u','v','w']
+
+        U,V,W = scaleVelocity(vel.u, vel.v, vel.w,
+                                points.Z, inflDict["scaleBy"],
+                                origUofZ, fU(points.Z), fIu(points.Z), fIv(points.Z), fIw(points.Z))
+        file = inflDict["outputDir"]+'/inlet/'+tNew+'/U'
+        vect = np.transpose(np.asarray((U, V, W)))
+        
+        if len(Vsmpl_in) == 0:
+            Vsmpl_in = np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3])
+            Vsmpl_out = np.reshape(np.asarray(vect[idx,:]),[1,-1,3])
+        else:
+            Vsmpl_in = np.append(Vsmpl_in, np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3]), axis=0)
+            Vsmpl_out = np.append(Vsmpl_out, np.reshape(np.asarray(vect[idx,:]),[1,-1,3]), axis=0)
+        
+        if writeInflow:
+            writeBDformattedFile(file,vect)
+        
+        print("Scaling \t t-old = "+t[0]+"\t\t--> t-new = "+tNew)
+            
+    sfix = datetime.now().strftime("%Y-%m-%d_%H:%M")
+    sfix = str(tMin)+'_to_'+str(tMax)
+    dt = times[1][1]-times[0][1]
+    velUnscaled = wind.profile(name="Unscaled",Z=Z_smpl,dt=dt,H=H,
+                    UofT=np.transpose(Vsmpl_in[:,:,0]),
+                    VofT=np.transpose(Vsmpl_in[:,:,1]),
+                    WofT=np.transpose(Vsmpl_in[:,:,2]))
+    velUnscaled.writeToFile(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
+
+    dt = round(times[1][1] * inflDict["tScl"], __precision)  - round(times[0][1] * inflDict["tScl"], __precision)
+    velScaled = wind.profile(name="Scaled",Z=Z_smpl,dt=dt,H=H,
+                    UofT=np.transpose(Vsmpl_out[:,:,0]),
+                    VofT=np.transpose(Vsmpl_out[:,:,1]),
+                    WofT=np.transpose(Vsmpl_out[:,:,2]))
+    velScaled.writeToFile(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
+ 
+    if writeInflow:
+        inflowDictFile = open(inflDict["outputDir"]+'/inflowDict', 'w')
+        inflowDictFile.write("""/*--------------------------------*- C++ -*----------------------------------*
+| =========                |                                                 |
+| \      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \    /   O peration     | Version:  4.1                                   |
+|   \  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+""")
+        inflowDictFile.write("maxInflowTime\t\t"+str(tNew)+";\n\n")
+        inflowDictFile.write("// ************************************************************************* //\n")
+        inflowDictFile.close()
+
+    pdfDoc.close()
+
+    return velUnscaled, velScaled
+
+def extractSampleProfileFromInflow(inletDir,outPath,figFile,tMax,H):
+    
+    points = readBDformattedFile(inletDir + '/points')
+    points.columns = ['X','Y','Z']
+    
+    Z = np.linspace(0.001,max(points.Z)-0.01,100)
+    idx = getClosest2DcoordsTo(points.Y,points.Z,Z)
+    Z = np.asarray(points.Z[idx],dtype=float)
+        
+    times = [ name for name in os.listdir(inletDir) if os.path.isdir(os.path.join(inletDir, name)) ]
+    times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
+    
+    velOfT = []
+    for t in times:
+        velFile = inletDir+'/'+t[0]+'/U'
+        vel = readBDformattedFile(velFile)
+        vel.columns = ['u','v','w']
+        
+        if len(velOfT) == 0:
+            velOfT = np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3])
+        else:
+            velOfT = np.append(velOfT, np.reshape(np.asarray(vel.values[idx,:]),[1,-1,3]), axis=0)
+        print("t = "+t[0])
+        if t[1] > tMax:
+            break
+    
+    np.savetxt(outPath+"_UofT.csv",velOfT[:,:,0],delimiter=",")
+    np.savetxt(outPath+"_VofT.csv",velOfT[:,:,1],delimiter=",")
+    np.savetxt(outPath+"_WofT.csv",velOfT[:,:,2],delimiter=",")
+    # ref_U_TI_L, Z, U, TI, L, freq, Spect_H, Spect_Others = wProc.processVelProfile(Z, 
+    #                                                                                velOfT, 
+    #                                                                                times[1][1]-times[0][1], 
+    #                                                                                H)
+    
+    # wPlt.plotProfiles([Z],
+    #                   [U],
+    #                   TI=[TI], 
+    #                   L=[L],
+    #                   plotNames=(),
+    #                   pltFile=figFile)
+    pass

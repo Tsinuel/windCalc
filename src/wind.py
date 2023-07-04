@@ -1872,6 +1872,7 @@ class Profiles:
                     xLimits='auto', # [nMin,nMax]
                     yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
                     overlayVonK=False, # Either one entry or array equal to N
+                    kwargs_ax=None, # kwargs for the axes
                     ):
         overlayVonK = (overlayVonK,)*self.N if isinstance(overlayVonK,bool) else overlayVonK
 
@@ -1935,7 +1936,8 @@ class Profiles:
                         yLimits=yLimits, # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
                         figSize=figSize,
                         plotType=plotType,
-                        drawXlineAt_rf1=drawXlineAt_rf1
+                        drawXlineAt_rf1=drawXlineAt_rf1,
+                        kwargs_ax=kwargs_ax
                         )
 
     def plotRefHeightStatsTable(self,
@@ -3074,7 +3076,7 @@ class bldgCp(windCAD.building):
                             overlayThese=None, overlayFactors=None, kwargs_overlay={'color':'k', 'linewidth':2, 'linestyle':'-'},
                             subplotLabels=None, subplotLabels_xy=[0.05,0.95], kwargs_subplotLabels={'fontsize':14},
                             legend_ax_idx=0,
-                            plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], zoneShadeColor='darkgrey', kwargs_zonePlots={},
+                            plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], zoneShadeColor='k', kwargs_zonePlots={},
                             xLimits=None, yLimits=None, xLabel=None, yLabel=None,
                             kwargs_min={}, kwargs_max={}, kwargs_legend={},
                             kwargs_ax={'gridMajor':True, 'gridMinor':True}):
