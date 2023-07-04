@@ -174,7 +174,9 @@ def convertSectionSampleToBoundaryDataInflow(caseDir, sectionName, fileName,
                                              pointDistanceTolerance=1e-6,
                                              timeOutputPrecision=6,
                                              showLog=True, 
-                                             detailedLog=False):
+                                             detailedLog=False,
+                                             num_processors=1,
+                                             ):
     if not os.path.exists(caseDir):
         raise Exception("The case directory '"+caseDir+"' does not exist.")
     sectDir = caseDir+"/postProcessing/"+sectionName+"/"
@@ -202,9 +204,17 @@ def convertSectionSampleToBoundaryDataInflow(caseDir, sectionName, fileName,
 
     if showLog:
         print("    Shifting time by: "+str(shiftTimeBy))
+    
+    # if num_processors > 1:
+    #     import multiprocessing as mp
+    #     pool = mp.Pool(processes=num_processors)
+    #     for t in times:
+    #         pool.apply_async(__convertSectionSampleToBoundaryDataInflow_singleT, args=(sectDir, t, fileName, outDir, shiftTimeBy, overwrite, pointsFileHandled, pointsFile, pointDistanceTolerance, timeOutputPrecision, showLog, detailedLog))
+    #     pool.close()
+    #     pool.join()
     for t in times:
         t_out = str(round(float(t)+shiftTimeBy,timeOutputPrecision))
-        timeDir_out = outDir+t_out+"/"
+        timeDir_out = outDir+"/"+t_out+"/"
         if os.path.exists(timeDir_out) and not overwrite:
             print("    Skipping existing time step: "+t_out+"/U")
             continue
