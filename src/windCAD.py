@@ -495,7 +495,7 @@ class face:
         # fill derived
         self.__handleBadTaps(allBldgTaps)
         if file_basic is None:
-            self.Update()
+            self.Refresh()
         elif file_derived is None:
             self.readFromFile(file_basic=file_basic)
         else:
@@ -723,7 +723,7 @@ class face:
         return errDict
 
     """-------------------------------- Data handlers ---------------------------------"""
-    def Update(self):
+    def Refresh(self):
         self.__generateTributaries()
         self.__generatePanels()
 
@@ -790,7 +790,7 @@ class face:
             self.error_in_panels = derived['error_in_panels']
             self.error_in_zones = derived['error_in_zones']
         else:
-            self.Update()
+            self.Refresh()
 
     def writeToFile(self,file_basic, file_derived=None):
         getDerived = file_derived is not None
@@ -988,7 +988,10 @@ class face:
         if newFig:
             ax.axis('equal')
 
-    def plotTapField(self, field, dx=None, ax=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both'):
+    def plotTapField(self, field, dx=None, ax=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both', 
+                     showValuesOnContour=True, kwargs_contourTxt={'inline':True, 'fmt':'{:.3g}', 'fontsize':6, 'colors':'k', },
+                     showContourEdge=True, kwargs_contourEdge={'colors':'k', 'linewidths':0.5, 'linestyles':'solid'},
+                     ):
         newFig = False
         if ax is None:
             newFig = True
@@ -1015,8 +1018,14 @@ class face:
             levels = np.linspace(min(field), max(field), nLvl)
         else:
             levels = np.linspace(fldRange[0], fldRange[1], nLvl)
-        cObj = ax.contourf(X, Y, Z,
-                levels=levels, cmap=cmap, extend=extend)
+        cObj = ax.contourf(X, Y, Z, levels=levels, cmap=cmap, extend=extend,)
+        if showContourEdge:
+            cObj_l = ax.contour(X, Y, Z, levels=levels, **kwargs_contourEdge)
+        else:
+            cObj_l = cObj
+        if showValuesOnContour:
+            ax.clabel(cObj_l, cObj_l.levels, **kwargs_contourTxt)
+            
         if newFig:
             plt.colorbar()
             ax.axis('equal')
@@ -1128,12 +1137,12 @@ class face:
 class Faces:
     """---------------------------------- Internals -----------------------------------"""
     def __init__(self,
-                    members: List[face]=[],
+                    memberFaces: List[face]=[],
                     file_basic=None,
                     file_derived=None,
                     ):
         self._currentIndex = 0
-        self._members: List[face] = members
+        self._memberFaces: List[face] = memberFaces
 
         if file_basic is not None and file_derived is not None:
             self.readFromFile(file_basic=file_basic,file_derived=file_derived)
@@ -1141,16 +1150,16 @@ class Faces:
             self.readFromFile(file_basic=file_basic)
     
     def _numOfMembers(self):
-        if self.members is None:
+        if self.memberFaces is None:
             return 0
-        return len(self.members)
+        return len(self.memberFaces)
 
     def __iter__(self):
         return self
 
     def __next__(self) -> face:
         if self._currentIndex < self._numOfMembers():
-            member = self._members[self._currentIndex]
+            member = self._memberFaces[self._currentIndex]
             self._currentIndex += 1
             return member
         else:
@@ -1158,57 +1167,61 @@ class Faces:
             raise StopIteration
 
     def __getitem__(self, key) -> face:
-        return self._members[key]
+        return self._memberFaces[key]
     
     def __setitem__(self, key: int, value: face):
-        self._members[key] = value
+        self._memberFaces[key] = value
 
     def __str__(self) -> str:
         name = 'Faces: '
-        for f in self.members:
+        for f in self.memberFaces:
             name += f.name + ', '
         return name
         
     """--------------------------------- Properties -----------------------------------"""
     @property
-    def members(self) -> List[face]:
-        return self._members
-    @members.setter
-    def members(self,value: List[face]) -> None:
-        self._members = value
+    def memberFaces(self) -> List[face]:
+        return self._memberFaces
+    @memberFaces.setter
+    def memberFaces(self,value: List[face]) -> None:
+        self._memberFaces = value
 
     @property
     def tapNo(self) -> List[int]:
         tapNo = []
-        for f in self.members:
+        for f in self.memberFaces:
             tapNo.extend(f.tapNo)
         return tapNo
 
     @property
     def tapNo_all(self) -> List[int]:
         tapNo = []
-        for f in self.members:
+        for f in self.memberFaces:
             tapNo.extend(f.tapNo_all)
         return tapNo
 
     @property
     def tapIdx(self) -> List[int]:
         tapIdx = []
-        for f in self.members:
+        for f in self.memberFaces:
             tapIdx.extend(f.tapIdx)
         return tapIdx
 
     @property
     def tapName(self) -> List[str]:
         tapName = []
-        for f in self.members:
-            tapName.extend(f.tapName)
+        for f in self.memberFaces:
+            if f.tapName is None:
+                tapName_i = ['']*f.NumTaps
+            else:
+                tapName_i = f.tapName
+            tapName.extend(tapName_i)
         return tapName
     
     @property
     def NominalPanelArea(self) -> List[float]:
-        nomArea = self._members[0].nominalPanelAreas
-        for f in self.members:
+        nomArea = self._memberFaces[0].nominalPanelAreas
+        for f in self.memberFaces:
             if f.nominalPanelAreas != nomArea:
                 raise ValueError('All faces must have the same nominal panel areas.')
         return nomArea
@@ -1217,7 +1230,7 @@ class Faces:
     def zoneDict(self):
         allZones = {}
         i = 0
-        for fc in self.members:
+        for fc in self.memberFaces:
             for val in fc.zoneDict.values():
                 isNewVal = True
                 for acceptedZone in allZones.values():
@@ -1243,38 +1256,38 @@ class Faces:
     @property
     def NumTaps(self):
         num = 0
-        for fc in self.members:
+        for fc in self.memberFaces:
             num += fc.NumTaps
         return num
 
     @property
     def NumPanels(self):
-        if len(self.members) == 0:
+        if len(self.memberFaces) == 0:
             return 0
         num = 0
-        for fc in self.members:
+        for fc in self.memberFaces:
             num += fc.NumPanels
         return num
 
     @property
     def error_in_panels(self):
         val = []
-        for fc in self._members:
+        for fc in self._memberFaces:
             val.append(fc.error_in_panels)
         return val
 
     @property
     def error_in_zones(self):
         val = []
-        for fc in self._members:
+        for fc in self._memberFaces:
             val.append(fc.error_in_zones)
         return val
 
     @property
     def NumPanelsPerArea(self):
-        if len(self.members) == 0:
+        if len(self.memberFaces) == 0:
             return 0
-        for i,fc in enumerate(self.members):
+        for i,fc in enumerate(self.memberFaces):
             if i == 0:
                 num = fc.NumPanelsPerArea
             else:
@@ -1287,7 +1300,7 @@ class Faces:
             return None
         mainZoneDict = self.zoneDict
         Weights = list([[]]*len(mainZoneDict))   # [nZones][nPanels][nTapsPerPanel_i]
-        for fc in self.members:
+        for fc in self.memberFaces:
             for z, zonei in enumerate(fc.zoneDict.values()):
                 zone = list(zonei)[0:2]
                 zone.append([])
@@ -1302,7 +1315,7 @@ class Faces:
             return None, None, None
         mainZoneDict = self.zoneDict
         tapIdxs = list([[]]*len(mainZoneDict))   # [nZones][nPanels][nTapsPerPanel_i]
-        for fc in self.members:
+        for fc in self.memberFaces:
             for z, zonei in enumerate(fc.zoneDict.values()):
                 zone = list(zonei)[0:2]
                 zone.append([])
@@ -1348,7 +1361,7 @@ class Faces:
         if self._numOfMembers() == 0:
             return None
         errDict = {}
-        for f, fc in enumerate(self._members):
+        for f, fc in enumerate(self._memberFaces):
             errDict[f"Face {f+1}"] = fc.panelingErrors
         return errDict
     
@@ -1357,7 +1370,7 @@ class Faces:
         if self._numOfMembers() == 0:
             return None
         minX, maxX, minY, maxY = [], [], [], []
-        for fc in self.members:
+        for fc in self.memberFaces:
             minX.append(np.min(fc.verticesPlt[:,0]))
             maxX.append(np.max(fc.verticesPlt[:,0]))
             minY.append(np.min(fc.verticesPlt[:,1]))
@@ -1366,11 +1379,12 @@ class Faces:
         return bb
 
     """-------------------------------- Data handlers ---------------------------------"""
-    def Update(self):
-        for fc in self.members:
-            fc.Update()
+    def Refresh(self):
+        for fc in self.memberFaces:
+            fc.Refresh()
 
-    def idxOfTapNum(self,tapNo) -> List[int]:
+    def tapIdxOf(self,tapNo) -> List[int]:
+        tapNo = [tapNo,] if np.isscalar(tapNo) else tapNo
         tapNo = np.array(tapNo)
         allIdx = np.array(self.tapIdx)
         allTapNo = np.array(self.tapNo)
@@ -1392,13 +1406,15 @@ class Faces:
         if len(notFoundTaps) > 0:
             msg = f"ERROR: The following taps are not found in the object: {notFoundTaps}"
             raise Exception(msg)
+        if len(foundTapIdx) == 1:
+            return foundTapIdx[0]
         return foundTapIdx
 
     def writeToFile(self,file_basic, file_derived=None):
         getDerived = file_derived is not None
         basic = {}
         derived = {}
-        for i,fc in enumerate(self.members):
+        for i,fc in enumerate(self.memberFaces):
             basic[i], derived[i] = fc.to_dict(getDerived=getDerived)
 
         with open(file_basic, 'w') as f:
@@ -1418,14 +1434,14 @@ class Faces:
         else:
             derived = None
 
-        self.members = []
+        self.memberFaces = []
         for i, bsc in enumerate(basic):
             mem = face()
             if derived is None:
                 mem.from_dict(basic=basic[bsc])
             else:
                 mem.from_dict(basic=basic[bsc],derived=derived[bsc])
-            self.members.append(mem)
+            self.memberFaces.append(mem)
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotEdges(self, ax=None, showName=True, 
@@ -1436,7 +1452,7 @@ class Faces:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        for fc in self._members:
+        for fc in self._memberFaces:
             fc.plotEdges(ax=ax, showName=showName, kwargs_Edge=kwargs_Edge)
         if newFig:
             ax.axis('equal')
@@ -1449,7 +1465,7 @@ class Faces:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        for fc in self._members:
+        for fc in self._memberFaces:
             fc.plotTaps(ax=ax, showTapNo=showTapNo, kwargs_dots=kwargs_dots, kwargs_text=kwargs_text)
         if newFig:
             ax.axis('equal')
@@ -1462,7 +1478,7 @@ class Faces:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        for fc in self._members:
+        for fc in self._memberFaces:
             fc.plotTribs(ax=ax, kwargs_Edge=kwargs_Edge)
         if newFig:
             ax.axis('equal')
@@ -1483,7 +1499,7 @@ class Faces:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        for fc in self._members:
+        for fc in self._memberFaces:
             fc.plotZones(ax=ax, zoneCol=zoneCol, drawEdge=drawEdge, fill=fill, showLegend=False, kwargs_Edge=kwargs_Edge, kwargs_Fill=kwargs_Fill)
         if newFig:
             ax.axis('equal')
@@ -1505,16 +1521,20 @@ class Faces:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        for fc in self._members:
+        for fc in self._memberFaces:
             fc.plotPanels(ax=ax, aIdx=aIdx, kwargs_Edge=kwargs_Edge)
         if newFig:
             ax.axis('equal')
 
     def plotPanels_AllAreas(self, 
                     figsize=(15,5), fig=None, axs=None, nCols=3,
-                    areaUnit='', areaFactor=1.0, areaFmt="{:.2f}",
+                    areaUnit='', areaFactor=1.0, areaFmt="{:.4f}",
                     plotEdges=True, plotTaps=False, plotZones=True,
-                    kwargs_Edge={'color':'b', 'lw':0.5, 'ls':'-', 'marker':'None', 'markersize':3},
+                    kwargs_faceEdge={'color':'k', 'lw':1.0, 'ls':'-'},
+                    kwargs_taps={},
+                    kwargs_zoneEdge={'color':'k', 'lw':0.5, 'ls':'-'},
+                    kwargs_zoneFill={'alpha':0.5,},
+                    kwargs_pnlEdge={'color':'k', 'lw':0.3, 'ls':'-'},
                     ):
         newFig = False
         areas = self.NominalPanelArea
@@ -1525,13 +1545,13 @@ class Faces:
             axs = axs.flatten()
 
         for a,area in enumerate(areas):
-            self.plotPanels(ax=axs[a], aIdx=a, kwargs_Edge=kwargs_Edge)
-            if plotEdges:
-                self.plotEdges(ax=axs[a], showName=False)
-            if plotTaps:
-                self.plotTaps(ax=axs[a], showTapNo=False)
             if plotZones:
-                self.plotZones(ax=axs[a], showLegend=False)
+                self.plotZones(ax=axs[a], showLegend=False, kwargs_Fill=kwargs_zoneFill, kwargs_Edge=kwargs_zoneEdge)
+            if plotTaps:
+                self.plotTaps(ax=axs[a], showTapNo=False, **kwargs_taps)
+            self.plotPanels(ax=axs[a], aIdx=a, kwargs_Edge=kwargs_pnlEdge)
+            if plotEdges:
+                self.plotEdges(ax=axs[a], showName=False, kwargs_Edge=kwargs_faceEdge)
             area_string = areaFmt.format(areaFactor*area)
             axs[a].set_title(f"Area: {area_string} {areaUnit}")
             
@@ -1543,15 +1563,19 @@ class Faces:
             plt.show()
         return fig, axs
 
-    def plotTapField(self, field, ax=None, dx=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both'):
+    def plotTapField(self, field, ax=None, dx=None, fldRange=None, nLvl=100, cmap='RdBu', extend='both',
+                     showValuesOnContour=True, kwargs_contourTxt={'inline':True, 'fmt':'{:.3g}', 'fontsize':6, 'colors':'k'},
+                     showContourEdge=True, kwargs_contourEdge={'colors':'k', 'linewidths':0.5, 'linestyles':'solid'},):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         contours = []
-        for fc in self._members:
-            c = fc.plotTapField(ax=ax, field=field, dx=dx, fldRange=fldRange, nLvl=nLvl, cmap=cmap, extend=extend)
+        for fc in self._memberFaces:
+            c = fc.plotTapField(ax=ax, field=field, dx=dx, fldRange=fldRange, nLvl=nLvl, cmap=cmap, extend=extend,
+                                showValuesOnContour=showValuesOnContour, kwargs_contourTxt=kwargs_contourTxt,
+                                showContourEdge=showContourEdge, kwargs_contourEdge=kwargs_contourEdge,)
             contours.append(c)
         if newFig:
             plt.colorbar()
@@ -1565,7 +1589,7 @@ class Faces:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        for f,fc in enumerate(self._members):
+        for f,fc in enumerate(self._memberFaces):
             fc.plotPanelField(field[f], fldName, dIdx=dIdx, aIdx=aIdx, showValueText=showValueText, strFmt=strFmt, fldRange=fldRange, ax=ax, nLvl=nLvl, cmap=cmap)
         if newFig:
             plt.colorbar()
@@ -1588,7 +1612,7 @@ class building(Faces):
                 faces_file_basic=None, 
                 faces_file_derived=None,
                 ):
-        super().__init__(members=faces, file_basic=faces_file_basic, file_derived=faces_file_derived)
+        super().__init__(memberFaces=faces, file_basic=faces_file_basic, file_derived=faces_file_derived)
         self.name = name
         self.H = H
         self.He = He
@@ -1605,10 +1629,10 @@ class building(Faces):
     """--------------------------------- Properties -----------------------------------"""
     @property
     def faces(self) -> List[face]:
-        return self._members
+        return self._memberFaces
     @faces.setter
     def faces(self,value: List[face]) -> None:
-        self._members = value
+        self._memberFaces = value
 
     """-------------------------------- Data handlers ---------------------------------"""
     def writeToFile(self, file_basic, file_derived=None) -> None:
@@ -1617,7 +1641,7 @@ class building(Faces):
         # finally add derived things if any
         pass
 
-class line:
+class samplingLine:
     def __init__(self, 
                 name=None,
                 faces: List[face]=[],

@@ -14,8 +14,9 @@ def main(args):
     sectionName = args[1]
     fileName = args[2]
     shiftTimeBy = float(args[3])
-    overwrite = bool(args[4])
-    outDir = args[5]
+    overwrite = bool(float(args[4]))
+    checkMatchingPoints = bool(float(args[5]))
+    outDir = args[6]
 
     print("caseDir: ", caseDir)
     print("sectionName: ", sectionName)
@@ -28,7 +29,8 @@ def main(args):
                                                 sectionName=sectionName, 
                                                 fileName=fileName,
                                                 shiftTimeBy=shiftTimeBy,
-                                                overwrite=overwrite, 
+                                                overwrite=overwrite,
+                                                checkMatchingPoints=checkMatchingPoints,
                                                 pointDistanceTolerance=1e-3,
                                                 showLog=True,
                                                 timeOutputPrecision=6,

@@ -11,6 +11,7 @@ import os
 import glob
 import warnings
 import wind as wd
+import json
 
 
 #===============================================================================
@@ -23,7 +24,7 @@ BAROCEL_RANGE_FACTORS = {
     "Range_factor": [94.606, 51.818, 29.917, 16., 9.461, 5.182, 2.992],
 }
 
-XREF_PITOT_QUEUE_TOLERANCE = 0.01 # xref
+XCHECK_PITOT_Q_TOLERANCE = 0.01 # xref
 
 #===============================================================================
 #=============================== FUNCTIONS =====================================
@@ -95,43 +96,41 @@ class BLWTL_HFPI:
                  analogChannels_idxs:dict=None,
                  pressureExtraChannels_tapNos:dict=None,
                  lowpassFreq=None,
-                 Ntaps=None,
-                 barocelRangeFactor=29.917,
+                 Ntaps=-1,
                  ) -> None:
         self.caseDir = caseDir
         self.userNotes = userNotes
         self.Z_MainPitot = Z_MainPitot
+        self.lowpassFreq = lowpassFreq
+        self.Ntaps = Ntaps
+
         if analogChannels_idxs is None:
             analogChannels_ex = {
-                'main_pitot': 1,
-                'xref_pitot': 3,
+                'main_pitot': 0,
+                'xcheck_pitot': 3,
                 'sync_switch': 6,
             }
-            print("analogChannels is not provided. It has the form of:")
-            print(analogChannels_ex)
+            print("Index (zero-based) of 'analogChannels' is not provided. It has the form of:")
+            print(json.dumps(analogChannels_ex, indent=4))
         self.analogChannels_idxs = analogChannels_idxs
         
         if pressureExtraChannels_tapNos is None:
             pressureExtraChannels_ex = {
                 'main_pitot_zero': 2909,
-                'main_pitot_queue': 2910,
+                'main_pitot_q': 2910,
                 '20inch_pitot_zero': 2907,
-                '20inch_pitot_queue': 2908,
+                '20inch_pitot_q': 2908,
                 'Uh_pitot_zero': 2905,
-                'Uh_pitot_queue': 2906,
+                'Uh_pitot_q': 2906,
             }
-            print("pressureExtraChannels_tapNos is not provided. It has the form of:")
-            print(pressureExtraChannels_ex)
+            print("'pressureExtraChannels_tapNos' is not provided. It has the form of:")
+            print(json.dumps(pressureExtraChannels_ex, indent=4))
         self.pressureExtraChannels_tapNos = pressureExtraChannels_tapNos
-        self.lowpassFreq = lowpassFreq
-
-        self.barocelRangeFactor = barocelRangeFactor
-        self.Ntaps = Ntaps
 
         self.files_pssd = None
         self.files_pssr = None
         self.AoA = None
-        self.WTTDATALOG = None
+        self.all_WTTDATALOGs = None
         self.CpTH: np.array() = None
         self.sampleRate_orig = None
         self.sampleRate = None
@@ -140,12 +139,13 @@ class BLWTL_HFPI:
         self.tapNos = None
         self.analogChannels = None
         self.pressureExtraChannels = None
-
-        self.Update()
+        self.barocelRangeFactors = None
+        self.CAL_factors = []
         
-    def Update(self):
+        self.Refresh()
+        
+    def Refresh(self):
         self.read()
-        
 
     def read(self):
         self.files_pssr = glob.glob(os.path.join(self.caseDir, '*.pssr'))
@@ -154,16 +154,23 @@ class BLWTL_HFPI:
 
         self.AoA = np.array([])
         self.sampleRate_orig = np.array([])
-        self.WTTDATALOG = []
+        self.all_WTTDATALOGs = []
         N_AoA = len(self.files_pssd)
 
         for d,(file_pssd,file_pssr) in enumerate(zip(self.files_pssd,self.files_pssr)):
             cp_data,analog,WTTDATALOG = readPSSfile(file_pssr,file_pssd)
             analog = np.transpose(analog)
             cp_data = np.transpose(cp_data)
-            self.WTTDATALOG.append(WTTDATALOG)
+            self.all_WTTDATALOGs.append(WTTDATALOG)
             self.AoA = np.append(self.AoA,float(WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][24][0][0][5][0][0]))
-            sampleFreq = WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][12][0][0]
+            self.CAL_factors.append({
+                                'Z':        WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][2][0][0][1], 
+                                'Zrms':     WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][2][0][0][2],
+                                'Q':        WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][2][0][0][3],
+                                'Qerr':     WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][2][0][0][4],
+                                'MainH2O':  WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][2][0][0][5][0][0],
+                                })
+            sampleFreq = np.squeeze(WTTDATALOG["SampleRate"][0][0])
             self.sampleRate_orig = np.append(self.sampleRate_orig, sampleFreq)
             if self.lowpassFreq is not None:
                 cp_data = wd.lowpass(cp_data,fs=sampleFreq,fc=self.lowpassFreq, axis=1, resample=True)
@@ -175,13 +182,17 @@ class BLWTL_HFPI:
                 anTH = np.zeros((N_AoA,Nchnl,N_t))
             CpTH[d,:,:] = cp_data[0:Ntaps,:]
             anTH[d,:,:] = analog
+            
         if self.lowpassFreq is None:
             self.sampleRate = self.sampleRate_orig
         else:
             self.sampleRate = np.ones_like(self.sampleRate_orig)*self.lowpassFreq
 
         tapNos = list(WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][3][0])
-        self.barocelRangeFactor = WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][7][0][3]
+        self.barocelRangeFactors = {
+                                    'main_pitot':   WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][7][0][3],
+                                    'xcheck_pitot': WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][8][0][3]
+                                    }
         self.testDuration = float(WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][6][0][0])
         self.floorExposure = WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][7]
         self.CpTH = CpTH[:,:self.Ntaps,:]
@@ -214,7 +225,7 @@ class BLWTL_HFPI:
             return None
         if not 'main_pitot' in self.analogChannels:
             return None
-        return np.sqrt(self.analogChannels['main_pitot'])  * self.barocelRangeFactor * wd.fps2mps
+        return np.sqrt(self.analogChannels['main_pitot'])  * self.barocelRangeFactors * wd.fps2mps
 
     @property
     def U_XRef(self):
@@ -227,6 +238,26 @@ class BLWTL_HFPI:
     def U_XRef_TH(self):
         if self.analogChannels is None:
             return None
-        if not 'xref_pitot' in self.analogChannels:
+        if not 'xcheck_pitot' in self.analogChannels:
             return None
-        return np.sqrt(self.analogChannels['xref_pitot'])  * self.barocelRangeFactor * wd.fps2mps
+        return np.sqrt(self.analogChannels['xcheck_pitot'])  * self.barocelRangeFactors * wd.fps2mps
+
+    @property
+    def description(self):
+        description = "HFPI data from BLWTL\n"
+        description += "Case directory: {}\n".format(self.caseDir)
+        description += "User notes: {}\n".format(self.userNotes)
+        description += "Main pitot Z: {} m\n".format(self.Z_MainPitot)
+        description += "Lowpass frequency: {} Hz\n".format(self.lowpassFreq)
+        description += "Barocel range factor: {}\n".format(json.dumps(self.barocelRangeFactors, indent=4))
+        description += "Ntaps: {}\n".format(self.Ntaps)
+        description += "AoA: {} deg.\n".format(self.AoA)
+        description += "Sample rate (raw): {} Hz\n".format(self.sampleRate_orig)
+        description += "Sample rate (filtered): {} Hz\n".format(self.sampleRate)
+        description += "Test duration: {} sec.\n".format(self.testDuration)
+        description += "Floor exposure: \n\t\tBank\tBlock height (in)\n" #.format(self.floorExposure)
+        description +=              "".join(["\t\t"+str(int(item[0]))+"\t"+str(item[1])+"\n" for item in self.floorExposure]) 
+        description += "Analog channels indecies: {}\n".format(json.dumps(self.analogChannels_idxs, indent=4))
+        description += "Pressure extra channels tap Nos.: {}\n".format(json.dumps(self.pressureExtraChannels_tapNos, indent=4))
+
+        return description

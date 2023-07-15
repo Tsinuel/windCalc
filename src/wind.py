@@ -176,14 +176,25 @@ def integLengthScale(x,dt,meanU=None,rho_tol=0.0001,showPlots=False):
      
     return L
 
-def psd(x,fs,nAvg=8):
+def psd(x, fs, nAvg=8, overlapRatio=0.5, window:Literal['hanning', 'hamming', 'bartlett', 'blackman']='hanning', kwargs_window={}, kwargs_welch={}, 
+        showPlots=False):
+    if np.isscalar(x):
+        raise Exception("The input 'x' must be a vector.")
     x = x - np.mean(x)
     N = len(x)
-    nblock = int(np.floor(N/nAvg))
-    overlap = int(np.ceil(nblock/2))
-    win = signal.hanning(nblock, True)
-    N = nblock*nAvg
-    f, Pxxf = signal.welch(x[0:N], fs, window=win, noverlap=overlap, nfft=nblock, return_onesided=True)
+    nblock = int(np.floor(N/nAvg)) # number of samples per block
+    overlap = int(np.floor(nblock*overlapRatio)) # number of samples to overlap
+    win = eval('signal.'+window+'(nblock, **kwargs_window)')
+    N = len(x) - (len(x) % nblock) # number of samples to use 
+    if N < nblock: # avoid error and get the simplest PSD possible
+        N = nblock
+    f, Pxxf = signal.welch(x[0:N], fs, window=win, noverlap=overlap, nfft=nblock, return_onesided=True, **kwargs_welch)
+    if showPlots:
+        plt.figure()
+        plt.loglog(f, Pxxf)
+        plt.xlabel('frequency [Hz]')
+        plt.ylabel('PSD [V**2/Hz]')
+        plt.show()
     return f, Pxxf
 
 def lowpass(x, fs, fc, axis=-1, order = 4, resample=False):
@@ -421,6 +432,7 @@ def getDurstFactor(gustDuration):
 #---------------------------- SURFACE PRESSURE ---------------------------------
 def peak_gumbel(x, axis:int=0, 
                 specs: dict=DEFAULT_PEAK_SPECS,
+                unevenDataManagement: Literal['remove', 'padMean', 'padZero']='remove',
                 detailedOutput=False, debugMode=False):
     x = np.array(x, dtype=float)
     ndim = x.ndim
@@ -428,13 +440,40 @@ def peak_gumbel(x, axis:int=0,
     if xShp[axis] < specs['Num_seg']:
         raise Exception(f"The time dimension of {xShp[axis]} along axis {axis} is less than number of segments, N of {specs['Num_seg']}. The input shape you gave is: {xShp}")
     if debugMode:
-        print(f"x: {np.shape(x)}")
+        print(f"x_orig: {np.shape(x)}")
+        print(f"axis: {axis}")
+        print(f"ndim: {ndim}")
 
     # Extract N min/max values
+    nUnevenExcessData = xShp[axis] % specs['Num_seg']
+    if nUnevenExcessData > 0:
+        if nUnevenExcessData > 0.25*xShp[axis]:
+            warnings.warn(f"Excess data points ({nUnevenExcessData}) is more than 25% of the total data points ({xShp[axis]}).")
+        if debugMode:
+            print(f"Excess data found.")
+        if unevenDataManagement == 'remove':
+            if debugMode:
+                print(f"Removing {nUnevenExcessData} data points from the end.")
+            # slice the excess data considering x can be any dimension. apply the slice along the axis of interest
+            x = x[tuple([slice(None)]*axis+[slice(0,-nUnevenExcessData)])]
+        elif unevenDataManagement == 'padMean':
+            # pad along the axis of interest
+            x = np.pad(x, (0,specs['Num_seg']-xShp[axis]%specs['Num_seg']), mode='mean')
+            if debugMode:
+                print(f"Padding {specs['Num_seg']-xShp[axis]%specs['Num_seg']} data points with mean value.")
+        elif unevenDataManagement == 'padZero':
+            x = np.pad(x, (0,specs['Num_seg']-xShp[axis]%specs['Num_seg']), mode='constant')
+            if debugMode:
+                print(f"Padding {specs['Num_seg']-xShp[axis]%specs['Num_seg']} data points with zero.")
+        else:
+            raise Exception("Unknown excessDataManagement method: "+unevenDataManagement)
+    
+    if debugMode:
+        print(f"x: {np.shape(x)}")
     if ndim == 1:
         x = np.array_split(x, specs['Num_seg'])
     else:
-        x = np.split(x, specs['Num_seg'], axis=axis)
+        x = np.array_split(x, specs['Num_seg'], axis=axis)
     x = np.moveaxis(x,0,-1)
     if debugMode:
         print(f"x: {np.shape(x)}")
@@ -500,6 +539,32 @@ def peak(x,axis=0,
         specs: dict=DEFAULT_PEAK_SPECS,
         debugMode=False, detailedOutput=False,
         ):
+    '''
+    Returns the peak values of the given time history along the given axis.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        The time history of the variable of interest. Should be N-dimensional.
+    axis : int, optional
+        The axis along which the peak values are to be calculated. The default is 0.
+    specs : dict, optional
+        The specifications for the peak calculation. The default is DEFAULT_PEAK_SPECS.
+    debugMode : bool, optional
+        If True, prints out the intermediate steps of the calculation. The default is False.
+    detailedOutput : bool, optional
+        If True, returns the details of the calculation. The default is False.
+
+    Returns
+    -------
+    peakMin : np.ndarray
+        The minimum peak values along the given axis.
+    peakMax : np.ndarray
+        The maximum peak values along the given axis.
+    details : dict
+        The details of the calculation. Only returned if detailedOutput is True.
+        
+    '''
     if specs['method'] == 'gumbel':
         return peak_gumbel(x,axis=axis,specs=specs,debugMode=debugMode, detailedOutput=detailedOutput)
     elif specs['method'] == 'minmax':
@@ -744,7 +809,7 @@ class spectra:
     def __init__(self, name=None, UofT=None, VofT=None, WofT=None, samplingFreq=None, 
                  n=None, Suu=None, Svv=None, Sww=None, nSpectAvg=8,
                  Z=None, U=None, Iu=None, Iv=None, Iw=None,
-                 xLu=None, xLv=None, xLw=None):
+                 xLu=None, xLv=None, xLw=None, keepTH=True):
         
         self.name = name
         self.samplingFreq = samplingFreq
@@ -767,7 +832,11 @@ class spectra:
         self.VofT = VofT
         self.WofT = WofT
 
-        self.Update()
+        self.Refresh()
+        if not keepTH:
+            self.UofT = None
+            self.VofT = None
+            self.WofT = None
 
     def __calculateSpectra(self):
         if self.UofT is not None:
@@ -843,7 +912,7 @@ class spectra:
             return np.multiply(self.n,self.Sww)/(normU**2)
     
     """-------------------------------- Data handlers ---------------------------------"""
-    def Update(self):
+    def Refresh(self):
         self.__calculateSpectra()
 
     def writeSpecsToFile(self):
@@ -1078,7 +1147,9 @@ class profile:
                 X: np.ndarray=None,
                 Y: np.ndarray=None,
                 Z: np.ndarray=None,
-                H=None, dt=None, t=None,
+                H=None, 
+                dt=None, 
+                t=None,
                 UofT: np.ndarray=None, 
                 VofT: np.ndarray=None,
                 WofT: np.ndarray=None,
@@ -1089,6 +1160,58 @@ class profile:
                 fileName=None,
                 keepTH=True,
                 interpolateToH=False, units=DEFAULT_SI_UNITS):
+        '''
+        Parameters
+        ----------
+        name : str, optional
+            Name of the profile. The default is "profile".
+        profType : Union[Literal["continuous","discrete","scatter"], None], optional
+            Type of the profile. The default is None.
+        X : np.ndarray, optional
+            A vector of X coordinates for the profile. Shape: [N_pts]. The default is None.
+        Y : np.ndarray, optional
+            A vector of Y coordinates for the profile. Shape: [N_pts]. The default is None.
+        Z : np.ndarray, optional
+            A vector of Z coordinates for the profile. Shape: [N_pts]. The default is None.
+        H : float, optional
+            A reference height (e.g. building height) for the profile. The default is None.
+        dt : float, optional
+            Time step. The default is None.
+        t : np.ndarray, optional
+            A vector of time. The default is None.
+        UofT : np.ndarray, optional
+            A matrix of U velocity time series. Shape: [N_pts, nTime]. The default is None.
+        VofT : np.ndarray, optional
+            A matrix of V velocity time series. Shape: [N_pts, nTime]. The default is None.
+        WofT : np.ndarray, optional
+            A matrix of W velocity time series. Shape: [N_pts, nTime]. The default is None.
+        pOfT : np.ndarray, optional
+            A matrix of pressure time series at all or limited number of points from the 
+            profile. This pressure is used for pressure coefficient calculation. 
+            Shape: [N_pts, nTime]. The default is None.
+        fields : List, optional
+            A list of fields to be calculated. The default is found in wind.VALID_VELOCITY_STAT_FIELDS.
+        stats : Dict, optional
+            A dictionary of pre-calculated statistics. The default is {}.
+        SpectH : spectra, optional
+            A pre-defined spectra object at the reference height. The default is None.
+        nSpectAvg : int, optional
+            Number of averaging windows for spectra calculation. The default is 8.
+        fileName : str, optional
+            Name of the file to read data from. The default is None.
+        keepTH : bool, optional
+            Keep time history data in memory. The default is True.
+        interpolateToH : bool, optional
+            Interpolate statistics to the reference height as opposed to using the nearest.
+            The default is False.
+        units : str, optional
+            Units of the data. The default is DEFAULT_SI_UNITS.
+
+        Returns
+        -------
+        None.
+        '''
+
         self.name = name
         self.profType = profType
         self.X: Union[np.ndarray, None] = X  # [N_pts]
@@ -1113,14 +1236,22 @@ class profile:
         self.interpolateToH = interpolateToH
         self.units = units
 
-        self.Update()
+        self.keepTH = keepTH
+
+        self.Refresh()
         if not keepTH:
+            self.t = None
             self.UofT = None
             self.VofT = None
             self.WofT = None
+            self.pOfT = None
     
     def __verifyData(self):
-        pass
+        if self.UofT is not None and self.VofT is not None and self.WofT is not None:
+            if not np.shape(self.UofT) == np.shape(self.VofT) == np.shape(self.WofT):
+                raise Exception("UofT, VofT, and WofT must have the same shape.")
+            if not np.shape(self.UofT)[0] == len(self.Z):
+                raise Exception("UofT, VofT, and WofT must have the same number of points as Z.")
 
     def __computeVelStats(self):
         if all([self.UofT is None, self.VofT is None, self.WofT is None]):
@@ -1147,7 +1278,7 @@ class profile:
         if self.WofT is not None:
             wOfT = self.WofT[self.H_idx,:]
         
-        self.SpectH = spectra(name=self.name, UofT=uOfT, VofT=vOfT, WofT=wOfT, samplingFreq=self.samplingFreq, Z=self.H, nSpectAvg=self.nSpectAvg)
+        self.SpectH = spectra(name=self.name, UofT=uOfT, VofT=vOfT, WofT=wOfT, samplingFreq=self.samplingFreq, Z=self.H, nSpectAvg=self.nSpectAvg, keepTH=self.keepTH)
 
     def __str__(self):
         return self.name
@@ -1155,18 +1286,33 @@ class profile:
     """----------------------------------- Properties ---------------------------------"""
     @property
     def T(self):
-        dur = None
-        if self.t is not None and self.dt is not None:
-            dur = self.dt * self.t[-1]
-        return dur
+        '''Duration of the time series in seconds'''
+        if self.t is not None:
+            return self.t[-1] - self.t[0]
+        elif any([self.UofT is not None, self.VofT is not None, self.WofT is not None]) and self.dt is not None:
+            return self.dt * (self.N_t-1)
+        else:
+            return None
 
     @property
-    def Tstar(self):
+    def T_star(self):
+        '''Normalized duration, T.Uh/H'''
         dur = self.T
-        durStar = None
-        if dur is not None and self.H is not None and self.Uh is not None:
-            durStar = dur * self.Uh / self.H
-        return durStar
+        if dur is None or self.H is None or self.Uh is None:
+            return None
+        else:
+            return dur * self.Uh/self.H
+
+    @property
+    def N_t(self):
+        if self.t is not None:
+            return len(np.asarray(self.t))
+        elif self.UofT is not None:
+            return np.shape(self.UofT)[-1]
+        elif self.VofT is not None:
+            return np.shape(self.VofT)[-1]
+        elif self.WofT is not None:
+            return np.shape(self.WofT)[-1]
     
     @property
     def N_pts(self):
@@ -1289,11 +1435,33 @@ class profile:
             return self.stats[field][self.H_idx]
 
     def stat_norm(self, field):
+        '''Returns the normalized value of the given field at the given height and the name of the normalization
+        
+        Parameters
+        ----------
+        field : str
+            Name of the field to be normalized. Choose from {'U','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw'}
+
+        Returns
+        -------
+        normVal : np.ndarray
+            Normalized value of the given field at the given height
+        normName : str
+            Name of the normalization
+
+        Raises
+        ------
+        NotImplementedError
+            If the normalization for the given field is not implemented yet
+
+            '''
         if self.stats is None:
             return None, ''
         else:
-            if field == 'U':
-                return self.UbyUh, 'U/Uh'
+            if field in ['U','V','W']:
+                if self.Uh is None:
+                    return None, ''
+                return self.stats[field]/self.Uh, field+'/Uh'
             elif field in ['Iu','Iv','Iw']:
                 return self.stats[field], field
             elif field in ['xLu','xLv','xLw']:
@@ -1308,7 +1476,7 @@ class profile:
                 raise NotImplementedError("Normalization for field '{}' not implemented".format(field))
             
     """-------------------------------- Data handlers ---------------------------------"""
-    def Update(self):
+    def Refresh(self):
         self.__verifyData()
         self.__computeVelStats()
         if self.origFileName is not None:
@@ -1346,19 +1514,7 @@ class profile:
 
         pass
 
-    def readFromFile(self,fileName,getHfromU_Uh=False):
-        # data = pd.read_csv(fileName)
-        # self.Z = data.Z
-        # self.U = data.U
-        # self.Iu = data.Iu
-        # self.Iv = data.Iv
-        # self.Iw = data.Iw
-        # if 'U_Uh' in data.columns and self.H is None:
-        #     idx = (np.abs(data.U_Uh - 1)).argmin()
-        #     self.H = self.Z[idx]
-
-        # self.N_pts = len(self.Z)
-        # # self.__updateUh()
+    def readFromFile(self):
         pass
 
     def copy(self):
@@ -1591,7 +1747,7 @@ class profile:
                                 alwaysShowFig=alwaysShowFig
                                 )   
 
-    def plotRefHeightStatsTable(self,
+    def plotBasicStatsTable(self,
                                 fig=None,
                                 ax=None,
                                 precision=2,):
@@ -1604,8 +1760,19 @@ class profile:
         ax.axis('off')
         ax.axis('tight')
         cell_text = []
+        # manually add some parameters
+        cell_text.append(['Name', self.name])
+        cell_text.append(['H', np.round(self.H, precision)])
+        cell_text.append(['Uh', np.round(self.Uh, precision)])
+        
         for key in self.stats.keys():
             cell_text.append([key, np.round(self.stats[key][self.H_idx], precision)])
+        # manually add some parameters
+        cell_text.append(['T', self.T])
+        cell_text.append(['T*', self.T_star])
+        cell_text.append(['samplingFreq', self.samplingFreq])
+
+        
         ax.table(cellText=cell_text,
                  colLabels=['Field','Value'],
                  loc='center')
@@ -1633,6 +1800,18 @@ class Profiles:
         self._currentIndex = 0
         raise StopIteration
 
+    def __getitem__(self, key):
+        return self.profiles[key]
+    
+    def __setitem__(self, key, value):
+        self.profiles[key] = value
+
+    def __len__(self):
+        return self.__numOfProfiles()
+    
+    def __str__(self):
+        return str(self.profiles)
+    
     @property
     def N(self):
         return len(self.profiles)
@@ -1941,10 +2120,9 @@ class Profiles:
                         )
 
     def plotRefHeightStatsTable(self,
-                                fig=None,figsize=[15,5],ax=None,precision=2,
+                                fig=None,figsize=[15,5],ax=None,decimals=4, strFmt='{:g}', 
                                 fontSz=None, normalize=True,
-                                kwargs_table={'align':'center', 
-                                              'loc':'center',
+                                kwargs_table={'loc':'center',
                                               'cellLoc': 'center',
                                               'bbox': [0.0, 0.0, 1.0, 1.0]}):
         if fig is None:
@@ -1957,7 +2135,24 @@ class Profiles:
         # each profile will have its own column and each field will have its own row. If there is missing value or non-existent field, it will be filled with ' '
         cell_text = []
         for key in self.profiles[0].stats.keys():
-            cell_text.append([key, *[np.round(prof.stats[key][prof.H_idx], precision) if key in prof.stats.keys() else ' ' for prof in self.profiles]])
+            if normalize:
+                # val = [np.round(prof.stat_norm(key)[prof.H_idx], precision) if key in prof.stats.keys() else ' ' for prof in self.profiles]
+                val = []
+                for prof in self.profiles:
+                    if key in prof.stats.keys():
+                        val_norm, key_name = prof.stat_norm(key)
+                        if val_norm is None:
+                            val.append(' ')
+                        else:
+                            val.append(np.round(val_norm[prof.H_idx], decimals))
+                    else:
+                        val.append(' ')
+            else:
+                key_name = key
+                # val = [np.round(prof.stats[key][prof.H_idx], decimals) if key in prof.stats.keys() else ' ' for prof in self.profiles]
+                val = [f"{strFmt}".format(prof.stats[key][prof.H_idx]) if key in prof.stats.keys() else ' ' for prof in self.profiles]
+            val.insert(0,key_name)
+            cell_text.append(val)
 
         table = ax.table(cellText=cell_text,
                     colLabels=['Field',*[prof.name for prof in self.profiles]],
@@ -1970,8 +2165,9 @@ class Profiles:
         plt.show()
 
 class ESDU74:
-    __Omega = 72.7e-6            # Angular rate of rotation of the earth in [rad/s].  ESDU 74031 sect. A.1
-    __k = 0.4   # von Karman constant
+    __Omega = 72.7e-6       # Angular rate of rotation of the earth in [rad/s].  ESDU 74031 sect. A.1
+    __k = 0.4               # von Karman constant
+
     def __init__(self,
                     phi=30,
                     z0=0.03,
@@ -2207,12 +2403,27 @@ class ESDU85:
     __Omega = 72.9e-6            # Angular rate of rotation of the earth [rad/s] ESDU 82026 ssA1
 
     def __init__(self,
-                    phi=30,
+                    phi=30.0,
                     z0=0.03,
                     Z=np.sort(np.append(np.logspace(np.log10(0.5),np.log10(300),99),10)), 
-                    Zref=10,
-                    Uref=10,
+                    Zref=10.0,
+                    Uref=10.0,
                     ):
+        """
+        
+        This class implements the ESDU 85 wind profile. The default values are for a open terrain at 30 degrees latitude. The default Z vector is from 0.5m to 300m with 99 points logarithmically spaced and 10m added at the end. The default Zref is 10m. The default Uref is 10m/s.
+
+        Args:
+            phi (float, optional): Latitude in degrees. Defaults to 30.0 degrees.
+            z0 (float, optional): Roughness length in meters. Defaults to 0.03m.
+            Z (np.ndarray, optional): Heights in meters. Defaults to np.sort(np.append(np.logspace(np.log10(0.5),np.log10(300),99),10)).
+            Zref (float, optional): Reference height in meters. Defaults to 10.0m
+            Uref (float, optional): Reference velocity in m/s. Defaults to 10.0m/s.
+
+        References:
+            ESDU 85020
+            ESDU 82026
+        """
         self.phi = phi # latitude in degrees
         self.z0 = z0
         self.d = 0.0  # zero-plane displacement not implemented
@@ -2497,7 +2708,7 @@ class bldgCp(windCAD.building):
                 Uref_input=None,  # for the Cp TH being input below
                 Uref_FS=None,     # Full-scale reference velocity for scaling purposes
                 samplingFreq=None,
-                airDensity=1.125,
+                fluidDensity=1.204,
                 AoA=None,
                 CpOfT=None,  # Cp TH referenced to Uref at Zref
                 badTaps=None, # tap numbers to remove
@@ -2508,6 +2719,114 @@ class bldgCp(windCAD.building):
                 peakSpecs=DEFAULT_PEAK_SPECS,
                 keepTH=True,
                 ):
+        """
+        This class handles the computation of building wind load by inheriting the windCAD.building 
+        class. It also handles the computation of the Cp time history from the pressure time history.
+
+        Args:
+            bldgName (str, optional): 
+                        Name of the building. Defaults to None.
+            H (float, optional): 
+                        The reference height of the building. Defaults to None.
+            He (float, optional): 
+                        Height of the building's eave. Defaults to None.
+            Hr (float, optional): 
+                        Height of the building's ridge. Defaults to None.
+            B (float, optional):
+                        Building width. Defaults to None.
+            D (float, optional): 
+                        Building depth. Defaults to None.
+            roofSlope (float, optional): 
+                        Roof slope in degrees. Defaults to None.
+            lScl (float, optional): 
+                        Length scale for the building. Defaults to 1.
+            valuesAreScaled (bool, optional): 
+                        Whether or not the values are scaled. Defaults to True.
+            faces (List[windCAD.face], optional): 
+                        List of faces of the building. Defaults to [].
+            faces_file_basic (str, optional): 
+                        Path to the basic face file. Defaults to None.
+            faces_file_derived (str, optional): 
+                        Path to the derived face file. Defaults to None.
+            caseName (str, optional): 
+                        Name of the case. Defaults to None.
+            notes_Cp (str, optional): 
+                        Notes for the Cp time history. Defaults to " ".
+            AoA_zero_deg_basisVector (np.ndarray, optional): 
+                        Basis vector for the zero degree AoA. Defaults to None.
+            AoA_rotation_direction (Literal['CW','CCW'], optional): 
+                        Rotation direction for the AoA. Defaults to None.
+            refProfile (profile, optional): 
+                        Reference profile for the Cp time history. Defaults to None.
+            Zref_input (float, optional): 
+                        The reference height used for the incoming Cp time history. 
+                        It is used to re-reference the Cp time history to the building 
+                        height. The units are in meters. Defaults to None.
+            Uref_input (float, optional): 
+                        The reference velocity used for the incoming Cp time history. 
+                        It is used to re-reference the Cp time history to the building 
+                        height. The units are in m/s. Defaults to None.
+            Uref_FS (float, optional): 
+                        The full-scale reference velocity used for scaling the velocity. 
+                        The units are in m/s. Defaults to None.
+            samplingFreq (float, optional): 
+                        Sampling frequency of the Cp time history. The units are in Hz. 
+                        Defaults to None.
+            fluidDensity (float, optional): 
+                        Fluid density in kg/m3. Defaults to that of air at sea level, 
+                        i.e., 1.204 kg/m3. https://en.wikipedia.org/wiki/Density_of_air
+            AoA (float, optional): 
+                        Angle of attack in degrees. Defaults to None.
+            CpOfT (np.ndarray, optional): 
+                        Pressure coefficient time history defined as
+                        Cp = (p-p0)/(0.5*rho*Uref^2) where p0 is the reference static
+                        pressure, p is the pressure at point of interest, rho is the
+                        fluid density, and Uref is the reference velocity. If both CpOfT
+                        and pOfT are provided, then CpOfT is used. Defaults to None.
+                        Shape: [N_AoA,Ntaps,Ntime]. 
+            badTaps (List[int], optional): 
+                        List of tap numbers to remove. Defaults to None.
+            reReferenceCpToH (bool, optional): 
+                        Whether or not to re-reference the Cp time history to the 
+                        building height. Defaults to True.
+            pOfT (np.ndarray, optional): 
+                        Pressure time history in Pa used in the calculation of CpOfT 
+                        (see the definition of 'CpOfT'). If CpOfT is provided, then this
+                        is neglected. Defaults to None.
+                        Shape: [N_AoA,Ntaps,Ntime].
+            p0ofT (np.ndarray, optional): 
+                        Reference static pressure time history in Pa used in the 
+                        calculation of CpOfT (see the definition of 'CpOfT'). If CpOfT
+                        is provided, then this is neglected. For CFD data, this is taken 
+                        from a point far upstream (if blockage is very low) or far above
+                        the building away from any boundaries. For wind tunnel data that
+                        is provided as CpOfT, this is the static reference pressure used
+                        by the scanners.
+                        Defaults to None.
+                        Shape: [N_AoA,Ntime].
+            CpStats (dict, optional):
+                        Dictionary of pre-calculated Cp statistics. If this is provided,
+                        then the Cp time history is not re-calculated. Defaults to None.
+                        Shape: dict{nFlds:[N_AoA,Ntaps]}.
+            peakSpecs (dict, optional):
+                        Dictionary of peak specifications. Defaults to DEFAULT_PEAK_SPECS.
+            keepTH (bool, optional):
+                        Whether or not to keep the Cp and pressure time histories.
+                        Defaults to True.
+
+        Raises:
+            Exception: If the p and p0 time series for Cp calculation do not match in 
+                        time steps.
+            Exception: If the provided Z vector contains values higher than 300m which
+                        is beyond the range provided in ESDU 82026, eq. A1.8.
+            Exception: Unknown normalization height type. Choose from {'Z', 'xLi'} or
+                        specify a number.
+
+        References:
+            ESDU 85020
+            ESDU 82026
+
+        """
         super().__init__(name=bldgName, H=H, He=He, Hr=Hr, B=B, D=D, roofSlope=roofSlope, lScl=lScl, valuesAreScaled=valuesAreScaled, faces=faces,
                         faces_file_basic=faces_file_basic, faces_file_derived=faces_file_derived)
 
@@ -2515,7 +2834,7 @@ class bldgCp(windCAD.building):
         self.notes_Cp = notes_Cp
         self.refProfile:profile = refProfile
         self.samplingFreq = samplingFreq
-        self.airDensity = airDensity
+        self.fluidDensity = fluidDensity
 
         self.Zref = Zref_input
         self.Uref = [Uref_input,] if np.isscalar(Uref_input) else Uref_input
@@ -2541,7 +2860,7 @@ class bldgCp(windCAD.building):
             self.tScl = self.lScl/self.vScl
         else:
             self.vScl = self.tScl = None
-        self.Update()
+        self.Refresh()
         if not keepTH:
             self.CpOfT = self.pOfT = self.p0ofT = None
 
@@ -2572,7 +2891,7 @@ class bldgCp(windCAD.building):
             raise Exception(f"The p and p0 time series for Cp calculation do not match in time steps. Shapes of p0ofT : {np.shape(p0ofT)}, pOfT : {np.shape(self.pOfT)}")
         pOfT = np.empty(np.shape(self.pOfT))
         self.CpOfT = np.divide(np.subtract(self.pOfT,p0ofT),
-                                0.5*self.airDensity*self.Uref**2)
+                                0.5*self.fluidDensity*self.Uref**2)
 
     def __computeAreaAveragedCp_____depricated(self):
         if self.NumPanels == 0 or self.CpOfT is None:
@@ -2753,7 +3072,7 @@ class bldgCp(windCAD.building):
                 stats[zKey].extend(val_z)
         return stats
 
-    """------------------------------ Data functions ----------------------------------"""
+    """--------------------------------- Methods --------------------------------------"""
     def CpStatsAreaAvgCollected(self, mixNominalAreasFromAllZonesAndFaces=False, 
                         envelope:Literal['max','min','none']='none', 
                         extremesPerNominalArea:Literal['max','min','none']='none'):
@@ -2818,7 +3137,7 @@ class bldgCp(windCAD.building):
                         CpAavg[zone_m][2][fld][a] = np.squeeze(extremePerArea(__CpAavg[zone_m][2][a][fld]))
         return CpAavg
 
-    def Update(self):
+    def Refresh(self):
         self.__verifyData()
         self.__computeCpTHfrom_p_TH()
         if self.CpOfT is not None:
@@ -2844,7 +3163,7 @@ class bldgCp(windCAD.building):
                             xticks=None, mrkrSize=2,
                             legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20], sharex=True, sharey=True,
                             overlayThis=None, overlay_AoA=None, overlayLabel=None, kwargs_overlay={}):
-        tapIdxs = self.tapIdx if tapsToPlot is None else self.idxOfTapNum(tapsToPlot)
+        tapIdxs = self.tapIdx if tapsToPlot is None else self.tapIdxOf(tapsToPlot)
         
         for fld in fields:
             self.checkStatField(fld)
@@ -2892,8 +3211,9 @@ class bldgCp(windCAD.building):
                 ax.annotate(tag, xy=(0,0), xycoords='axes fraction',xytext=(0.05, 0.05), textcoords='axes fraction',
                             fontsize=12, ha='left', va='bottom', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.7))
                 ax.set_ylim(fldRange)
-                if xticks is not None:
-                    ax.xaxis.set_ticks(xticks)
+                xticks = np.arange(0,450,90) if xticks is None else xticks
+                ax.xaxis.set_ticks(xticks)
+                ax.set_xlim([xticks[0],xticks[-1]])
                 ax.tick_params(axis=u'both', which=u'both',direction='in')
                 
                 ax.grid(which='both')
@@ -2917,8 +3237,8 @@ class bldgCp(windCAD.building):
             handles, labels = ax.get_legend_handles_labels()
             if newFig:
                 fig.legend(handles, fields, loc='upper center',ncol=len(fields), bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
-                plt.annotate(f"Page {p+1} of {nPages}", xy=pageNo_xy, xycoords='figure fraction', ha='right', va='bottom')
-                plt.annotate(self.name, xy=pageNo_xy, xycoords='figure fraction', ha='left', va='bottom')
+                text = f"Page {p+1} of {nPages}\n Case: {self.name}"
+                plt.annotate(text, xy=pageNo_xy, xycoords='figure fraction', ha='center', va='top')
                 plt.show()
         if newFig:
             return figs, all_axes
@@ -2926,7 +3246,10 @@ class bldgCp(windCAD.building):
             return 
 
     def plotTapCpStatContour(self, fieldName, dxnIdx=None, envelopeType:Literal['high','low','both']='both', figSize=[15,10], ax=None, 
-                             fldRange=None, nLvl=100, cmap='RdBu', extend='both', title=None, colBarOrientation='horizontal'):
+                            fldRange=None, nLvl=100, cmap='RdBu', extend='both', title=None, colBarOrientation='horizontal',
+                            showValuesOnContour=True, kwargs_contourTxt={'inline':True, 'fmt':'%.2g','fontsize':4, 'colors':'b'},
+                            showContourEdge=True, kwargs_contourEdge={'colors':'k', 'linewidths':0.3, 'linestyles':'solid'},
+                            ):
         self.checkStatField(fieldName)
         if dxnIdx is None:
             if envelopeType == 'both':
@@ -2945,7 +3268,9 @@ class bldgCp(windCAD.building):
             newFig = True
             fig = plt.figure(figsize=figSize)
             ax = fig.add_subplot()
-        cObj = self.plotTapField(ax=ax, field=data, fldRange=fldRange, nLvl=nLvl, cmap=cmap, extend=extend)
+        cObj = self.plotTapField(ax=ax, field=data, fldRange=fldRange, nLvl=nLvl, cmap=cmap, extend=extend,
+                                 showValuesOnContour=showValuesOnContour, kwargs_contourTxt=kwargs_contourTxt,
+                                 showContourEdge=showContourEdge, kwargs_contourEdge=kwargs_contourEdge)
         if newFig:
             self.plotEdges(ax=ax)
 
@@ -3271,11 +3596,63 @@ class bldgCp(windCAD.building):
             return fig, ax
 
 class BldgCps():
-    def __init__(self) -> None:
-        self._members = []
-        self.parent = bldgCp()
+    def __init__(self,
+                memberBldgs:List[bldgCp]=[],
+                masterBldg:Union[bldgCp,None]=None,
+                ) -> None:
+        self.memberBldgs = memberBldgs
+        print(f"Number of member bldgs: {len(memberBldgs)}")
+
+        self.master = memberBldgs[0] if masterBldg is None and len(memberBldgs) > 0 else masterBldg
+        # super().__init__(caseName=mb.name, H=mb.H, He=mb.He, Hr=mb.Hr, B=mb.B, D=mb.D, roofSlope=mb.roofSlope, lScl=mb.lScl, valuesAreScaled=mb.valuesAreScaled, faces=mb.memberFaces,
+        #                 # refProfile=mb.refProfile, samplingFreq=mb.samplingFreq, airDensity=mb.airDensity,
+        #                 # Zref_input=mb.Zref, Uref_input=mb.Uref, Uref_FS=mb.Uref_FS, badTaps=mb.badTaps, AoA=mb.AoA, AoA_zero_deg_basisVector=mb.AoA_zero_deg_basisVector, 
+        #                 # AoA_rotation_direction=mb.AoA_rotation_direction,
+        #                 # CpOfT=mb.CpOfT, pOfT=mb.pOfT, p0ofT=mb.p0ofT, CpStats=mb.CpStats, peakSpecs=mb.peakSpecs,
+        #                 )
+        # self.master = masterBldg
+
+    def __fold(self):
+        flds = self.master.CpStats.keys()
+        stat = {}
+        for fld in flds:
+            stat[fld] = np.zeros_like(self.master.CpStats[fld])
+            for i, bldg in enumerate(self.memberBldgs):
+                stat[fld] += bldg.CpStats[fld]
+            stat[fld] /= self.Num_MemberBldgs
         pass
 
-    def fold(self):
-        pass
+    """-------------------------------- Properties ------------------------------------"""
+    @property
+    def Num_MemberBldgs(self):
+        return len(self.memberBldgs)
+    
+
+    """--------------------------------- Methods --------------------------------------"""
+    def CpStats(self, errorPercentile=95.0,): 
+        if len(self.memberBldgs) == 0 or self.master is None:
+            return None
+        flds = self.master.CpStats.keys()
+        upper = {} 
+        mean = {}
+        lower = {}
+        allData = {}
+        for fld in flds:
+            # initialize clctd{} by zeros like the master bldg CpStats with one extra dimension for the member bldgs as the last dimension
+            allData[fld] = np.zeros(np.shape(self.master.CpStats[fld]) + (self.Num_MemberBldgs,))
+            for i, bldg in enumerate(self.memberBldgs):
+                # collect the CpStats of the member bldgs into the last dimension of clctd{} without explicitly knowing the dimensionality of the CpStats
+                allData[fld][...,i] = bldg.CpStats[fld]
+                
+            mean[fld] = np.mean(allData[fld], axis=-1)
+            upper[fld] = np.percentile(allData[fld], 50+errorPercentile/2, axis=-1)
+            lower[fld] = np.percentile(allData[fld], 50-errorPercentile/2, axis=-1)
+        return mean, upper, lower, allData
+    
+
+
+    """--------------------------------- Plotters -------------------------------------"""
+
+
+
 

@@ -171,6 +171,7 @@ def convertSectionSampleToBoundaryDataInflow(caseDir, sectionName, fileName,
                                              outDir=None, 
                                              shiftTimeBy=None, 
                                              overwrite=False,
+                                             checkMatchingPoints=True,
                                              pointDistanceTolerance=1e-6,
                                              timeOutputPrecision=6,
                                              showLog=True, 
@@ -244,12 +245,12 @@ def convertSectionSampleToBoundaryDataInflow(caseDir, sectionName, fileName,
                 print("    Writing points to: "+pointsFile)
                 print("    Writing velocity to: <output_dir> = "+outDir)
         else:
-            if not np.array_equal(points, points_old):
+            if not np.array_equal(points, points_old) and checkMatchingPoints:
                 # throw error if the number of points does not match
                 if not len(points) == len(points_old):
                     raise Exception("The number of points in the file '"+sectDir+t+"/"+fileName+ext+"' do not match with the number of points in the file '"+pointsFile+"'.")
                 if showLog:
-                    print("    Reordering velocity to match the points in existing 'points' file.")
+                    print("      Reordering velocity to match the points in existing 'points' file.")
                 from scipy.spatial import KDTree
                 tree = KDTree(points)
                 distance,idx = tree.query(points_old)
@@ -268,9 +269,11 @@ def convertSectionSampleToBoundaryDataInflow(caseDir, sectionName, fileName,
         else:
             if showLog:
                 print("    Skipping existing time step: "+t_out+"/U")
+    if showLog:
+        print("    << Finished converting section sample to boundaryData inflow.")
 
 #-----------------  Probe readers and related functions  -----------------------
-def __readProbe_singleT(file,field):
+def read_OF_probe_single(file,field):
     """
     Read time-history data of a field from a single OpenFOAM probe file.
 
@@ -292,7 +295,7 @@ def __readProbe_singleT(file,field):
 
     @author: Tsinuel Geleta
     """
-    probes = np.zeros([0])
+    points = np.zeros([0])
     data = np.zeros([0])
     time  = np.zeros([0])
     with open(file, "r") as f:
@@ -304,22 +307,24 @@ def __readProbe_singleT(file,field):
                 if line.startswith('# Probe'):
                     line = line.split()
                     prb_i = np.reshape(np.asarray(line[3:6],dtype=float),[1,3])
-                    if len(probes) == 0:
-                        probes = prb_i
+                    if len(points) == 0:
+                        points = prb_i
                     else:
-                        probes = np.append(probes,prb_i,axis=0)
+                        points = np.append(points,prb_i,axis=0)
                 else:
                     continue
             else:
                 line = line.split()
                 if field == 'p':
-                    if len(line[1:]) < len(probes): # inclomplete line
+                    if len(line[1:]) < len(points): # inclomplete line
                         continue
                     d = np.reshape(np.asarray(line[1:],dtype=(float)),[1,-1])
                 elif field == 'U':
-                    if len(line[1:])/3 < len(probes): # inclomplete line
+                    if len(line[1:])/3 < len(points): # inclomplete line
                         continue
                     d = np.reshape(np.asarray(line[1:],dtype=(float)),[1,-1,3])
+                else:
+                    raise Exception("The probe reader is not implemented for field '"+field+"'.")
 
                 if len(data) == 0:
                     data = d
@@ -327,9 +332,9 @@ def __readProbe_singleT(file,field):
                     data = np.append(data, d,axis=0)
                 time = np.append(time,float(line[0]))
    
-    return probes, time, data
+    return points, time, data
 
-def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None, trimOverlap=True, 
+def read_OF_probe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None, trimOverlap=True, 
               shiftTimeToZero=True, removeOutOfDomainProbes=True, showLog=True, skipNoneExistingFiles=True):
     """
     Read probe time-history data from an OpenFOAM case.
@@ -377,7 +382,7 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None
     times = [ name for name in os.listdir(probeDir) if os.path.isdir(os.path.join(probeDir, name)) ]
     times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
     
-    probes = np.zeros([0])
+    points = np.zeros([0])
     T = np.zeros([0])
     data = np.zeros([0])
     
@@ -394,11 +399,11 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None
         if showLog:
             print(f"           Reading {field} from: {fileName}")
         
-        (probes,time,d) = __readProbe_singleT(fileName, field)
+        (points,time,d) = read_OF_probe_single(fileName, field)
         if showLog:
             tStart = time[0] if len(time) > 0 else np.nan
             tEnd = time[-1] if len(time) > 0 else np.nan
-            print(f"                {len(probes)} probes with {len(time)} time steps ({tStart} to {tEnd})")
+            print(f"                {len(points)} probes with {len(time)} time steps ({tStart} to {tEnd})")
             print(f"                No. of overlapping time steps with previously read data: {len(np.intersect1d(T,time))}")
             print(f"                Shape of data: {np.shape(d)}")
         
@@ -457,10 +462,16 @@ def readProbe(probeName, postProcDir, field, trimTimeSegs:List[List[float]]=None
         if showLog:
             if len(removeIdx[0]) > 0:
                 print(f"      Removing {len(removeIdx[0])} out-of-domain probes.")
-        probes = np.delete(probes,removeIdx,0)
+        points = np.delete(points,removeIdx,0)
         data = np.delete(data,removeIdx,1)
         
-    return probes, T, data
+    if showLog:
+        print(f"      No. of probes: {len(points)}")
+        print(f"      No. of time steps: {len(T)}")
+        print(f"      Shape of data: {np.shape(data)}")
+        print("      << Finished reading probe data.")
+
+    return points, T, data
     
 def processVelProfile(caseDir, probeName, targetProfile=None,
                         name=None,
@@ -483,7 +494,7 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
         print("Target profile read from:\t"+str(targetProfile))
     
         print("  >> Reading probe data ...")
-    probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
+    probes,time,vel = read_OF_probe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
     if showLog:
         print("             << Done!")
     
@@ -575,7 +586,7 @@ def readVelProfile(caseDir, probeName,
         print("Probe read from:\t\t"+postProcDir+probeName)
         print("  >> Reading probe data ...")
     if not readFromNPY_file:
-        probes,time,vel = readProbe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
+        probes,time,vel = read_OF_probe(probeName, postProcDir, "U", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
         if writeToFile:
             if showLog:
                 print("  >> Writing data to NPY file.")
@@ -597,9 +608,6 @@ def readVelProfile(caseDir, probeName,
     
     if showLog:
         print("  >> Processing profile data.")
-    if showLog:
-        print("             << Done!")
-        print("  >> Finished reading probe data.")
 
     if readPressure:
         if showLog:
@@ -611,29 +619,45 @@ def readVelProfile(caseDir, probeName,
         contains_p = [name for name in times if os.path.exists(sampleDir+name+"/p")] 
         if any(contains_p):
             if not readFromNPY_file:
-                _,time_p,pressure = readSurfacePressure(caseDir=caseDir, probeName=probeName, trimTimeSegs=trimTimeSegs, shiftTimeToZero=shiftTimeToZero,
+                pressure,_,time_p = readSurfacePressure(caseDir=caseDir, probeName=probeName, trimTimeSegs=trimTimeSegs, shiftTimeToZero=shiftTimeToZero,
                                                                 showLog=showLog)
                 pressure = np.transpose(pressure)
+                idxOfP = np.where(np.isin(np.round(time_p,decimals=6),np.round(time,decimals=6),assume_unique=True))[0]
+                pressure = pressure[:,idxOfP]
+                time_p = time_p[idxOfP]
+
+                idxOfV = np.where(np.isin(np.round(time,decimals=6),np.round(time_p,decimals=6),assume_unique=True))[0]
+                vel = vel[idxOfV,:,:]
+                time = time[idxOfV]
+
                 if writeToFile:
                     if showLog:
                         print("  >> Writing data to NPY file.")
                         print("             << Done!")
                     np.save(outDir+probeName+"_pressure.npy",pressure)
-                    np.save(outDir+probeName+"_time_p.npy",time_p)
+                    # np.save(outDir+probeName+"_time_p.npy",time_p)
             else:
                 if showLog:
                     print("  >> Reading data from NPY file.")
                 pressure = np.load(outDir+probeName+"_pressure.npy")
-                time_p = np.load(outDir+probeName+"_time_p.npy")
+                # time_p = np.load(outDir+probeName+"_time_p.npy")
         else:
             pressure = None
-            time_p = None
+            # time_p = None
+    if showLog:
+        print("             << Done!")
+        print("  >> Finished reading probe data.")
     
     name = caseName+"__"+probeName if name is None else name
-    prof = wind.profile(name=name,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
-                          WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.DEFAULT_SI_UNITS,
-                          pOfT=pressure
-                          )
+    # check if there more than one time step
+    if len(np.shape(vel)) == 3:
+        prof = wind.profile(name=name,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
+                            WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.DEFAULT_SI_UNITS,
+                            pOfT=pressure
+                            )
+    else:
+        print("WARNING! The velocity data is not a time history. The profile will be created without.")
+        prof = None
     return prof
 
 def readSurfacePressure(caseDir, probeName, 
@@ -649,7 +673,7 @@ def readSurfacePressure(caseDir, probeName,
         print("Processing OpenFOAM case:\t"+caseDir)
         print("Probe read from:\t\t"+postProcDir+probeName)
         print("  >> Reading probe data ...")
-    probes,time,pressure = readProbe(probeName, postProcDir, "p", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
+    probes,time,pressure = read_OF_probe(probeName, postProcDir, "p", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
     if showLog:
         print("             << Done!")
     
@@ -659,7 +683,7 @@ def readSurfacePressure(caseDir, probeName,
         print("             << Done!")
         print("  >> Finished reading probe data.")
     
-    return probes,time,pressure
+    return pressure,probes,time
 
 def writeProbeDict(file, points, fields=['p','U'], writeControl='adjustableRunTime', writeInterval='$probeWriteTime', includeLines=[], overwrite=False, precision=8, width=10):
     if os.path.exists(file):
@@ -737,7 +761,9 @@ class foamCase:
         self.mainProfile = None
         self.__allProfiles = None
 
-    def Update(self, **kwargs):
+        self.Refresh()
+
+    def Refresh(self, **kwargs):
         if self.caseDir is not None:
             if self.velProbeName_main is not None:
                 self.mainProfile = processVelProfile(self.caseDir, self.velProbeName_main, name=self.name, 
@@ -762,12 +788,14 @@ class inflowTuner:
                  target:wind.profile=None,
                  inflows:wind.Profiles=None,
                  incidents:wind.Profiles=None,
+                 refProfiles:wind.Profiles=None,
                  ) -> None:
         self.H = H
         self.nSpectAvg = nSpectAvg
         self.target = target
         self.inflows = inflows
         self.incidents = incidents
+        self.refProfiles = refProfiles
 
     @property
     def allProfiles(self):
@@ -829,8 +857,13 @@ class inflowTuner:
         else:
             self.inflows.profiles.append(prof)
 
-    def addIncident(self, caseDir, probeName, name=None, trimTimeSegs=[[0, 1.0],], showLog=False):
-        prof = readVelProfile(caseDir=caseDir,probeName=probeName,name=name, showLog=showLog, trimTimeSegs=trimTimeSegs,H=self.H)
+    def addIncident(self, caseDir, probeName, name=None, readFromNPY_file=True, writeToDataFile=False,
+                    trimTimeSegs=[[0, 1.0],], showLog=True,
+                    kwargs_readVelProfile={},):
+        
+        prof = readVelProfile(caseDir=caseDir,probeName=probeName,name=name, showLog=showLog, trimTimeSegs=trimTimeSegs,H=self.H, readFromNPY_file=readFromNPY_file,
+                                writeToFile=writeToDataFile,
+                              **kwargs_readVelProfile)
         if self.incidents is None:
             self.incidents = wind.Profiles([prof,])
         else:
@@ -904,7 +937,8 @@ class inflowTuner:
             scaledTables.append(scaledTable)
         return scaledTables, factors, names
 
-    def writeProfile(self, rounds=0, dir=None, name='profile', figsize=[15,15], zLim=[0,10], debugMode=False, applySmoothing=True, compensateFor_xLi_in_Ii=False,
+    def writeProfile(self, rounds=0, dir=None, name='profile', figsize=[15,15], zLim=[0,10], scaleByFixedRefHeightRatio=True, 
+                     debugMode=False, applySmoothing=True, compensateFor_xLi_in_Ii=False,
                      zMax_scaling=None, zMin_scaling=None, scale_xLi=True, applyLimitedSmoothing=False,
                      smoothWindow=[50, 50, 50, 50, 200, 150, 200], kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True,
                                                                                      'paddingFactor':2, 'paddingMode':'edge'},):
@@ -914,6 +948,8 @@ class inflowTuner:
             if len(profs) == 0:
                 return
             fig, axs = plt.subplots(3,3, figsize=figsize)
+            # set the facecolor of the figure
+            fig.set_facecolor('w')
             axs = axs.flatten()
             flds = ['U', 'Iu', 'Iv', 'Iw', 'xLu', 'xLv', 'xLw']
             axIdxs = [0, 3, 4, 5, 6, 7, 8]
@@ -935,6 +971,9 @@ class inflowTuner:
                     ax2.plot(ratio[flds[ii]], ratio['Z']/self.target.H, label='ratio', lw=2, ls='--', c='c',marker='None', ms=3)
                     ax2.set_xlabel('ratio')
                     ax2.axvline(1.0, c='k', ls='--', lw=1)
+                    ax2.xaxis.label.set_color('c')
+                    ax2.tick_params(axis='x', colors='c')
+                    ax2.spines['top'].set_color('c')
                 ax.set_xlabel(flds[ii])
                 ax.set_ylabel('Z/H')
                 ax.set_ylim(zLim)
@@ -981,14 +1020,25 @@ class inflowTuner:
                 prof_attempt = interpToZ(prof_attempt, Z)
                 prof_target = interpToZ(prof_target, Z)
             ratio = pd.DataFrame()
-            ratio['Z'] = prof_target['Z']
-            ratio['U'] = prof_target['U']/prof_attempt['U']
-            ratio['Iu'] = prof_target['Iu']/prof_attempt['Iu']
-            ratio['Iv'] = prof_target['Iv']/prof_attempt['Iv']
-            ratio['Iw'] = prof_target['Iw']/prof_attempt['Iw']
-            ratio['xLu'] = prof_target['xLu']/prof_attempt['xLu']
-            ratio['xLv'] = prof_target['xLv']/prof_attempt['xLv']
-            ratio['xLw'] = prof_target['xLw']/prof_attempt['xLw']
+            if scaleByFixedRefHeightRatio:
+                hIdx = np.argmin(np.abs(prof_target.Z - self.H))
+                ratio['Z'] = prof_target['Z']
+                ratio['U'] = np.ones_like(prof_target['Z'])*prof_target['U'][hIdx]/prof_attempt['U'][hIdx]
+                ratio['Iu'] = np.ones_like(prof_target['Z'])*prof_target['Iu'][hIdx]/prof_attempt['Iu'][hIdx]
+                ratio['Iv'] = np.ones_like(prof_target['Z'])*prof_target['Iv'][hIdx]/prof_attempt['Iv'][hIdx]
+                ratio['Iw'] = np.ones_like(prof_target['Z'])*prof_target['Iw'][hIdx]/prof_attempt['Iw'][hIdx]
+                ratio['xLu'] = np.ones_like(prof_target['Z'])*prof_target['xLu'][hIdx]/prof_attempt['xLu'][hIdx]
+                ratio['xLv'] = np.ones_like(prof_target['Z'])*prof_target['xLv'][hIdx]/prof_attempt['xLv'][hIdx]
+                ratio['xLw'] = np.ones_like(prof_target['Z'])*prof_target['xLw'][hIdx]/prof_attempt['xLw'][hIdx]
+            else:
+                ratio['Z'] = prof_target['Z']
+                ratio['U'] = prof_target['U']/prof_attempt['U']
+                ratio['Iu'] = prof_target['Iu']/prof_attempt['Iu']
+                ratio['Iv'] = prof_target['Iv']/prof_attempt['Iv']
+                ratio['Iw'] = prof_target['Iw']/prof_attempt['Iw']
+                ratio['xLu'] = prof_target['xLu']/prof_attempt['xLu']
+                ratio['xLv'] = prof_target['xLv']/prof_attempt['xLv']
+                ratio['xLw'] = prof_target['xLw']/prof_attempt['xLw']
 
             if zMinCommon is None:
                 imin = 0
@@ -1099,9 +1149,10 @@ class inflowTuner:
     def plotProfiles(self, figsize=[15,12], zLim=[0,10], normalize=True, lw = 1.5, ms=3,
                             xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
                             xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None, 
-                            includeInflows=True, includeIncidents=True, 
+                            includeInflows=True, includeIncidents=True, includeRefProfiles=True,
                             lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
-                            kwargs_plt=None, kwargs_ax={}):
+                            kwargs_plt=None, kwargs_ax={},
+                            kwargs_StatsTable={}):
         longListOfColors = ['r', 'b', 'g', 'm', 'k', 'c', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'lime', 'teal', 'navy', ]
        
         if kwargs_plt is None:
@@ -1113,6 +1164,9 @@ class inflowTuner:
             if self.incidents is not None and includeIncidents:
                 for i, prof in enumerate(self.incidents.profiles):
                     kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'-'})
+            if self.refProfiles is not None and includeRefProfiles:
+                for i, prof in enumerate(self.refProfiles.profiles):
+                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw+1, 'ls':'-.'})
 
         profs = []
         if self.target is not None:
@@ -1121,25 +1175,32 @@ class inflowTuner:
             profs.extend(self.inflows.profiles)
         if self.incidents is not None and includeIncidents:
             profs.extend(self.incidents.profiles)
+        if self.refProfiles is not None and includeRefProfiles:
+            profs.extend(self.refProfiles.profiles)
         profs = wind.Profiles(profs)
 
+        profs.plotRefHeightStatsTable(**kwargs_StatsTable)
         profs.plotProfile_basic2(figsize=figsize, yLimits=zLim, normalize=normalize, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, 
                                             xLimits_Iw=xLimits_Iw, xLimits_uw=xLimits_uw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
                                             xLabel=xLabel, zLabel=zLabel, lgnd_kwargs=lgnd_kwargs, kwargs_plt=kwargs_plt, kwargs_ax=kwargs_ax)
         
     def plotSpectra(self, figSize=[15,5], lw = 1.5, ms=3,
-                    xLimits='auto', yLimits='auto', includeInflows=True, includeIncidents=True,
-                    kwargs_plt=None, ):
+                    xLimits='auto', yLimits='auto', includeInflows=True, includeIncidents=True, includeRefProfiles=True,
+                    kwargs_plt=None, 
+                    kwargs_pltSpectra={}):
         longListOfColors = ['r', 'b', 'g', 'm', 'k', 'c', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'lime', 'teal', 'navy', ]
         if kwargs_plt is None:
             kwargs_plt = []
-            kwargs_plt.append({'color':'k', 'lw':1, 'ls':'None', 'marker':'o', 'ms':ms})
+            kwargs_plt.append({'color':'k', 'lw':1, 'ls':'-', 'marker':'.', 'ms':ms})
             if self.inflows is not None and includeInflows:
                 for i, prof in enumerate(self.inflows.profiles):
                     kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'--'})
             if self.incidents is not None and includeIncidents:
                 for i, prof in enumerate(self.incidents.profiles):
                     kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'-'})
+            if self.refProfiles is not None and includeRefProfiles:
+                for i, prof in enumerate(self.refProfiles.profiles):
+                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw+1, 'ls':'-.'})
         
         profs = []
         if self.target is not None:
@@ -1148,9 +1209,23 @@ class inflowTuner:
             profs.extend(self.inflows.profiles)
         if self.incidents is not None and includeIncidents:
             profs.extend(self.incidents.profiles)
+        if self.refProfiles is not None and includeRefProfiles:
+            profs.extend(self.refProfiles.profiles)
         profs = wind.Profiles(profs)
 
-        profs.plotSpectra(figSize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_ax=kwargs_plt)
+        profs.plotSpectra(figSize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_ax=kwargs_plt, **kwargs_pltSpectra)
+
+
+
+
+
+
+
+
+
+
+
+
 
 #===============================================================================
 #=============================== GRAVEYARD =====================================
