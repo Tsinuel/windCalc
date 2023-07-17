@@ -6,7 +6,7 @@ Created on Tue Aug 30 01:40:48 2022
 """
 
 import sys
-import foam
+import windOF
 
 def main(args):
     print(args)
@@ -15,7 +15,7 @@ def main(args):
     targetProfile = args[2]
     
     
-    foam.processVelProfile(caseDir, probeName, targetProfile,
+    windOF.processVelProfile(caseDir, probeName, targetProfile,
                           normalize=True,
                           writeToDataFile=True,
                           showPlots=False,

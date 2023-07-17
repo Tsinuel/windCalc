@@ -6,7 +6,7 @@ Created on Tue Aug 30 01:40:48 2022
 """
 
 import sys
-import foam
+import windOF
 
 def main(args):
     print(args)
@@ -15,7 +15,7 @@ def main(args):
     tMax = float(args[2])
     H = float(args[3])
     write = bool(float(args[4]))
-    foam.scaleInflowData(caseDir, tMin, tMax, H, writeInflow=write, smplName="sampleInfl")
+    windOF.scaleInflowData(caseDir, tMin, tMax, H, writeInflow=write, smplName="sampleInfl")
     
 if __name__ == "__main__":
     main(sys.argv[1:])

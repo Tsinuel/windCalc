@@ -2120,12 +2120,16 @@ class Profiles:
                         )
 
     def plotRefHeightStatsTable(self,
-                                fig=None,figsize=[15,5],ax=None,decimals=4, strFmt='{:g}', 
-                                fontSz=None, normalize=True,
+                                fig=None,figsize=[0,5],ax=None, strFmt='{:.4g}', 
+                                fontSz=None, normalize=True, colColors=None, colTxtColors=None, 
+                                showBorder=False, 
                                 kwargs_table={'loc':'center',
                                               'cellLoc': 'center',
-                                              'bbox': [0.0, 0.0, 1.0, 1.0]}):
+                                              'bbox': [0.0, 0.0, 1.0, 1.0],}):
         if fig is None:
+            fntFctr = 1.0 if fontSz is None else fontSz/10.0
+            if figsize[0] == 0:
+                figsize[0] = 2*(self.N+1)*fntFctr
             fig = plt.figure(figsize=figsize)
         if ax is None:
             ax = plt.subplot()
@@ -2144,13 +2148,13 @@ class Profiles:
                         if val_norm is None:
                             val.append(' ')
                         else:
-                            val.append(np.round(val_norm[prof.H_idx], decimals))
+                            val.append(strFmt.format(val_norm[prof.H_idx]))
                     else:
                         val.append(' ')
             else:
                 key_name = key
                 # val = [np.round(prof.stats[key][prof.H_idx], decimals) if key in prof.stats.keys() else ' ' for prof in self.profiles]
-                val = [f"{strFmt}".format(prof.stats[key][prof.H_idx]) if key in prof.stats.keys() else ' ' for prof in self.profiles]
+                val = [strFmt.format(prof.stats[key][prof.H_idx]) if key in prof.stats.keys() else ' ' for prof in self.profiles]
             val.insert(0,key_name)
             cell_text.append(val)
 
@@ -2160,6 +2164,25 @@ class Profiles:
         if fontSz is not None:
             table.auto_set_font_size(False)
             table.set_fontsize(fontSz)
+
+        # decorative edits
+        nRows = len(cell_text)+1
+        if colColors is not None:
+            for i in range(self.N):
+                for j in range(nRows):
+                    table[(j,i+1)].set_facecolor(colColors[i])
+        if colTxtColors is not None:
+            for i in range(self.N):
+                for j in range(nRows):
+                    table[(j,i+1)].set_text_props(color=colTxtColors[i])
+        for i in range(self.N+1):
+            table[(0,i)].set_text_props(weight='bold')
+        for i in range(nRows):
+            table[(i,0)].set_text_props(weight='bold')
+        if not showBorder:
+            for key, cell in table.get_celld().items():
+                cell.set_linewidth(0)
+
 
         fig.tight_layout()
         plt.show()
@@ -3143,7 +3166,7 @@ class bldgCp(windCAD.building):
         if self.CpOfT is not None:
             self.CpStats = get_CpTH_stats(self.CpOfT,axis=len(np.shape(self.CpOfT))-1,peakSpecs=self.peakSpecs)
         self.__computeAreaAveragedCp()
-    
+        
     def write(self):
         pass
 

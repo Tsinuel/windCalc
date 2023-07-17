@@ -7,14 +7,14 @@ Created on Tue Aug 30 01:40:48 2022
 
 import sys
 # import numpy as np
-import foam
+import windOF
 
 def main(args):
     caseDir = args[0]
     tMin = float(args[1])
     tMax = float(args[2])
     H = float(args[3])
-    foam.scaleInflowData(caseDir, tMin, tMax, H, writeInflow=False)
+    windOF.scaleInflowData(caseDir, tMin, tMax, H, writeInflow=False)
     
     
     

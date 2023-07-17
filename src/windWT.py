@@ -148,6 +148,7 @@ class BLWTL_HFPI:
         self.read()
 
     def read(self):
+        print("Reading HFPI data from: {}".format(self.caseDir))
         self.files_pssr = glob.glob(os.path.join(self.caseDir, '*.pssr'))
         file_names = [os.path.splitext(os.path.basename(file_name))[0] for file_name in self.files_pssr]
         self.files_pssd = [os.path.join(self.caseDir, file+'.pssd') for file in file_names]
@@ -158,6 +159,7 @@ class BLWTL_HFPI:
         N_AoA = len(self.files_pssd)
 
         for d,(file_pssd,file_pssr) in enumerate(zip(self.files_pssd,self.files_pssr)):
+            print("   Reading file: {}".format(file_pssd))
             cp_data,analog,WTTDATALOG = readPSSfile(file_pssr,file_pssd)
             analog = np.transpose(analog)
             cp_data = np.transpose(cp_data)

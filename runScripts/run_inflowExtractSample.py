@@ -6,7 +6,7 @@ Created on Tue Aug 30 01:40:48 2022
 """
 
 import sys
-import foam
+import windOF
 
 def main(args):
     print(args)
@@ -19,7 +19,7 @@ def main(args):
     figFile = caseDir+'constant/boundaryData/sampleProfiles.pdf'    
     H = 0.08
     
-    foam.extractSampleProfileFromInflow(inletDir, outPath, figFile, tMax, H)
+    windOF.extractSampleProfileFromInflow(inletDir, outPath, figFile, tMax, H)
     
     
 if __name__ == "__main__":

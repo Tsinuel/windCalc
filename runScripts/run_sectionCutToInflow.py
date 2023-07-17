@@ -6,7 +6,7 @@ Created on Mon Jul 3 22:20:15 2023
 """
 
 import sys
-import foam
+import windOF
 
 def main(args):
     print(args)
@@ -25,7 +25,7 @@ def main(args):
     print("overwrite: ", overwrite)
     print("outDir: ", outDir)
         
-    foam.convertSectionSampleToBoundaryDataInflow(caseDir=caseDir, 
+    windOF.convertSectionSampleToBoundaryDataInflow(caseDir=caseDir, 
                                                 sectionName=sectionName, 
                                                 fileName=fileName,
                                                 shiftTimeBy=shiftTimeBy,
