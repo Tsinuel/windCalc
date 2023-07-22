@@ -137,7 +137,7 @@ class BLWTL_HFPI:
         self.testDuration = None
         self.floorExposure = None
         self.tapNos = None
-        self.analogChannels = None
+        self.analogData = None
         self.pressureExtraChannels = None
         self.barocelRangeFactors = None
         self.CAL_factors = []
@@ -202,10 +202,10 @@ class BLWTL_HFPI:
         self.tapNos = tapNos[:self.Ntaps]
 
         if self.analogChannels_idxs is not None:
-            self.analogChannels = {}
+            self.analogData = {}
             for dId in self.analogChannels_idxs:
                 idx = self.analogChannels_idxs[dId]
-                self.analogChannels[dId] = anTH[:,idx,:]
+                self.analogData[dId] = anTH[:,idx,:]
 
         if self.pressureExtraChannels_tapNos is not None:
             self.pressureExtraChannels = {}
@@ -213,6 +213,10 @@ class BLWTL_HFPI:
                 tNo = self.pressureExtraChannels_tapNos[dId]
                 idx = tapNos.index(tNo)
                 self.pressureExtraChannels[dId] = CpTH[:,idx,:]
+
+        print("   A total of {} AoA were read.".format(N_AoA))
+        print("   Shape of CpTH: {}".format(np.shape(self.CpTH)))
+        print("   Done reading HFPI data.\n")
 
     @property
     def Uref(self):
@@ -223,26 +227,44 @@ class BLWTL_HFPI:
 
     @property
     def Uref_TH(self):
-        if self.analogChannels is None:
+        if self.analogData is None:
+            print("No analog data found.")
             return None
-        if not 'main_pitot' in self.analogChannels:
+        if not 'main_pitot' in self.analogData.keys():
+            print("The key 'main_pitot' is not found in the analog data dictionary.")
             return None
-        return np.sqrt(self.analogChannels['main_pitot'])  * self.barocelRangeFactors * wd.fps2mps
+        if not 'main_pitot' in self.barocelRangeFactors.keys():
+            print("The key 'main_pitot' is not found in the barocelRangeFactors dictionary.")
+            return None
+        voltage = np.asarray(self.analogData['main_pitot'])
+        if np.any(voltage < 0.0):
+            warnings.warn("Negative voltage detected in main pitot. Assuming that the pitot ID is not correct.")
+            return None
+        return np.sqrt(voltage)  * self.barocelRangeFactors['main_pitot'] * wd.fps2mps
 
     @property
-    def U_XRef(self):
-        uTH = self.U_XRef_TH
+    def Uref_Xchk(self):
+        uTH = self.Uref_Xchk_TH
         if uTH is None:
             return None
         return np.mean(uTH,axis=-1)
 
     @property
-    def U_XRef_TH(self):
-        if self.analogChannels is None:
+    def Uref_Xchk_TH(self):
+        if self.analogData is None:
+            print("No analog channel data found.")
             return None
-        if not 'xcheck_pitot' in self.analogChannels:
+        if not 'xcheck_pitot' in self.analogData.keys():
+            print("The key 'xcheck_pitot' is not found in the analog data dictionary.")
             return None
-        return np.sqrt(self.analogChannels['xcheck_pitot'])  * self.barocelRangeFactors * wd.fps2mps
+        if not 'xcheck_pitot' in self.barocelRangeFactors.keys():
+            print("The key 'xcheck_pitot' is not found in the barocelRangeFactors dictionary.")
+            return None
+        voltage = np.asarray(self.analogData['xcheck_pitot'])
+        if np.any(voltage < 0):
+            warnings.warn("Negative voltage detected in cross-check pitot. Assuming that the pitot ID is not correct.")
+            return None
+        return np.sqrt(voltage)  * self.barocelRangeFactors['xcheck_pitot'] * wd.fps2mps
 
     @property
     def description(self):

@@ -598,12 +598,25 @@ def get_CpTH_stats(TH,axis=0,
 
 #-------------------------------- PLOTTING -------------------------------------
 def formatAxis(ax, gridMajor=True, gridMinor=False, tickLabelSize=10, labelSize=12,
-               tickTop=True, tickRight=True, gridColor_mjr=[0.8,0.8,0.8], gridColor_mnr=[0.85,0.85,0.85], 
+               tickTop=True, tickRight=True, gridColor_mjr=[0.8,0.8,0.8], gridColor_mnr=[0.85,0.85,0.85], numFormat: Literal['general','scientific','default']='general',
+               tickDirection='in',
             #    kwargs_grid_major={'linestyle':'-', 'linewidth':1, 'color':'k'}, 
             #    kwargs_grid_minor={},
                ):
-    ax.tick_params(axis='both', which='major', labelsize=tickLabelSize, direction='in', top=tickTop, right=tickRight)
-    ax.tick_params(axis='both', which='minor', labelsize=tickLabelSize, direction='in', top=tickTop, right=tickRight)
+    # def custom_format(x,pos):
+    #     return f"{x:g}"
+    if numFormat == 'scientific':
+        custom_format = lambda x,pos: f"{x:.1e}"
+    elif numFormat == 'general':
+        custom_format = lambda x,pos: f"{x:g}"
+    else:
+        custom_format = None
+
+    if custom_format is not None:
+        ax.xaxis.set_major_formatter(custom_format)
+        ax.yaxis.set_major_formatter(custom_format)
+    ax.tick_params(axis='both', which='major', labelsize=tickLabelSize, direction=tickDirection, top=tickTop, right=tickRight)
+    ax.tick_params(axis='both', which='minor', labelsize=tickLabelSize, direction=tickDirection, top=tickTop, right=tickRight)
     ax.xaxis.label.set_size(labelSize)
     ax.yaxis.label.set_size(labelSize)
     if gridMajor:
@@ -1627,8 +1640,90 @@ class profile:
     def plotProfile_basic2(self, fig=None, axs=None, figsize=[12,10], label=None, normalize=True,
                             xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
                             xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
+                            overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
                             yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
                             kwargs_plt={'color': 'k', 'linestyle': '-'}, kwargs_ax={}):
+        '''
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure, optional
+            Figure to plot on. The default is None.
+        axs : matplotlib.axes._subplots.AxesSubplot, optional
+            Axes to plot on. The default is None.
+        figsize : list, optional
+            Figure size. The default is [12,10].
+        label : str, optional
+            Label for the profile. The default is None.
+        normalize : bool, optional
+            Normalize the profile. The default is True.
+        xLabel : str, optional
+            Label for the x-axis. The default is None.
+        zLabel : str, optional
+            Label for the z-axis. The default is None.
+        xLimits_U : list, optional
+            Limits for the x-axis of the U profile. The default is None.
+        xLimits_Iu : list, optional
+            Limits for the x-axis of the Iu profile. The default is None.
+        xLimits_Iv : list, optional
+            Limits for the x-axis of the Iv profile. The default is None.
+        xLimits_Iw : list, optional
+            Limits for the x-axis of the Iw profile. The default is None.
+        xLimits_xLu : list, optional
+            Limits for the x-axis of the xLu profile. The default is None.
+        xLimits_xLv : list, optional
+            Limits for the x-axis of the xLv profile. The default is None.
+        xLimits_xLw : list, optional
+            Limits for the x-axis of the xLw profile. The default is None.
+        xLimits_uw : list, optional
+            Limits for the x-axis of the uw profile. The default is None.
+        overlayThese : dict, optional
+            A dictionary of fields to overlay on the profile. If it include a field called 
+            'name', it will be used in the legend. It must have a field called 'Z' which
+            is the profile height. The normalization, if any, is assumed to be pre-applied.
+            The default is None.
+        '''
+        def addOverlay(ax, fld, name='_', kwargs_overlay={}):
+            if overlayThese is None:
+                return
+            print("Overlaying something ...")
+            if fld in overlayThese:
+                if overlayType == 'single':
+                    ax.plot(overlayThese[fld], overlayThese['Z'], 
+                            label=name, **kwargs_overlay)
+                elif overlayType == 'scatter':
+                    ax.scatter(overlayThese[fld], overlayThese['Z'], 
+                               label=name, **kwargs_overlay)
+                elif overlayType == 'errorBars':
+                    if kwargs_overlay == {}:
+                        kwargs_overlay = {
+                            'widths': 0.25,
+                            'notch': True,
+                            'vert': False,
+                            'showfliers': False,
+                            'patch_artist': True,
+                            'meanline': True,
+                            'boxprops': dict(facecolor='w', color='k', linewidth=1.25),
+                            'medianprops': dict(color='k', linewidth=1.25),
+                            'whiskerprops': dict(color='k', linewidth=1.25),
+                            'capprops': dict(color='k', linewidth=1.25)
+                            }
+                    # keep the existing y-axis ticks and labels as they will be overwritten by boxplot
+                    yTicks = ax.get_yticks()
+                    hadYLabel = ax.get_ylabel() != ''
+                    bx = ax.boxplot(overlayThese[fld], positions=overlayThese['Z'], 
+                            **kwargs_overlay)
+                    ax.set_yticks(yTicks)
+                    if hadYLabel:
+                        ax.set_yticklabels(['{:g}'.format(y) for y in yTicks])
+                    if name != '_':
+                        bx['boxes'][0].set_label(name)
+                        # return the legend handle for the boxplot
+                        return bx['boxes'][0]
+                else:
+                    raise NotImplementedError("Overlay type '{}' not implemented".format(overlayType))
+                return None
+
+                    
         newFig = False
         if fig is None:
             newFig = True
@@ -1641,30 +1736,43 @@ class profile:
         
         if 'U' in self.stats.keys():
             self.plotProfile_any('U', ax=axs[0,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_U, yLimits=yLimits, kwargs=kwargs_plt)
+            name = overlayThese['name'] if overlayThese is not None and 'name' in overlayThese else '_'
+            ovly_lg = addOverlay(axs[0,0], 'U', name, kwargs_overlay=kwargs_overlay)
         if 'uw' in self.stats.keys():
             self.plotProfile_any('uw', ax=axs[0,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_uw, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[0,1], 'uw', kwargs_overlay=kwargs_overlay)
         if 'Iu' in self.stats.keys():
             self.plotProfile_any('Iu', ax=axs[1,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iu, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[1,0], 'Iu', kwargs_overlay=kwargs_overlay)
         if 'Iv' in self.stats.keys():
             self.plotProfile_any('Iv', ax=axs[1,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iv, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[1,1], 'Iv', kwargs_overlay=kwargs_overlay)
         if 'Iw' in self.stats.keys():
             self.plotProfile_any('Iw', ax=axs[1,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iw, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[1,2], 'Iw', kwargs_overlay=kwargs_overlay)
         if 'xLu' in self.stats.keys():
             self.plotProfile_any('xLu', ax=axs[2,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLu, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[2,0], 'xLu', kwargs_overlay=kwargs_overlay)
         if 'xLv' in self.stats.keys():
             self.plotProfile_any('xLv', ax=axs[2,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLv, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[2,1], 'xLv', kwargs_overlay=kwargs_overlay)
         if 'xLw' in self.stats.keys():
             self.plotProfile_any('xLw', ax=axs[2,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLw, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[2,2], 'xLw', kwargs_overlay=kwargs_overlay)
         
         if newFig:
             axs[0,2].axis('off')
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=UserWarning)
-                fig.legend(handles=axs[0,0].get_lines(), bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
+                legend_handles = [axs[0,0].get_lines()]
+                if ovly_lg is not None:
+                    print(ovly_lg is not None)
+                    legend_handles.append(ovly_lg)
+                fig.legend(legend_handles, bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
             for ax in axs.flatten():
                 formatAxis(ax, **kwargs_ax)
             plt.show()
-        return fig, axs
+        return fig, axs, ovly_lg
     
     def plot(self, fig=None, ax_U=None, ax_Iu=None, ax_Spect=None, figsize=None, landscape=True, 
              kwargs_profile={}, 
@@ -1965,6 +2073,7 @@ class Profiles:
     def plotProfile_basic2(self, figsize=[12,10], label=None, normalize=True,
                             xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
                             xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
+                            overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
                             yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
                             kwargs_plt=None, kwargs_ax={}):
         fig, axs = plt.subplots(3,3)
@@ -1973,17 +2082,33 @@ class Profiles:
         kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
 
         for i, prof in enumerate(self.profiles):
-            prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, 
-                                    xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, xLimits_uw=xLimits_uw, 
-                                    yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+            if i == 0 and overlayThese is not None:
+                _,_,ovly_lg = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, 
+                                                    xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, 
+                                                    xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, xLimits_uw=xLimits_uw, 
+                                                    overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay,
+                                                    yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+            else:
+                _,_,_ = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, 
+                                        xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
+                                        xLimits_uw=xLimits_uw, 
+                                        yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+                ovly_lg = None
         
         axs[0,2].axis('off')
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
-            fig.legend(handles=axs[0,0].get_lines(), bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
+            # legend_handles = [axs[0,0].get_lines()]
+            # if ovly_lg is not None:
+            #     legend_handles.append(ovly_lg)
+            # fig.legend(handles=legend_handles, bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
+            axs[0,2].legend(handles=axs[0,0].get_legend_handles_labels()[0],
+                            labels=axs[0,0].get_legend_handles_labels()[1],
+                            **lgnd_kwargs)
         for ax in axs.flatten():
             formatAxis(ax, **kwargs_ax)
-        plt.show()
+        # plt.show()
+        return fig, axs
 
     def plotTimeHistory(self,
                     figFile=None,
@@ -2051,7 +2176,7 @@ class Profiles:
                     xLimits='auto', # [nMin,nMax]
                     yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
                     overlayVonK=False, # Either one entry or array equal to N
-                    kwargs_ax=None, # kwargs for the axes
+                    kwargs_plt=None, # kwargs for the plot
                     ):
         overlayVonK = (overlayVonK,)*self.N if isinstance(overlayVonK,bool) else overlayVonK
 
@@ -2101,8 +2226,10 @@ class Profiles:
                     Svv += (smooth(self.profiles[i].SpectH.Svv_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
                     Sww += (smooth(self.profiles[i].SpectH.Sww_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
                 names += (self.profiles[i].SpectH.name+'-vonK',)
+        Nplts = len(n)
+        kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(Nplts)]
 
-        wplt.plotSpectra(
+        fig = wplt.plotSpectra(
                         freq=n, # ([n1,], [n2,], ... [nN,])
                         Suu=Suu, # ([n1,], [n2,], ... [nN,])
                         Svv=Svv, # ([n1,], [n2,], ... [nN,])
@@ -2116,11 +2243,12 @@ class Profiles:
                         figSize=figSize,
                         plotType=plotType,
                         drawXlineAt_rf1=drawXlineAt_rf1,
-                        kwargs_ax=kwargs_ax
+                        kwargs_plt=kwargs_plt
                         )
+        return fig
 
     def plotRefHeightStatsTable(self,
-                                fig=None,figsize=[0,5],ax=None, strFmt='{:.4g}', 
+                                fig=None,figsize=[0,5],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}', 
                                 fontSz=None, normalize=True, colColors=None, colTxtColors=None, 
                                 showBorder=False, 
                                 kwargs_table={'loc':'center',
@@ -2128,8 +2256,8 @@ class Profiles:
                                               'bbox': [0.0, 0.0, 1.0, 1.0],}):
         if fig is None:
             fntFctr = 1.0 if fontSz is None else fontSz/10.0
-            if figsize[0] == 0:
-                figsize[0] = 2*(self.N+1)*fntFctr
+            if autoFigSize:
+                figsize[0] = 2*(self.N+1)*fntFctr*figWidthFctr
             fig = plt.figure(figsize=figsize)
         if ax is None:
             ax = plt.subplot()
@@ -2186,6 +2314,7 @@ class Profiles:
 
         fig.tight_layout()
         plt.show()
+        return fig, ax
 
 class ESDU74:
     __Omega = 72.7e-6       # Angular rate of rotation of the earth in [rad/s].  ESDU 74031 sect. A.1
@@ -2194,17 +2323,22 @@ class ESDU74:
     def __init__(self,
                     phi=30,
                     z0=0.03,
-                    Z=np.sort(np.append(np.logspace(np.log10(0.5),np.log10(300.0),99),10)), 
+                    Z=None,
+                    d=0.0,
                     Zref=10.0,
                     Uref=10.0,
                     ):
         self.phi = phi # latitude in degrees
         self.z0 = z0
-        self.Z = Z
         self.Zref = Zref
         self.Uref = Uref
+        if Z is None:
+            Z = np.sort(np.append(np.logspace(np.log10(1.01*z0+d),np.log10(300),99),10))
+        self.Z = Z
         if not self.Zref in self.Z:
             self.Z = np.sort(np.append(self.Z, self.Zref))
+        # remove all Z values that are smaller than z0
+        self.Z = self.Z[self.Z >= self.z0]
 
     def __str__(self):
         return 'ESDU-74 (z0 = '+str(self.z0)+'m)'
@@ -2224,7 +2358,7 @@ class ESDU74:
         return 1000*np.power(self.z0,0.18)        # ESDU 74031, eq. A.14
 
     def Ug(self):
-        pass
+        return self.U(self.Zg())        # ESDU 74031, eq. A.15
 
     def uStar(self):
         if self.z0 is None or self.Uref is None or self.Zref is None or self.phi is None:
@@ -2252,10 +2386,13 @@ class ESDU74:
         else:
             return 0.76 
 
+    def Fu(self,Z=None):
+        Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
+        return np.multiply(0.867 + 0.556*np.log10(Z) - 0.246*np.power(np.log10(Z),2), self.lambda_())     # ESDU 74031, eq. A.4a
+
     def Iu(self,Z=None):
         Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
-        Fu = np.multiply(0.867 + 0.556*np.log10(Z) - 0.246*np.power(np.log10(Z),2), self.lambda_())     # ESDU 74031, eq. A.4a
-        return np.divide(Fu, 
+        return np.divide(self.Fu(Z), 
                         np.log(np.divide(Z, self.z0)) )      # ESDU 74031, eq. A.3
 
     def Iv(self,Z=None):
@@ -2264,14 +2401,22 @@ class ESDU74:
         return np.divide(Fv, 
                         np.log(np.divide(Z, self.z0)) )      # ESDU 74031, eq. A.3
 
+    def Fw(self,Z=None):
+        Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
+        return 0.381 + 0.172*np.log10(Z) - 0.062*np.power(np.log10(Z),2)     # ESDU 74031, eq. A.6
+
     def Iw(self,Z=None):
         Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
-        Fv = 0.381 + 0.172*np.log10(Z) - 0.062*np.power(np.log10(Z),2)     # ESDU 74031, eq. A.5
-        return np.divide(Fv, 
+        return np.divide(self.Fw(Z), 
                         np.log(np.divide(Z, self.z0)) )      # ESDU 74031, eq. A.3
 
-    def uPwP(self,Z=None):
-        pass         # ESDU 74031, eq. A.10
+    def uw(self,Z=None):
+        Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
+        sigU_sigW = self.Iu(Z)*self.Iw(Z)*np.power(self.U(Z),2)
+        Ro = np.divide(self.Ug(), self.f()*self.z0)
+        Vstar_VG = np.divide(0.31, np.log10(Ro)) - 0.012
+        alphaG = 58 - 5*np.log10(Ro)
+        return sigU_sigW * -0.16/(self.Fu(Z)*self.Fw(Z)) * (1-(self.f()*Z*np.sin(alphaG))/(self.Ug()*(Vstar_VG)**2))     # ESDU 74031, eq. A.10
 
     def xLu(self,Z=None):
         Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
@@ -2392,7 +2537,7 @@ class ESDU74:
 
     def toProfileObj(self,name=None,n=None) -> profile:
         if name is None:
-            name = 'ESDU74 (z0='+str(self.z0)+'m)'
+            name = 'ESDU-74 (z0='+str(self.z0)+'m)'
 
         if n is None:
             n = np.multiply(DEFAULT_RF, np.divide(self.Uref, self.Zref))
@@ -2414,13 +2559,13 @@ class ESDU74:
         stats['xLu'] = self.xLu()
         stats['xLv'] = self.xLv()
         stats['xLw'] = self.xLw()
+        stats['uw'] = self.uw()
 
-        prof = profile(name=name, 
-                profType="continuous", 
-                Z=self.Z, H=self.Zref,
-                stats=stats,
-                SpectH=spect )
-        return prof
+        return profile(name=name, 
+                        profType="continuous", 
+                        Z=self.Z, H=self.Zref,
+                        stats=stats,
+                        SpectH=spect)
     
 class ESDU85:
     __Omega = 72.9e-6            # Angular rate of rotation of the earth [rad/s] ESDU 82026 ssA1
@@ -2428,7 +2573,8 @@ class ESDU85:
     def __init__(self,
                     phi=30.0,
                     z0=0.03,
-                    Z=np.sort(np.append(np.logspace(np.log10(0.5),np.log10(300),99),10)), 
+                    Z=None,
+                    d=0.0,
                     Zref=10.0,
                     Uref=10.0,
                     ):
@@ -2449,10 +2595,16 @@ class ESDU85:
         """
         self.phi = phi # latitude in degrees
         self.z0 = z0
-        self.d = 0.0  # zero-plane displacement not implemented
-        self.Z = Z
+        self.d = d  # zero-plane displacement not implemented
         self.Zref = Zref
         self.Uref = Uref
+        if Z is None:
+            Z = np.sort(np.append(np.logspace(np.log10(1.01*z0+d),np.log10(300),99),10))
+        self.Z = Z
+        if not self.Zref in self.Z:
+            self.Z = np.sort(np.append(self.Z, self.Zref))
+        # remove all Z values that are smaller than z0
+        # self.Z = self.Z[self.Z >= self.z0]
         
         if not self.Zref in self.Z:
             self.Z = np.sort(np.append(self.Z, self.Zref))
@@ -2513,12 +2665,12 @@ class ESDU85:
         Z = self.Z if Z is None else Z
         return np.multiply(self.sigWbySigU(Z),self.Iu(Z))
     
-    def uPwP(self,Z=None):
-        Z = self.Zref if Z is None else Z
-        temp1 = -1*np.multiply(np.multiply(self.Iu(Z),self.Iv(Z)), np.power(self.U(Z),2) )
-        temp2 = np.divide(1 - 2*Z/self.h(),
+    def uw(self,Z=None):
+        Z = self.Z if Z is None else Z
+        op1 = -1*np.multiply(np.multiply(self.Iu(Z),self.Iv(Z)), np.power(self.U(Z),2) )
+        op2 = np.divide(1 - 2*Z/self.h(),
                           np.multiply(np.power(self.sigUbyUstar(Z),2), self.sigWbySigU(Z) ) )
-        return np.multiply(temp1,temp2)     # ESDU 85020, eq. 4.7
+        return np.multiply(op1,op2)     # ESDU 85020, eq. 4.7
     
     def A(self,Z=None):
         Z = self.Z if Z is None else Z
@@ -2676,7 +2828,7 @@ class ESDU85:
 
     def toProfileObj(self,name=None,n=None) -> profile:
         if name is None:
-            name = 'ESDU85 (z0='+str(self.z0)+'m)'
+            name = 'ESDU-85 (z0='+str(self.z0)+'m)'
 
         if n is None:
             n = np.multiply(DEFAULT_RF, np.divide(self.Uref, self.Zref))
@@ -2698,6 +2850,7 @@ class ESDU85:
         stats['xLu'] = self.xLu()
         stats['xLv'] = self.xLv()
         stats['xLw'] = self.xLw()
+        stats['uw'] = self.uw()
 
         prof = profile(name=name, 
                 profType="continuous", 
@@ -2705,6 +2858,10 @@ class ESDU85:
                 stats=stats,
                 SpectH=spect )
         return prof
+
+class ASCE_49_21:
+    def __init__(self) -> None:
+        pass
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
 class faceCp(windCAD.face):
@@ -2909,6 +3066,7 @@ class bldgCp(windCAD.building):
             return
         if self.pOfT is None and self.p0ofT is None:
             return
+        print(f"Computing Cp time history ...")
         p0ofT = 0.0 if self.p0ofT is None else self.p0ofT
         if not np.isscalar(p0ofT) and not np.shape(p0ofT)[-1] == np.shape(self.pOfT)[-1]:
             raise Exception(f"The p and p0 time series for Cp calculation do not match in time steps. Shapes of p0ofT : {np.shape(p0ofT)}, pOfT : {np.shape(self.pOfT)}")
@@ -2941,13 +3099,15 @@ class bldgCp(windCAD.building):
     def __computeAreaAveragedCp(self):
         if self.NumPanels == 0 or self.CpOfT is None:
             return
-        
+        print(f"Computing area-averaged Cp time history ...")
+
         axT = len(np.shape(self.CpOfT))-1
         nT = np.shape(self.CpOfT)[-1]
         nAoA = self.NumAoA
         self.CpStatsAreaAvg = [] # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
 
         for _, fc in enumerate(self.faces):
+            print(f"    Computing area-averaged Cp time history for face {fc.name} ...")
             avgCp_f = []
             for _,(wght_z,idx_z) in enumerate(zip(fc.tapWghtPerPanel,fc.tapIdxPerPanel)):
                 avgCp_z = []
@@ -3161,12 +3321,16 @@ class bldgCp(windCAD.building):
         return CpAavg
 
     def Refresh(self):
+        print(f"Refreshing {self.name}...")
+        print(f"Verifying data ...")
         self.__verifyData()
         self.__computeCpTHfrom_p_TH()
         if self.CpOfT is not None:
+            print(f"Computing Cp statistics ...")
             self.CpStats = get_CpTH_stats(self.CpOfT,axis=len(np.shape(self.CpOfT))-1,peakSpecs=self.peakSpecs)
         self.__computeAreaAveragedCp()
-        
+        print(f"Done refreshing {self.name}.\n")
+    
     def write(self):
         pass
 

@@ -540,6 +540,7 @@ def readVelProfile(caseDir, probeName,
                     writeToFile=False,
                     outDir=None,
                     readFromNPY_file=False,
+                    kwargs_profile={},
                     ):
     '''
     Read velocity profile from an OpenFOAM case.
@@ -651,12 +652,11 @@ def readVelProfile(caseDir, probeName,
         print("  >> Finished reading probe data.")
     
     name = caseName+"__"+probeName if name is None else name
-    # check if there more than one time step
     if len(np.shape(vel)) == 3:
         prof = wind.profile(name=name,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
                             WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.DEFAULT_SI_UNITS,
-                            pOfT=pressure
-                            )
+                            pOfT=pressure,
+                            **kwargs_profile)
     else:
         print("WARNING! The velocity data is not a time history. The profile will be created without.")
         prof = None
@@ -860,11 +860,11 @@ class inflowTuner:
             self.inflows.profiles.append(prof)
 
     def addIncident(self, caseDir, probeName, name=None, readFromNPY_file=True, writeToDataFile=False,
-                    trimTimeSegs=[[0, 1.0],], showLog=True,
+                    trimTimeSegs=[[0, 1.0],], showLog=True, kwargs_profile={},
                     kwargs_readVelProfile={},):
         
         prof = readVelProfile(caseDir=caseDir,probeName=probeName,name=name, showLog=showLog, trimTimeSegs=trimTimeSegs,H=self.H, readFromNPY_file=readFromNPY_file,
-                                writeToFile=writeToDataFile,
+                                writeToFile=writeToDataFile, kwargs_profile=kwargs_profile,
                               **kwargs_readVelProfile)
         if self.incidents is None:
             self.incidents = wind.Profiles([prof,])
@@ -939,12 +939,12 @@ class inflowTuner:
             scaledTables.append(scaledTable)
         return scaledTables, factors, names
 
-    def writeProfile(self, rounds=0, dir=None, name='profile', figsize=[15,15], zLim=[0,10], scaleByFixedRefHeightRatio=True, 
+    def writeProfile(self, rounds=0, dir=None, name='profile', caseName='infl', figsize=[15,15], zLim=[0,10], scaleByFixedRefHeightRatio=True, description=" ",
                      debugMode=False, applySmoothing=True, compensateFor_xLi_in_Ii=False,
                      zMax_scaling=None, zMin_scaling=None, scale_xLi=True, applyLimitedSmoothing=False,
                      smoothWindow=[50, 50, 50, 50, 200, 150, 200], kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True,
                                                                                      'paddingFactor':2, 'paddingMode':'edge'},):
-        def plotThese(profs:List[pd.DataFrame]=[], names=[], ratio:pd.DataFrame=None, mainTitle=None, markers=None, color=None, lwgts=None, lss=None):
+        def plotThese(profs:List[pd.DataFrame]=[], names=[], ratio:pd.DataFrame=None, mainTitle=caseName, markers=None, color=None, lwgts=None, lss=None):
             if not debugMode:
                 return
             if len(profs) == 0:
@@ -958,7 +958,7 @@ class inflowTuner:
             axs[1].axis('off')
             axs[2].axis('off')
             ax_legend = axs[1]
-            mrkrs = ['o', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X', '*', 'H', '1', '2', '3', '4', '+', 'x', '|', '_'] 
+            mrkrs = ['.', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X', '*', 'H', '1', '2', '3', '4', '+', 'x', '|', '_'] 
             markers = mrkrs if markers is None else markers
             cols = ['k', 'b', 'r', 'g', 'm', 'c', 'y'] if color is None else color
             lwgts = [1,]*len(profs) if lwgts is None else lwgts
@@ -967,15 +967,16 @@ class inflowTuner:
             for ii in range(len(flds)):
                 ax = axs[axIdxs[ii]]
                 for jj, prof in enumerate(profs):
-                    ax.plot(prof[flds[ii]], prof['Z']/self.target.H, label=names[jj], lw=lwgts[jj], ls=lss[jj], marker=markers[jj], ms=3, c=cols[jj%len(cols)])
+                    ax.plot(prof[flds[ii]], prof['Z']/self.target.H, label=names[jj], lw=lwgts[jj], ls=lss[jj], marker=markers[jj], ms=2, c=cols[jj%len(cols)])
                 if ratio is not None:
                     ax2 = ax.twiny()
-                    ax2.plot(ratio[flds[ii]], ratio['Z']/self.target.H, label='ratio', lw=2, ls='--', c='c',marker='None', ms=3)
+                    ax2.plot(ratio[flds[ii]], ratio['Z']/self.target.H, label='ratio', lw=2, ls='--', c='c',marker='None', ms=2)
                     ax2.set_xlabel('ratio')
                     ax2.axvline(1.0, c='k', ls='--', lw=1)
                     ax2.xaxis.label.set_color('c')
                     ax2.tick_params(axis='x', colors='c')
                     ax2.spines['top'].set_color('c')
+                    wind.formatAxis(ax2, gridMajor=False, gridMinor=False, tickDirection='out')
                 ax.set_xlabel(flds[ii])
                 ax.set_ylabel('Z/H')
                 ax.set_ylim(zLim)
@@ -990,6 +991,8 @@ class inflowTuner:
             plt.tight_layout()
             if mainTitle is not None:
                 fig.suptitle(mainTitle)
+            if dir is not None:
+                plt.savefig(dir+caseName+"_round"+str(rounds)+".svg", dpi=300)
 
         def interpToZ(prof, Z, merge=True):
             if merge:
@@ -1016,7 +1019,7 @@ class inflowTuner:
             prof_out['xLw'][imin:imax] = wind.smooth(prof['xLw'][imin:imax], smoothWindow[6], **kwargs_smooth)
             return prof_out
 
-        def prof_ratio(prof_target, prof_attempt, scaleByFixedRatio, zMaxCommon=None, zMinCommon=None):
+        def prof_ratio(prof_target, prof_attempt, scaleByFixedRatio, zMaxCommon=None, zMinCommon=None, include_xLi=True):
             if not np.array_equal(prof_target.Z, prof_attempt.Z):
                 Z = np.unique(np.sort(np.concatenate((prof_target.Z, prof_attempt.Z))))
                 prof_attempt = interpToZ(prof_attempt, Z)
@@ -1072,6 +1075,10 @@ class inflowTuner:
                     ratio = smooth_profile(ratio, imin, imax)
                 else:
                     ratio = smooth_profile(ratio)
+            if not include_xLi:
+                ratio['xLu'] = 1.0
+                ratio['xLv'] = 1.0
+                ratio['xLw'] = 1.0
             return ratio
 
         def profileObj_to_df(prof):
@@ -1086,24 +1093,24 @@ class inflowTuner:
             df['xLw'] = prof.xLw
             return df
 
-        def scale_profile(prof, ratio):
-            if not np.array_equal(prof['Z'], ratio['Z']):
-                Z = np.unique(np.sort(np.concatenate((prof['Z'], ratio['Z']))))
-                ratio = interpToZ(ratio, Z)
-                prof = interpToZ(prof, Z)
-            prof_out = prof.copy()
-            prof_out['U'] *= ratio['U']
+        def multiply_profiles(prof1, prof2):
+            if not np.array_equal(prof1['Z'], prof2['Z']):
+                Z = np.unique(np.sort(np.concatenate((prof1['Z'], prof2['Z']))))
+                prof2 = interpToZ(prof2, Z)
+                prof1 = interpToZ(prof1, Z)
+            prof_out = prof1.copy()
+            prof_out['U'] *= prof2['U']
             if compensateFor_xLi_in_Ii:
-                prof_out['Iu'] *= ratio['Iu']/ratio['xLu']
-                prof_out['Iv'] *= ratio['Iv']/ratio['xLv']
-                prof_out['Iw'] *= ratio['Iw']/ratio['xLw']
+                prof_out['Iu'] *= prof2['Iu']/prof2['xLu']
+                prof_out['Iv'] *= prof2['Iv']/prof2['xLv']
+                prof_out['Iw'] *= prof2['Iw']/prof2['xLw']
             else:
-                prof_out['Iu'] *= ratio['Iu']
-                prof_out['Iv'] *= ratio['Iv']
-                prof_out['Iw'] *= ratio['Iw']
-            prof_out['xLu'] *= ratio['xLu']
-            prof_out['xLv'] *= ratio['xLv']
-            prof_out['xLw'] *= ratio['xLw']
+                prof_out['Iu'] *= prof2['Iu']
+                prof_out['Iv'] *= prof2['Iv']
+                prof_out['Iw'] *= prof2['Iw']
+            prof_out['xLu'] *= prof2['xLu']
+            prof_out['xLv'] *= prof2['xLv']
+            prof_out['xLw'] *= prof2['xLw']
             return prof_out
 
         target_0 = self.targetProfileTable(smoothWindow=smoothWindow, castToUniform=True, kwargs_smooth=kwargs_smooth)
@@ -1118,28 +1125,24 @@ class inflowTuner:
         scaleByFixedRefHeightRatio = [scaleByFixedRefHeightRatio,]*(rounds+1) if np.isscalar(scaleByFixedRefHeightRatio) else scaleByFixedRefHeightRatio
 
         while r < rounds:
-            print('Scaling round: '+str(r+1))
+            print('Scaling round: '+str(r))
             profs_out.append(profileObj_to_df(self.incidents.profiles[r]))
             profs_out_names.append(self.incidents.profiles[r].name)
             zMax_scaling = 0.8*min(np.array(profs_out[r]['Z'])[-1], np.array(target_0['Z'])[-1]) if zMax_scaling is None else zMax_scaling
             zMin_scaling = 1.2*max(np.array(profs_out[r]['Z'])[0], np.array(target_0['Z'])[0]) if zMin_scaling is None else zMin_scaling
-            ratios.append(prof_ratio(profs_in[r], profs_out[r], zMaxCommon=zMax_scaling, zMinCommon=zMin_scaling, scaleByFixedRatio=scaleByFixedRefHeightRatio[r] ))
-            ratios[r+1] = scale_profile(ratios[r], ratios[r+1])
-            if not scale_xLi[r]: 
-                ratios[r+1]['xLu'] = 1.0
-                ratios[r+1]['xLv'] = 1.0
-                ratios[r+1]['xLw'] = 1.0
-            profs_in.append(scale_profile(profs_in[0], ratios[r+1]))
+            ratios.append(prof_ratio(profs_in[r], profs_out[r], zMaxCommon=zMax_scaling, zMinCommon=zMin_scaling, scaleByFixedRatio=scaleByFixedRefHeightRatio[r], 
+                                     include_xLi=scale_xLi[r] ))
+            ratios[r+1] = multiply_profiles(ratios[r], ratios[r+1],)
+            profs_in.append(multiply_profiles(profs_in[0], ratios[r+1],))
             profs_in_names.append(profs_out_names[r-1]+' (scaled)')
             print('    Input \t\t\t\t: '+ str(profs_in_names[r]))
             print('    Output \t\t\t\t: '+ str(profs_out_names[r]))
             print(f"    Latest roof height ratio \t\t: U = {ratios[r]['U'][0]:.3f}, Iu = {ratios[r]['Iu'][0]:.3f}, Iv = {ratios[r]['Iv'][0]:.3f}, "+
                   f"Iw = {ratios[r]['Iw'][0]:.3f}, xLu = {ratios[r]['xLu'][0]:.3f}, xLv = {ratios[r]['xLv'][0]:.3f}, xLw = {ratios[r]['xLw'][0]:.3f}")
             print(f"    Cumulative roof height ratio \t: U = {ratios[r+1]['U'][0]:.3f}, Iu = {ratios[r+1]['Iu'][0]:.3f}, Iv = {ratios[r+1]['Iv'][0]:.3f}, "+
-                    f"Iw = {ratios[r+1]['Iw'][0]:.3f}, xLu = {ratios[r+1]['xLu'][0]:.3f}, xLv = {ratios[r+1]['xLv'][0]:.3f}, xLw = {ratios[r+1]['xLw'][0]:.3f}")
-            print("")
+                    f"Iw = {ratios[r+1]['Iw'][0]:.3f}, xLu = {ratios[r+1]['xLu'][0]:.3f}, xLv = {ratios[r+1]['xLv'][0]:.3f}, xLw = {ratios[r+1]['xLw'][0]:.3f}\n")
             r += 1
-        prof_latest_incident = profileObj_to_df(self.incidents.profiles[r-1])
+        prof_latest_incident = profileObj_to_df(self.incidents.profiles[r-1]) if rounds > 0 else None
         ratio = ratios[-1]
         prof = profs_in[-1]
 
@@ -1149,7 +1152,9 @@ class inflowTuner:
                 os.makedirs(dir)
             prof.to_csv(dir+'/'+name, index=False, sep=' ', float_format='%.6e', header=False)
             print('Profile written to: '+dir+'/'+name)
-            with open(dir+'/'+name+'_info.txt', 'w') as f:
+            with open(dir+'/'+caseName+'_info.txt', 'w') as f:
+                f.write('Case name\t\t\t\t\t: '+caseName+'\n')
+                f.write('Description\t\t\t\t\t: '+description+'\n')
                 f.write('Date\t\t\t\t\t\t: '+str(datetime.datetime.now())+'\n')
                 f.write('Scaling rounds\t\t\t\t: '+str(rounds)+'\n')
                 f.write('Scale by fixed Zref ratio\t: '+str(scaleByFixedRefHeightRatio)+'\n')
@@ -1164,7 +1169,7 @@ class inflowTuner:
                 f.write('Profile written to\t\t\t: '+dir+'/'+name+'\n')
                 f.write('\nScaling info:\n')
                 for r in range(rounds):
-                    f.write('  SCALING ROUND '+str(r+1)+':\n')
+                    f.write('  SCALING ROUND '+str(r)+':\n')
                     f.write('    Input\t\t\t\t\t: '+ str(profs_in_names[r])+'\n')
                     f.write('    Output\t\t\t\t\t: '+ str(profs_out_names[r])+'\n')
                     f.write(f"    Latest Zref ratio \t\t: U = {ratios[r]['U'][0]:.3f}, Iu = {ratios[r]['Iu'][0]:.3f}, Iv = {ratios[r]['Iv'][0]:.3f}, "+
@@ -1174,7 +1179,6 @@ class inflowTuner:
                     f.write('\n')
                 f.write('\n')
                         
-
         if debugMode:
             toPlot = [profileObj_to_df(self.target), target_0]
             names = ['target'+' ('+self.target.name+')', 'target(smooth)']
@@ -1183,7 +1187,7 @@ class inflowTuner:
                 names.append('latest EDS ('+self.incidents.profiles[r-1].name+')')
             toPlot.append(prof)
             names.append('next_prof')
-            plotThese(profs=toPlot, names=names, ratio=ratio, mainTitle='Scaling', color=['k', 'k', 'b', 'r'], lwgts=[1, 2, 2, 3], lss=['None', '-', '-', '-'], 
+            plotThese(profs=toPlot, names=names, ratio=ratio, mainTitle=caseName, color=['k', 'k', 'b', 'r'], lwgts=[1, 2, 2, 3], lss=['None', '-', '-', '-'], 
                       markers=['.', 'None', 'None', 'None'])
             
         return prof
@@ -1199,7 +1203,7 @@ class inflowTuner:
        
         if kwargs_plt is None:
             kwargs_plt = []
-            kwargs_plt.append({'color':'k', 'lw':1, 'ls':'None', 'marker':'o', 'ms':ms})
+            kwargs_plt.append({'color':'k', 'lw':0.3, 'ls':'-', 'marker':'.', 'ms':ms})
             if self.inflows is not None and includeInflows:
                 for i, _ in enumerate(self.inflows.profiles):
                     kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'--'})
@@ -1258,7 +1262,7 @@ class inflowTuner:
             profs.extend(self.refProfiles.profiles)
         profs = wind.Profiles(profs)
 
-        profs.plotSpectra(figSize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_ax=kwargs_plt, **kwargs_pltSpectra)
+        profs.plotSpectra(figSize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_plt=kwargs_plt, **kwargs_pltSpectra)
 
 
 

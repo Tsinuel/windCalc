@@ -199,7 +199,7 @@ def plotSpectra(
                 drawXlineAt_rf1=False,
                 alwaysShowFig=False,
                 avoidZeroFreq=True,
-                kwargs_ax=None,
+                kwargs_plt=None,
                 ):
 
     nCols = 3 - (Suu,Svv,Sww).count(None)
@@ -209,8 +209,8 @@ def plotSpectra(
     figSize = [5*nCols, 5] if figSize is None else figSize
     dataLabels = ('data',)*N if dataLabels is None else dataLabels
 
-    if kwargs_ax is None:
-        kwargs_ax = [{}] * N
+    if kwargs_plt is None:
+        kwargs_plt = [{}] * N
 
     if isinstance(pltFile, str):
         pdf = PdfPages(pltFile)
@@ -222,7 +222,7 @@ def plotSpectra(
     if Suu is not None:
         plt.subplot(nRows,nCols,m+1)
         for i in range(N):
-            plot[plotType](freq[i][i_n0:], Suu[i][1:], label=dataLabels[i], **kwargs_ax[i])
+            plot[plotType](freq[i][i_n0:], Suu[i][1:], label=dataLabels[i], **kwargs_plt[i])
         plt.xlabel(xLabel)
         plt.ylabel(yLabels[0])
         if drawXlineAt_rf1:
@@ -240,7 +240,7 @@ def plotSpectra(
     if Svv is not None:
         plt.subplot(nRows,nCols,m+1)
         for i in range(N):
-            plot[plotType](freq[i][i_n0:], Svv[i][1:], label=dataLabels[i], **kwargs_ax[i])
+            plot[plotType](freq[i][i_n0:], Svv[i][1:], label=dataLabels[i], **kwargs_plt[i])
         plt.xlabel(xLabel)
         plt.ylabel(yLabels[1])
         if drawXlineAt_rf1:
@@ -258,7 +258,7 @@ def plotSpectra(
     if Sww is not None:
         plt.subplot(nRows,nCols,m+1)
         for i in range(N):
-            plot[plotType](freq[i][i_n0:], Sww[i][1:], label=dataLabels[i], **kwargs_ax[i])
+            plot[plotType](freq[i][i_n0:], Sww[i][1:], label=dataLabels[i], **kwargs_plt[i])
         plt.xlabel(xLabel)
         plt.ylabel(yLabels[2])
         if drawXlineAt_rf1:
@@ -281,6 +281,7 @@ def plotSpectra(
 
     if isinstance(pltFile, str):
         pdf.close()
+    return fig
 
 def plotSpectra____depricated(
                 freq, # ([n1,], [n2,], ... [nN,])
