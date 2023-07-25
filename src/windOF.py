@@ -1136,7 +1136,7 @@ class inflowTuner:
             profs_in.append(multiply_profiles(profs_in[0], ratios[r+1],))
             profs_in_names.append(profs_out_names[r-1]+' (scaled)')
             print('    Input \t\t\t\t: '+ str(profs_in_names[r]))
-            print('    Output \t\t\t\t: '+ str(profs_out_names[r]))
+            print('    Latest ED LES \t\t\t: '+ str(profs_out_names[r]))
             print(f"    Latest roof height ratio \t\t: U = {ratios[r]['U'][0]:.3f}, Iu = {ratios[r]['Iu'][0]:.3f}, Iv = {ratios[r]['Iv'][0]:.3f}, "+
                   f"Iw = {ratios[r]['Iw'][0]:.3f}, xLu = {ratios[r]['xLu'][0]:.3f}, xLv = {ratios[r]['xLv'][0]:.3f}, xLw = {ratios[r]['xLw'][0]:.3f}")
             print(f"    Cumulative roof height ratio \t: U = {ratios[r+1]['U'][0]:.3f}, Iu = {ratios[r+1]['Iu'][0]:.3f}, Iv = {ratios[r+1]['Iv'][0]:.3f}, "+
@@ -1171,7 +1171,7 @@ class inflowTuner:
                 for r in range(rounds):
                     f.write('  SCALING ROUND '+str(r)+':\n')
                     f.write('    Input\t\t\t\t\t: '+ str(profs_in_names[r])+'\n')
-                    f.write('    Output\t\t\t\t\t: '+ str(profs_out_names[r])+'\n')
+                    f.write('    Latest ED LES\t\t\t\t: '+ str(profs_out_names[r])+'\n')
                     f.write(f"    Latest Zref ratio \t\t: U = {ratios[r]['U'][0]:.3f}, Iu = {ratios[r]['Iu'][0]:.3f}, Iv = {ratios[r]['Iv'][0]:.3f}, "+
                             f"Iw = {ratios[r]['Iw'][0]:.3f}, xLu = {ratios[r]['xLu'][0]:.3f}, xLv = {ratios[r]['xLv'][0]:.3f}, xLw = {ratios[r]['xLw'][0]:.3f}\n")
                     f.write(f"    Cumulative Zref ratio \t: U = {ratios[r+1]['U'][0]:.3f}, Iu = {ratios[r+1]['Iu'][0]:.3f}, Iv = {ratios[r+1]['Iv'][0]:.3f}, "+
@@ -1187,7 +1187,7 @@ class inflowTuner:
                 names.append('latest EDS ('+self.incidents.profiles[r-1].name+')')
             toPlot.append(prof)
             names.append('next_prof')
-            plotThese(profs=toPlot, names=names, ratio=ratio, mainTitle=caseName, color=['k', 'k', 'b', 'r'], lwgts=[1, 2, 2, 3], lss=['None', '-', '-', '-'], 
+            plotThese(profs=toPlot, names=names, ratio=ratio, mainTitle=caseName, color=['k', 'k', 'r', 'g'], lwgts=[1, 2, 2, 3], lss=['None', '-', '-', '-'], 
                       markers=['.', 'None', 'None', 'None'])
             
         return prof
@@ -1225,14 +1225,16 @@ class inflowTuner:
             profs.extend(self.refProfiles.profiles)
         profs = wind.Profiles(profs)
 
-        profs.plotRefHeightStatsTable(colTxtColors=[p['color'] for p in kwargs_plt], 
+        table = profs.plotRefHeightStatsTable(colTxtColors=[p['color'] for p in kwargs_plt], 
                                       fontSz=12,
                                       **kwargs_StatsTable)
 
-        profs.plotProfile_basic2(figsize=figsize, yLimits=zLim, normalize=normalize, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, 
+        fig = profs.plotProfile_basic2(figsize=figsize, yLimits=zLim, normalize=normalize, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, 
                                             xLimits_Iw=xLimits_Iw, xLimits_uw=xLimits_uw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
                                             xLabel=xLabel, zLabel=zLabel, lgnd_kwargs=lgnd_kwargs, kwargs_plt=kwargs_plt, kwargs_ax=kwargs_ax)
         
+        return fig, table
+    
     def plotSpectra(self, figSize=[15,5], lw = 1.5, ms=3,
                     xLimits='auto', yLimits='auto', includeInflows=True, includeIncidents=True, includeRefProfiles=True,
                     kwargs_plt=None, 
@@ -1240,16 +1242,16 @@ class inflowTuner:
         longListOfColors = ['r', 'b', 'g', 'm', 'k', 'c', 'orange', 'purple', 'brown', 'pink', 'gray', 'olive', 'lime', 'teal', 'navy', ]
         if kwargs_plt is None:
             kwargs_plt = []
-            kwargs_plt.append({'color':'k', 'lw':1, 'ls':'-', 'marker':'.', 'ms':ms})
+            kwargs_plt.append({'color':'k', 'lw':1, 'ls':'-', 'marker':'None', 'ms':ms, 'alpha':0.7})
             if self.inflows is not None and includeInflows:
                 for i, prof in enumerate(self.inflows.profiles):
-                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'--'})
+                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'--', 'alpha':0.7})
             if self.incidents is not None and includeIncidents:
                 for i, prof in enumerate(self.incidents.profiles):
-                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'-'})
+                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw, 'ls':'-', 'alpha':0.7})
             if self.refProfiles is not None and includeRefProfiles:
                 for i, prof in enumerate(self.refProfiles.profiles):
-                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw+1, 'ls':'-.'})
+                    kwargs_plt.append({'color':longListOfColors[i], 'lw':lw+1, 'ls':'-'})
         
         profs = []
         if self.target is not None:
@@ -1262,7 +1264,7 @@ class inflowTuner:
             profs.extend(self.refProfiles.profiles)
         profs = wind.Profiles(profs)
 
-        profs.plotSpectra(figSize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_plt=kwargs_plt, **kwargs_pltSpectra)
+        return profs.plotSpectra(figSize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_plt=kwargs_plt, **kwargs_pltSpectra)
 
 
 

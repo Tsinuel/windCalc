@@ -1138,11 +1138,13 @@ class Faces:
     """---------------------------------- Internals -----------------------------------"""
     def __init__(self,
                     memberFaces: List[face]=[],
+                    tapNos: List[int]=[],
                     file_basic=None,
                     file_derived=None,
                     ):
         self._currentIndex = 0
         self._memberFaces: List[face] = memberFaces
+        self.tapNo_all_lumped = tapNos
 
         if file_basic is not None and file_derived is not None:
             self.readFromFile(file_basic=file_basic,file_derived=file_derived)
@@ -1188,6 +1190,8 @@ class Faces:
 
     @property
     def tapNo(self) -> List[int]:
+        if self._numOfMembers() == 0:
+            return self.tapNo_all_lumped
         tapNo = []
         for f in self.memberFaces:
             tapNo.extend(f.tapNo)
@@ -1202,6 +1206,9 @@ class Faces:
 
     @property
     def tapIdx(self) -> List[int]:
+        if self._numOfMembers() == 0:
+            return np.arange(len(self.tapNo_all_lumped))
+        print("here")
         tapIdx = []
         for f in self.memberFaces:
             tapIdx.extend(f.tapIdx)
@@ -1209,6 +1216,8 @@ class Faces:
 
     @property
     def tapName(self) -> List[str]:
+        if self._numOfMembers() == 0:
+            return None
         tapName = []
         for f in self.memberFaces:
             if f.tapName is None:
@@ -1609,10 +1618,11 @@ class building(Faces):
                 lScl=1.0,   # length scale
                 valuesAreScaled=True, # weather or not the dimensions are scaled
                 faces: List[face]=[], 
+                tapNos: List[int]=[],
                 faces_file_basic=None, 
                 faces_file_derived=None,
                 ):
-        super().__init__(memberFaces=faces, file_basic=faces_file_basic, file_derived=faces_file_derived)
+        super().__init__(memberFaces=faces, tapNos=tapNos, file_basic=faces_file_basic, file_derived=faces_file_derived)
         self.name = name
         self.H = H
         self.He = He

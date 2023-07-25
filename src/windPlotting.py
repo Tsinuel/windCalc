@@ -7,6 +7,7 @@ Created on Mon Aug 15 21:19:46 2022
 
 import numpy as np
 import matplotlib.pyplot as plt
+from typing import Literal
 
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -188,7 +189,7 @@ def plotSpectra(
                 Svv=None, # ([n1,], [n2,], ... [nN,])
                 Sww=None, # ([n1,], [n2,], ... [nN,])
                 dataLabels=None, # ("str1", "str2", ... "strN")
-                plotType='loglog', # {'loglog','plot','semilogx','semilogy'}
+                plotType:Literal['loglog','plot','semilogx','semilogy']='loglog', # {'loglog','plot','semilogx','semilogy'}
                 pltFile=None, # "/path/to/plot/file.pdf"
                 xLabel=r"$n [Hz]$",
                 yLabels=(r"$S_{uu}$",r"$S_{vv}$",r"$S_{ww}$"), 

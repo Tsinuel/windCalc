@@ -24,6 +24,7 @@ from scipy import signal
 from scipy.stats import skew,kurtosis
 from scipy.interpolate import interp1d
 from matplotlib.patches import Arc
+from matplotlib.patches import Patch
 
 #===============================================================================
 #==================== CONSTANTS & GLOBAL VARIABLES  ============================
@@ -241,6 +242,36 @@ def vonKarmanSww(n,U,Iw,xLw):
                                        np.power((1 + 283.1*np.power(n*xLw/U,2)),11/6))
 
 def vonKarmanSpectra(n,U,Iu=None,Iv=None,Iw=None,xLu=None,xLv=None,xLw=None):
+    '''
+    Parameters
+    ----------
+    n : np.ndarray
+        Frequency vector.
+    U : float
+        Mean wind speed.
+    Iu : float, optional
+        Longitudinal turbulence intensity. The default is None.
+    Iv : float, optional
+        Lateral turbulence intensity. The default is None.
+    Iw : float, optional
+        Vertical turbulence intensity. The default is None.
+    xLu : float, optional
+        Longitudinal integral length scale. The default is None.
+    xLv : float, optional
+        Lateral integral length scale. The default is None.
+    xLw : float, optional
+        Vertical integral length scale. The default is None.
+
+    Returns
+    -------
+    Suu : np.ndarray
+        Longitudinal velocity spectrum.
+    Svv : np.ndarray
+        Lateral velocity spectrum.
+    Sww : np.ndarray
+        Vertical velocity spectrum.
+
+    '''
     Suu = Svv = Sww = None
     if Iu is not None and xLu is not None:
         Suu = vonKarmanSuu(n,U,Iu,xLu)
@@ -1048,13 +1079,13 @@ class spectra:
         pass
 
     """--------------------------------- Plotters -------------------------------------"""
-    def plotSpect_any(self, f, S, ax=None, fig=None, figSize=[15,5], label=None, xLabel=None, yLabel=None, xLimits=None, yLimits=None, 
+    def plotSpect_any(self, f, S, ax=None, fig=None, figsize=[15,5], label=None, xLabel=None, yLabel=None, xLimits=None, yLimits=None, 
                       plotType: Literal['loglog', 'semilogx', 'semilogy']='loglog', 
                       kwargs_plot={'color': 'k', 'linestyle': '-'}, kwargs_legend={'loc': 'lower left', 'fontsize': 12}, kwargs_ax={}):
         newFig = False
         if fig is None:
             newFig = True
-            fig = plt.figure(figsize=figSize)
+            fig = plt.figure(figsize=figsize)
             ax = fig.add_subplot()
 
         if plotType == 'loglog':
@@ -1075,22 +1106,82 @@ class spectra:
         
         if newFig:
             fig.legend(**kwargs_legend)
-            formatAxis(ax, **kwargs_ax)
+            formatAxis(ax, numFormat='default', **kwargs_ax)
             plt.show()
         return fig, ax
 
-    def plot(self, fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figSize=[15,4], label=None, plotSuu=True, plotSvv=True, plotSww=True,
+    def plot(self, fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], label=None, 
                     xLabel=None, yLabel_Suu=None, yLabel_Svv=None, yLabel_Sww=None,
                     xLimits=None, yLimits=None, 
                     normalize=True, normZ:Literal['Z','xLi']='Z', normU:Literal['U','sigUi']='U',         
                     plotType: Literal['loglog', 'semilogx', 'semilogy']='loglog', avoidZeroFreq=True, 
-                    kwargs_Suu={'color': 'k', 'linestyle': '-'}, kwargs_Svv={'color': 'k', 'linestyle': '-'}, kwargs_Sww={'color': 'k', 'linestyle': '-'}, 
+                    kwargs_plt={'color': 'k', 'linestyle': '-'}, 
+                    overlayThese:dict=None, overlayType:Literal['single','scatter','all_and_avg','errorBars']='single', kwargs_overlay={}, kwargs_overlay_all={}, 
                     showLegend=True,  kwargs_legend={'loc': 'lower left', 'fontsize': 12}, 
                     kwargs_ax={}):
+        def addOverlay(ax, fld, name='_', kwargs_overlay={}):
+            if overlayThese is None:
+                return
+            # print("Overlaying something ...")
+            if fld in overlayThese:
+                if plotType == 'loglog':
+                    ax.loglog()
+                elif plotType == 'semilogx':
+                    ax.semilogx()
+                elif plotType == 'semilogy':
+                    ax.semilogy()
+                firstIdx = 1 if avoidZeroFreq else 0
+
+                if overlayType == 'single':
+                    ax.plot(overlayThese['rf'][firstIdx:], overlayThese[fld][firstIdx:], 
+                            label=name, **kwargs_overlay)
+                elif overlayType == 'scatter':
+                    ax.scatter(overlayThese['rf'][firstIdx:,:], overlayThese[fld][firstIdx:,:], 
+                               label=name, **kwargs_overlay)
+                elif overlayType == 'all_and_avg':
+                    # check if the overlay data has the following keys in it: 'rf', 'rf_avg', fld, fld+'_avg'
+                    if not all([k in overlayThese for k in ['rf', 'rf_avg', fld, fld+'_avg']]):
+                        raise Exception(f"Overlay data must have the following keys: 'rf', 'rf_avg', {fld}, {fld}'_avg'")
+                    ax.plot(overlayThese['rf'][firstIdx:,:], overlayThese[fld][firstIdx:,...], 
+                             **kwargs_overlay_all)
+                    ax.plot(overlayThese['rf_avg'][firstIdx:], overlayThese[fld+'_avg'][firstIdx:], 
+                            label=name, **kwargs_overlay)                
+                elif overlayType == 'errorBars':
+                    print("The boxplot for spectra needs revision!.")
+                    warnings.warn("The boxplot for spectra needs revision!.")
+                    if kwargs_overlay == {}:
+                        kwargs_overlay = {
+                            'widths': 0.25,
+                            'notch': True,
+                            'vert': False,
+                            'showfliers': False,
+                            'patch_artist': True,
+                            'meanline': True,
+                            'boxprops': dict(facecolor='w', color='k', linewidth=1.25),
+                            'medianprops': dict(color='k', linewidth=1.25),
+                            'whiskerprops': dict(color='k', linewidth=1.25),
+                            'capprops': dict(color='k', linewidth=1.25)
+                            }
+                    # keep the existing y-axis ticks and labels as they will be overwritten by boxplot
+                    yTicks = ax.get_yticks()
+                    hadYLabel = ax.get_ylabel() != ''
+                    bx = ax.boxplot(overlayThese[fld], positions=overlayThese['Z'], 
+                            **kwargs_overlay)
+                    ax.set_yticks(yTicks)
+                    if hadYLabel:
+                        ax.set_yticklabels(['{:g}'.format(y) for y in yTicks])
+                    if name != '_':
+                        bx['boxes'][0].set_label(name)
+                        # return the legend handle for the boxplot
+                        return bx #['boxes'][0]
+                else:
+                    raise NotImplementedError("Overlay type '{}' not implemented".format(overlayType))
+                return None
+
         newFig = False
         if fig is None:
             newFig = True
-            fig = plt.figure(figsize=figSize)
+            fig = plt.figure(figsize=figsize)
             axs = fig.subplots(1,3)
             ax_Suu = axs[0]
             ax_Svv = axs[1]
@@ -1132,25 +1223,32 @@ class spectra:
             Svv = Svv[1:]
             Sww = Sww[1:]
         
-        if plotSuu and ax_Suu is not None:
-            self.plotSpect_any(n, Suu, ax=ax_Suu, fig=fig, figSize=figSize, label=label, xLabel=xLabel, yLabel=yLabel_Suu, xLimits=xLimits, yLimits=yLimits, 
-                            kwargs_plot=kwargs_Suu, plotType=plotType)
-        if plotSvv and ax_Svv is not None:
-            self.plotSpect_any(n, Svv, ax=ax_Svv, fig=fig, figSize=figSize, label=label, xLabel=xLabel, yLabel=yLabel_Svv, xLimits=xLimits, yLimits=yLimits,
-                                kwargs_plot=kwargs_Svv, plotType=plotType)
-        if plotSww and ax_Sww is not None:
-            self.plotSpect_any(n, Sww, ax=ax_Sww, fig=fig, figSize=figSize, label=label, xLabel=xLabel, yLabel=yLabel_Sww, xLimits=xLimits, yLimits=yLimits,
-                                kwargs_plot=kwargs_Sww, plotType=plotType)
+        if ax_Suu is not None:
+            name = overlayThese['name'] if overlayThese is not None and 'name' in overlayThese else '_'
+            _ = addOverlay(ax_Suu, 'rSuu', name, kwargs_overlay=kwargs_overlay)
+            self.plotSpect_any(n, Suu, ax=ax_Suu, fig=fig, figsize=figsize, label=label, xLabel=xLabel, yLabel=yLabel_Suu, xLimits=xLimits, yLimits=yLimits[0], 
+                            kwargs_plot=kwargs_plt, plotType=plotType)
+        if ax_Svv is not None:
+            name = overlayThese['name'] if overlayThese is not None and 'name' in overlayThese else '_'
+            _ = addOverlay(ax_Svv, 'rSvv', name, kwargs_overlay=kwargs_overlay)
+            self.plotSpect_any(n, Svv, ax=ax_Svv, fig=fig, figsize=figsize, label=label, xLabel=xLabel, yLabel=yLabel_Svv, xLimits=xLimits, yLimits=yLimits[1],
+                                kwargs_plot=kwargs_plt, plotType=plotType)
+        if ax_Sww is not None:
+            name = overlayThese['name'] if overlayThese is not None and 'name' in overlayThese else '_'
+            _ = addOverlay(ax_Sww, 'rSww', name, kwargs_overlay=kwargs_overlay)
+            self.plotSpect_any(n, Sww, ax=ax_Sww, fig=fig, figsize=figsize, label=label, xLabel=xLabel, yLabel=yLabel_Sww, xLimits=xLimits, yLimits=yLimits[2],
+                                kwargs_plot=kwargs_plt, plotType=plotType)
 
         if showLegend:
             ax_Suu.legend(**kwargs_legend)
 
         if newFig:
-            formatAxis(ax_Suu, **kwargs_ax)
-            formatAxis(ax_Svv, **kwargs_ax)
-            formatAxis(ax_Sww, **kwargs_ax)
+            formatAxis(ax_Suu, numFormat='default', **kwargs_ax)
+            formatAxis(ax_Svv, numFormat='default', **kwargs_ax)
+            formatAxis(ax_Sww, numFormat='default', **kwargs_ax)
             plt.show()
-        pass
+        return fig, ax_Suu, ax_Svv, ax_Sww
+        
 
 class profile:
     """---------------------------------- Internals -----------------------------------"""
@@ -1685,7 +1783,7 @@ class profile:
         def addOverlay(ax, fld, name='_', kwargs_overlay={}):
             if overlayThese is None:
                 return
-            print("Overlaying something ...")
+            # print("Overlaying something ...")
             if fld in overlayThese:
                 if overlayType == 'single':
                     ax.plot(overlayThese[fld], overlayThese['Z'], 
@@ -1718,12 +1816,11 @@ class profile:
                     if name != '_':
                         bx['boxes'][0].set_label(name)
                         # return the legend handle for the boxplot
-                        return bx['boxes'][0]
+                        return bx #['boxes'][0]
                 else:
                     raise NotImplementedError("Overlay type '{}' not implemented".format(overlayType))
                 return None
-
-                    
+     
         newFig = False
         if fig is None:
             newFig = True
@@ -1734,10 +1831,11 @@ class profile:
         if zLabel is None:
             zLabel = 'Z/H' if normalize else 'Z'
         
+        bxPltObj = None
         if 'U' in self.stats.keys():
             self.plotProfile_any('U', ax=axs[0,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_U, yLimits=yLimits, kwargs=kwargs_plt)
             name = overlayThese['name'] if overlayThese is not None and 'name' in overlayThese else '_'
-            ovly_lg = addOverlay(axs[0,0], 'U', name, kwargs_overlay=kwargs_overlay)
+            bxPltObj = addOverlay(axs[0,0], 'U', name, kwargs_overlay=kwargs_overlay)
         if 'uw' in self.stats.keys():
             self.plotProfile_any('uw', ax=axs[0,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_uw, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[0,1], 'uw', kwargs_overlay=kwargs_overlay)
@@ -1765,14 +1863,14 @@ class profile:
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=UserWarning)
                 legend_handles = [axs[0,0].get_lines()]
-                if ovly_lg is not None:
-                    print(ovly_lg is not None)
-                    legend_handles.append(ovly_lg)
+                if bxPltObj is not None:
+                    print(bxPltObj is not None)
+                    legend_handles.append(bxPltObj)
                 fig.legend(legend_handles, bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
             for ax in axs.flatten():
                 formatAxis(ax, **kwargs_ax)
             plt.show()
-        return fig, axs, ovly_lg
+        return fig, axs, bxPltObj
     
     def plot(self, fig=None, ax_U=None, ax_Iu=None, ax_Spect=None, figsize=None, landscape=True, 
              kwargs_profile={}, 
@@ -2076,6 +2174,7 @@ class Profiles:
                             overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
                             yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
                             kwargs_plt=None, kwargs_ax={}):
+        
         fig, axs = plt.subplots(3,3)
         fig.set_size_inches(figsize)
 
@@ -2083,7 +2182,7 @@ class Profiles:
 
         for i, prof in enumerate(self.profiles):
             if i == 0 and overlayThese is not None:
-                _,_,ovly_lg = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, 
+                _,_,bxPltObj = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, 
                                                     xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, 
                                                     xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, xLimits_uw=xLimits_uw, 
                                                     overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay,
@@ -2093,18 +2192,25 @@ class Profiles:
                                         xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
                                         xLimits_uw=xLimits_uw, 
                                         yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
-                ovly_lg = None
+                bxPltObj = None if i == 0 else bxPltObj
         
         axs[0,2].axis('off')
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", category=UserWarning)
-            # legend_handles = [axs[0,0].get_lines()]
-            # if ovly_lg is not None:
-            #     legend_handles.append(ovly_lg)
-            # fig.legend(handles=legend_handles, bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
-            axs[0,2].legend(handles=axs[0,0].get_legend_handles_labels()[0],
-                            labels=axs[0,0].get_legend_handles_labels()[1],
-                            **lgnd_kwargs)
+            if bxPltObj is None:
+                axs[0,2].legend(handles=axs[0,0].get_legend_handles_labels()[0],
+                                labels=axs[0,0].get_legend_handles_labels()[1],
+                                **lgnd_kwargs)
+            else:
+                hndls, lbls = axs[0, 0].get_legend_handles_labels()
+
+                # Add the boxplot handle to the legend handles
+                hndls.append(bxPltObj["boxes"][0])
+
+                # Add the label for the boxplot handle
+                lbls.append(overlayThese['name'])
+
+                axs[0, 2].legend(handles=hndls, labels=lbls, **lgnd_kwargs)
         for ax in axs.flatten():
             formatAxis(ax, **kwargs_ax)
         # plt.show()
@@ -2246,6 +2352,52 @@ class Profiles:
                         kwargs_plt=kwargs_plt
                         )
         return fig
+
+    def plotSpect(self, 
+                fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], label=None, 
+                xLabel=None, yLabel_Suu=None, yLabel_Svv=None, yLabel_Sww=None,
+                xLimits=None, yLimits=None, 
+                normalize=True, normZ:Literal['Z','xLi']='Z', normU:Literal['U','sigUi']='U',         
+                plotType: Literal['loglog', 'semilogx', 'semilogy']='loglog', avoidZeroFreq=True, 
+                overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, kwargs_overlay_all={},
+                lgnd_kwargs={'loc': 'best', 'ncol': 1},
+                kwargs_plt=None, kwargs_ax={}):
+        fig, axs = plt.subplots(1,3)
+        fig.set_size_inches(figsize)
+
+        ax_Suu = axs[0] if ax_Suu is None else ax_Suu
+        ax_Svv = axs[1] if ax_Svv is None else ax_Svv
+        ax_Sww = axs[2] if ax_Sww is None else ax_Sww
+
+        kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
+
+        for i, prof in enumerate(self.profiles):
+            if i == 0 and overlayThese is not None:
+                _ = prof.SpectH.plot(fig=fig, ax_Suu=ax_Suu, ax_Svv=ax_Svv, ax_Sww=ax_Sww, figsize=figsize, label=prof.SpectH.name,
+                                        xLabel=xLabel, yLabel_Suu=yLabel_Suu, yLabel_Svv=yLabel_Svv, yLabel_Sww=yLabel_Sww,
+                                        xLimits=xLimits, yLimits=yLimits,
+                                        normalize=normalize, normZ=normZ, normU=normU,
+                                        plotType=plotType, avoidZeroFreq=avoidZeroFreq,
+                                        overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay, kwargs_overlay_all=kwargs_overlay_all,
+                                        kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+            else:
+                _ = prof.SpectH.plot(fig=fig, ax_Suu=ax_Suu, ax_Svv=ax_Svv, ax_Sww=ax_Sww, figsize=figsize, label=prof.SpectH.name,
+                                        xLabel=xLabel, yLabel_Suu=yLabel_Suu, yLabel_Svv=yLabel_Svv, yLabel_Sww=yLabel_Sww,
+                                        xLimits=xLimits, yLimits=yLimits,
+                                        normalize=normalize, normZ=normZ, normU=normU,
+                                        plotType=plotType, avoidZeroFreq=avoidZeroFreq,
+                                        kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+        
+        # with warnings.catch_warnings():
+        #     warnings.filterwarnings("ignore", category=UserWarning)
+        ax_Suu.legend(handles=ax_Suu.get_legend_handles_labels()[0],
+                        labels=ax_Suu.get_legend_handles_labels()[1],
+                        **lgnd_kwargs)
+        
+        for ax in axs.flatten():
+            formatAxis(ax, **kwargs_ax, numFormat='default')
+        # plt.show()
+        return fig, axs
 
     def plotRefHeightStatsTable(self,
                                 fig=None,figsize=[0,5],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}', 
@@ -2876,10 +3028,10 @@ class faceCp(windCAD.face):
 class bldgCp(windCAD.building):
     def __init__(self, 
                 # Inputs for the base class
-                bldgName=None, H=None, He=None, Hr=None, B=None, D=None, roofSlope=None, lScl=1, valuesAreScaled=True, 
-                faces: List[windCAD.face] = [], faces_file_basic=None, faces_file_derived=None,
+                bldgName='myBuilding', H=None, He=None, Hr=None, B=None, D=None, roofSlope=None, lScl=1, valuesAreScaled=True, 
+                faces: List[windCAD.face] = [], faces_file_basic=None, faces_file_derived=None, tapNos: List[int]=[],
                 # Inputs for the derived class
-                caseName=None,
+                caseName='myBuilding_testCase',
                 notes_Cp=" ",
                 AoA_zero_deg_basisVector=None,
                 AoA_rotation_direction:Literal['CW','CCW']=None,
@@ -3008,7 +3160,7 @@ class bldgCp(windCAD.building):
 
         """
         super().__init__(name=bldgName, H=H, He=He, Hr=Hr, B=B, D=D, roofSlope=roofSlope, lScl=lScl, valuesAreScaled=valuesAreScaled, faces=faces,
-                        faces_file_basic=faces_file_basic, faces_file_derived=faces_file_derived)
+                        faces_file_basic=faces_file_basic, faces_file_derived=faces_file_derived, tapNos=tapNos)
 
         self.name = caseName
         self.notes_Cp = notes_Cp
@@ -3347,7 +3499,7 @@ class bldgCp(windCAD.building):
                             fields=['peakMin','mean','peakMax',],fldRange=[-15,10], tapsToPlot=None, includeTapName=True,
                             nCols=7, nRows=10, cols = ['r','k','b','g','m','r','k','b','g','m'],mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], 
                             ls=['-','-','-','-','-','-','-','-','-','-',],
-                            xticks=None, mrkrSize=2,
+                            xticks=None, nAoA_ticks=5, xlim=None, mrkrSize=2,
                             legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20], sharex=True, sharey=True,
                             overlayThis=None, overlay_AoA=None, overlayLabel=None, kwargs_overlay={}):
         tapIdxs = self.tapIdx if tapsToPlot is None else self.tapIdxOf(tapsToPlot)
@@ -3398,7 +3550,11 @@ class bldgCp(windCAD.building):
                 ax.annotate(tag, xy=(0,0), xycoords='axes fraction',xytext=(0.05, 0.05), textcoords='axes fraction',
                             fontsize=12, ha='left', va='bottom', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.7))
                 ax.set_ylim(fldRange)
-                xticks = np.arange(0,450,90) if xticks is None else xticks
+                if xlim is not None:
+                    min_AoA, max_AoA = xlim
+                else:
+                    min_AoA, max_AoA = np.floor(np.min(self.AoA)/5)*5, np.ceil(np.max(self.AoA)/5)*5
+                xticks = np.unique(np.floor(np.linspace(min_AoA, max_AoA, nAoA_ticks)/5)*5) if xticks is None else xticks
                 ax.xaxis.set_ticks(xticks)
                 ax.set_xlim([xticks[0],xticks[-1]])
                 ax.tick_params(axis=u'both', which=u'both',direction='in')
