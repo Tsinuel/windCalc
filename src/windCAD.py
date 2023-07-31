@@ -141,8 +141,16 @@ def sortVoronoi(coords,tribs=None):
     tribs = shp.MultiPolygon([tribs.geoms[i] for i in idxs])
     return tribs
 
-def trimmedVoronoi(bound,coords):
+def trimmedVoronoi(bound,coords,showLog=False):
+    if showLog:
+        print(f"Generating tributaries ...")
+        print(f"Shape of bound: {np.shape(bound)}")
+        print(f"Shape of coords: {np.shape(coords)}")
+    
     inftyTribs = voronoi_diagram(shp.MultiPoint(coords))
+    if showLog:
+        print(f"Shape of inftyTribs: {np.shape(inftyTribs.geoms)}")
+    
     boundPolygon = shp.Polygon(bound)
     tribs = []
     for g in inftyTribs.geoms:
@@ -152,12 +160,40 @@ def trimmedVoronoi(bound,coords):
         else:
             continue
     idx = []
+    areas = []
     for ic in range(np.shape(coords)[0]):
         for it,trib in enumerate(tribs):
             if shp.Point(coords[ic,:]).within(trib):
                 idx.append(it)
+                areas.append(trib.area)
                 break
-    tribs = shp.MultiPolygon([tribs[i] for i in idx])
+    idx = np.asarray(idx,dtype=int)
+    areas = np.asarray(areas,dtype=float)
+    totalArea = np.sum(areas)
+    boundArea = boundPolygon.area
+    if abs(totalArea - boundArea) > 0.00001*boundArea:
+        warnings.warn(f"The sum of tributary areas {totalArea} is not equal to the area of the bound {boundArea}.")
+
+    temp = []
+    for i in idx:
+        temp.append(tribs[i])
+        if not type(tribs[i]) == shp.Polygon:
+            warnings.warn(f"Type of tributary {i} is {type(tribs[i])}. There is a risk of voronoi not completely tiling the bound.")
+    tribs = shp.GeometryCollection(temp)
+
+    # tribs = shp.MultiPolygon([tribs[i] for i in idx])
+
+    if showLog:
+        print(f"Shape of tribs: {np.shape(tribs.geoms)}")
+        plt.figure(figsize=[15,10])
+        x,y = boundPolygon.exterior.xy
+        plt.plot(x,y,'-b',lw=3)
+        plt.plot(coords[:,0],coords[:,1],'.r')
+        for g in tribs.geoms:
+            x,y = g.exterior.xy
+            plt.plot(x,y,'-r',lw=1)
+        plt.axis('equal')
+        plt.show()
     
     return tribs
 
@@ -408,6 +444,7 @@ class face:
                 numOfNominalPanelAreas=5,
                 file_basic=None,
                 file_derived=None,
+                showDetailedLog=False,
                 ):
         """
         Represents a 2D planar face of a building. The face is defined by its vertices in the face-local coordinate system. The face-local coordinate system is defined by its origin and basis vectors in the main 3D coordinate system. The face-local coordinate system is also defined by its origin and basis vectors in the 2D coordinate system for plotting. The face is also defined by its taps. The taps are defined by their numbers, names, and coordinates in the face-local coordinate system. Component and cladding load zoning can be defined for the face according to a pre-defined dictionary that specifies the design code zonings.
@@ -495,7 +532,7 @@ class face:
         # fill derived
         self.__handleBadTaps(allBldgTaps)
         if file_basic is None:
-            self.Refresh()
+            self.Refresh(showDetailedLog)
         elif file_derived is None:
             self.readFromFile(file_basic=file_basic)
         else:
@@ -525,10 +562,11 @@ class face:
         if self.tapCoord is not None:
             self.tapCoord = np.delete(self.tapCoord, badIdx, axis=0)
 
-    def __generateTributaries(self):
+    def __generateTributaries(self, showDetailedLog=False):
         if self.vertices is None or self.tapCoord is None:
             return
-        self.tapTribs = trimmedVoronoi(self.vertices, self.tapCoord)
+
+        self.tapTribs = trimmedVoronoi(self.vertices, self.tapCoord, showLog=showDetailedLog)
 
     def __defaultZoneAndPanelConfig(self):
         if self.zoneDict is None and self.nominalPanelAreas is None:
@@ -546,12 +584,15 @@ class face:
 
             self.nominalPanelAreas = np.logspace(np.log10(minArea), np.log10(maxArea), self.numOfNominalPanelAreas)
 
-    def __generatePanels(self):
+    def __generatePanels(self, showDetailedLog=False):
         self.__defaultZoneAndPanelConfig()
         print(f"Generating panels ...")
         # print(f"Shape of zones: {np.shape(self.zones)}")
         if self.tapTribs is None or self.zoneDict is None:
             return
+        if showDetailedLog:
+            print(f"Shape of tapTribs: {np.shape(self.tapTribs)}")
+            print(f"Shape of nominalPanelAreas: {np.shape(self.nominalPanelAreas)}")
 
         self.panels : shp.MultiPolygon = ()    # [nZones][nAreas][nPanels]
         # self.panelAreas = ()    # [nZones][nAreas][nPanels]
@@ -723,9 +764,9 @@ class face:
         return errDict
 
     """-------------------------------- Data handlers ---------------------------------"""
-    def Refresh(self):
-        self.__generateTributaries()
-        self.__generatePanels()
+    def Refresh(self, showDetailedLog=False):
+        self.__generateTributaries(showDetailedLog)
+        self.__generatePanels(showDetailedLog)
 
     def to_dict(self,getDerived=False):
         basic = {}
@@ -910,7 +951,16 @@ class face:
             fig = plt.figure()
             ax = fig.add_subplot()
         for trib in self.tapTribs.geoms:
-            xy = transform(np.transpose(trib.exterior.xy), self.origin_plt, self.basisVectors_plt) 
+            if type(trib) == shp.Polygon:
+                xy = transform(np.transpose(trib.exterior.xy), self.origin_plt, self.basisVectors_plt) 
+            elif type(trib) == shp.MultiPolygon:
+                xy = []
+                for t in trib.geoms:
+                    xy.extend(transform(np.transpose(t.exterior.xy), self.origin_plt, self.basisVectors_plt))
+                xy = np.array(xy)
+            else:
+                warnings.warn(f"Unknown geometry type: {type(trib)}")
+                continue
             ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
         if newFig:
             ax.axis('equal')

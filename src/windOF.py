@@ -607,6 +607,8 @@ def readVelProfile(caseDir, probeName,
         print("             << Done!")
     
     Z = probes[:,2]
+    X = probes[:,0]
+    Y = probes[:,1]
     dt = np.mean(np.diff(time))
     
     if showLog:
@@ -653,7 +655,7 @@ def readVelProfile(caseDir, probeName,
     
     name = caseName+"__"+probeName if name is None else name
     if len(np.shape(vel)) == 3:
-        prof = wind.profile(name=name,Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
+        prof = wind.profile(name=name, X=X, Y=Y, Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
                             WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.DEFAULT_SI_UNITS,
                             pOfT=pressure,
                             **kwargs_profile)
@@ -837,7 +839,7 @@ class inflowTuner:
             table['xLw'] = wind.smooth(self.target.xLw, smoothWindow, **kwargs_smooth)
         return table
     
-    def addInflow(self, caseName, sampleName, name=None):
+    def addInflow(self, caseName, sampleName, name=None, nSpectAvg=None):
 
         tFile = caseName+"/"+sampleName+"/time.npy"
         Ufile = caseName+"/"+sampleName+"/UofT.npy"
@@ -853,7 +855,9 @@ class inflowTuner:
 
         dt = time[2] - time[1]
 
-        prof = wind.profile(name=name, Z=probes[:,2], UofT=UofT, VofT=VofT, WofT=WofT, H=self.H, dt=dt, nSpectAvg=self.nSpectAvg)
+        nSpectAvg = self.nSpectAvg if nSpectAvg is None else nSpectAvg
+
+        prof = wind.profile(name=name, Z=probes[:,2], UofT=UofT, VofT=VofT, WofT=WofT, H=self.H, dt=dt, nSpectAvg=nSpectAvg)
         if self.inflows is None:
             self.inflows = wind.Profiles([prof,])
         else:
@@ -1264,7 +1268,7 @@ class inflowTuner:
             profs.extend(self.refProfiles.profiles)
         profs = wind.Profiles(profs)
 
-        return profs.plotSpectra(figSize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_plt=kwargs_plt, **kwargs_pltSpectra)
+        return profs.plotSpectra(figsize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_plt=kwargs_plt, **kwargs_pltSpectra)
 
 
 
