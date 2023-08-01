@@ -111,8 +111,7 @@ def getDurstFactor(gustDuration):
             Other Structures. ASCE Standard ASCE/SEI 7-22, ASCE standard. American Society 
             of Civil Engineers, Reston, VA, USA. https://doi.org/10.1061/9780784415788
     """
-    
-    if any(gustDuration < 1.03780849700000) or any(gustDuration > 3600):
+    if gustDuration < 1.03780849700000 or gustDuration > 3600:
         raise ValueError("The gust duration must be between 1.037808497 and 3600 seconds.")
     gustDur = [1.03780849700000,1.12767394700000,1.22532098700000,1.33142343500000,1.45694344800000,1.57538111200000,1.70810738900000,1.86913930100000,2.00713704800000,
                2.19136209900000,2.38111554700000,2.58730004200000,2.81133837300000,3.05477653000000,3.31929437600000,3.60671723400000,3.97673384700000,4.35593123500000,
@@ -142,6 +141,7 @@ def CpConversionFactor(from_: Literal['simulated', 'NBCC', 'ASCE'], to_: Literal
                         from_Z: Union[float, np.ndarray], from_z0: float=None, from_gustDuration: float=None, to_z0: float=0.03, 
                         to_Z: float=10, 
                         zg: float=500, 
+                        debugMode: bool=False,
                         ):
     """
     Calculates the lumped reference velocity conversion factor between experimental/CFD data, 
@@ -187,6 +187,13 @@ def CpConversionFactor(from_: Literal['simulated', 'NBCC', 'ASCE'], to_: Literal
         data with wind load provisions. J. Wind Eng. Ind. Aerodyn. 93, 31-59. 
         https://doi.org/10.1016/j.jweia.2004.07.007
     """
+    if debugMode:
+        print(f"Calculating the lumped reference velocity conversion factors for C&C wind loads.")
+        print(f"\t\t  From \t\t---> \t To")
+        print(f"Type\t\t: {from_} \t---> \t {to_}")
+        print(f"z0\t\t: {from_z0:.3g} \t---> \t {to_z0:.3g}")
+        print(f"Z\t\t: {from_Z:.3g} \t\t---> \t {to_Z:.3g}")
+        
     from_Z = np.array(from_Z) if isinstance(from_Z, list) or isinstance(from_Z, tuple) else from_Z
     if from_ == 'simulated':
         if from_gustDuration is None:
@@ -205,12 +212,19 @@ def CpConversionFactor(from_: Literal['simulated', 'NBCC', 'ASCE'], to_: Literal
         to_gustDuration = 3600
     elif to_ == 'ASCE':
         to_gustDuration = 3
+    if debugMode:
+        print(f"gust_dur\t: {from_gustDuration:.5g} \t\t---> \t {to_gustDuration:.5g}")
     
-    F_exp = velRatio_exposureChange(from_z0=from_z0, to_z0=to_z0, zg=zg, zref=to_Z)
-    F_height = velRatio_heightChange(from_Z=from_Z, to_Z=to_Z, z0=from_z0)
-    F_gustDuration = velRatio_gustDurationChange(from_gustDuration=from_gustDuration, to_gustDuration=to_gustDuration)
+    F_exp = velRatio_exposureChange(from_z0=from_z0, to_z0=to_z0, zg=zg, zref=to_Z) ** -2
+    F_height = velRatio_heightChange(from_Z=from_Z, to_Z=to_Z, z0=from_z0) ** -2
+    F_gustDuration = velRatio_gustDurationChange(from_gustDuration=from_gustDuration, to_gustDuration=to_gustDuration) ** -2
 
-    factor = (F_exp * F_height * F_gustDuration) ** (-2)
+    factor = F_exp * F_height * F_gustDuration
+    if debugMode:
+        print(f"\tExposure factor\t\t: {F_exp:.3g}")
+        print(f"\tHeight factor\t\t: {F_height:.3g}")
+        print(f"\tGust duration factor\t: {F_gustDuration:.3g}")
+        print(f"Combined factor\t\t\t: {factor:.3g}")
     return factor
 
 

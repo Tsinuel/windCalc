@@ -97,12 +97,16 @@ class BLWTL_HFPI:
                  pressureExtraChannels_tapNos:dict=None,
                  lowpassFreq=None,
                  Ntaps=-1,
+                 trimTimeStart=None,
+                 trimTimeEnd=None,
                  ) -> None:
         self.caseDir = caseDir
         self.userNotes = userNotes
         self.Z_MainPitot = Z_MainPitot
         self.lowpassFreq = lowpassFreq
         self.Ntaps = Ntaps
+        self.trimTimeStart = trimTimeStart
+        self.trimTimeEnd = trimTimeEnd
 
         if analogChannels_idxs is None:
             analogChannels_ex = {
@@ -285,3 +289,17 @@ class BLWTL_HFPI:
         description += "Pressure extra channels tap Nos.: {}\n".format(json.dumps(self.pressureExtraChannels_tapNos, indent=4))
 
         return description
+
+    @property
+    def trimTimeStartIdx(self):
+        if self.trimTimeStart is None:
+            return 0
+        sf = self.sampleRate if np.isscalar(self.sampleRate) else self.sampleRate[0]
+        return int(self.trimTimeStart * sf)
+    
+    @property
+    def trimTimeEndIdx(self):
+        if self.trimTimeEnd is None:
+            return -1
+        sf = self.sampleRate if np.isscalar(self.sampleRate) else self.sampleRate[0]
+        return int(self.trimTimeEnd * sf)

@@ -1258,7 +1258,6 @@ class Faces:
     def tapIdx(self) -> List[int]:
         if self._numOfMembers() == 0:
             return np.arange(len(self.tapNo_all_lumped))
-        print("here")
         tapIdx = []
         for f in self.memberFaces:
             tapIdx.extend(f.tapIdx)
