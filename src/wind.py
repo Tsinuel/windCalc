@@ -8,13 +8,10 @@ import numpy as np
 import pandas as pd
 import os
 import warnings
-import shapely.geometry as shp
 import matplotlib.pyplot as plt
-import matplotlib.lines as lines
 import json
 import copy
 
-from shapely.ops import voronoi_diagram
 from typing import List,Literal,Dict,Tuple,Any,Union,Set
 from scipy import signal
 from scipy.stats import skew,kurtosis
@@ -395,7 +392,6 @@ def fitVelDataToLogProfile(Z, U, Zref=None, Uref=None, d=0.0, debugMode=False, u
 
     return z0, uStar, U_fit
 
-
 def fitVelToPowerLawProfile(Z, U, Zref=None, Uref=None, debugMode=False, alpha_init=1.0, U0_init=1.0) -> Tuple[float, float, np.ndarray]:
     from scipy.optimize import minimize
 
@@ -411,7 +407,6 @@ def fitVelToPowerLawProfile(Z, U, Zref=None, Uref=None, debugMode=False, alpha_i
             Uref = None
     with_constraint = Zref is not None and Uref is not None
     raise NotImplemented()
-
 
 def get_velTH_stats_1pt(UofT: np.ndarray=None, 
                     VofT: np.ndarray=None, 
@@ -520,6 +515,8 @@ def fitESDUgivenIuRef(
         es = ESDU74(z0=z0i[0],Zref=Zref,Uref=Uref,phi=phi)
     else:
         raise Exception("Unknown ESDU version: "+ESDUversion)
+    print("Zref = "+str(Zref))
+    print("IuRef = "+str(IuRef))
 
     z0_0 = z0i[0]
     z0_1 = z0i[1]
@@ -556,6 +553,54 @@ def fitESDUgivenIuRef(
     z0 = (z0_0 + z0_1)/2
     return z0, es
 
+def getMathName(rawname):
+    if rawname == 'U':
+        return '$U$'
+    elif rawname == 'U/Uh':
+        return '$U/U_h$'
+    elif rawname == 'V':
+        return '$V$'
+    elif rawname == 'V/Uh':
+        return '$V/U_h$'
+    elif rawname == 'W':
+        return '$W$'
+    elif rawname == 'W/Uh':
+        return '$W/U_h$'
+    elif rawname == 'Iu':
+        return '$I_u$'
+    elif rawname == 'Iv':
+        return '$I_v$'
+    elif rawname == 'Iw':
+        return '$I_w$'
+    elif rawname == 'xLu':
+        return '$^xL_u$'
+    elif rawname == 'xLu/H':
+        return '$^xL_u/H$'
+    elif rawname == 'xLv':
+        return '$^xL_v$'
+    elif rawname == 'xLv/H':
+        return '$^xL_v/H$'
+    elif rawname == 'xLw':
+        return '$^xL_w$'
+    elif rawname == 'xLw/H':
+        return '$^xL_w/H$'
+    elif rawname == 'uv': 
+        return '$\\overline{u\'v\'}$'
+    elif rawname == 'uv/Uh^2':
+        return '$\\overline{u\'v\'}/U_h^2$'
+    elif rawname == 'uw':
+        return '$\\overline{u\'w\'}$'
+    elif rawname == 'uw/Uh^2':
+        return '$\\overline{u\'w\'}/U_h^2$'
+    elif rawname == 'vw':
+        return '$\\overline{v\'w\'}$'
+    elif rawname == 'vw/Uh^2':
+        return '$\\overline{v\'w\'}/U_h^2$'
+    else:
+        warnings.warn("Unknown rawname: "+rawname)
+        return rawname
+    
+    
 #---------------------------- SURFACE PRESSURE ---------------------------------
 def peak_gumbel(x, axis:int=0, 
                 specs: dict=DEFAULT_PEAK_SPECS,
@@ -1186,7 +1231,7 @@ class profile:
                 fileName=None,
                 keepTH=True,
                 interpolateToH=False, 
-                units=DEFAULT_SI_UNITS
+                units=DEFAULT_SI_UNITS,
                 ):
         '''
         Parameters
@@ -1494,17 +1539,17 @@ class profile:
             if field in ['U','V','W']:
                 if self.Uh is None:
                     return None, ''
-                return self.stats[field]/self.Uh, field+'/Uh'
+                return self.stats[field]/self.Uh, getMathName(field+'/Uh')
             elif field in ['Iu','Iv','Iw']:
-                return self.stats[field], field
+                return self.stats[field], getMathName(field)
             elif field in ['xLu','xLv','xLw']:
                 if self.H is None:
                     return None, ''
-                return self.stats[field]/self.H, field+'/H'
+                return self.stats[field]/self.H, getMathName(field+'/H')
             elif field in ['uv','uw','vw']:
                 if self.Uh is None:
                     return None, ''
-                return self.stats[field]/(self.Uh**2), field+'/Uh^2'
+                return self.stats[field]/(self.Uh**2), getMathName(field+'/Uh^2')
             else:
                 raise NotImplementedError("Normalization for field '{}' not implemented".format(field))
     
@@ -1587,13 +1632,20 @@ class profile:
         Z10 = 10*lScl
         return np.interp(Z10, self.Z, self.U)
 
-    def fitted_z0(self, uStar_init=1.0, z0_init=0.001, debugMode=False):
-        [zMin, zMax] = self.workSect_zLim
-        idxMin = np.argmin(np.abs(self.Z-zMin))
-        idxMax = np.argmin(np.abs(self.Z-zMax))
-        Z = self.Z[idxMin:idxMax+1]
-        U = self.U[idxMin:idxMax+1]
-        z0, _, _ = fitVelDataToLogProfile(Z, U, Zref=self.H, Uref=self.Uh, d=0.0, debugMode=debugMode, uStar_init=uStar_init, z0_init=z0_init)
+    def fitted_z0(self, fitTo:Literal['U','Iu']='Iu', lScl=1.0, uStar_init=1.0, z0_init=0.001, debugMode=False,
+                  kwargs_z0Fit={}) -> Union[float, None]:
+        if fitTo == 'U':
+            [zMin, zMax] = self.workSect_zLim
+            idxMin = np.argmin(np.abs(self.Z-zMin))
+            idxMax = np.argmin(np.abs(self.Z-zMax))
+            Z = self.Z[idxMin:idxMax+1]
+            U = self.U[idxMin:idxMax+1]
+            z0, _, _ = fitVelDataToLogProfile(Z, U, Zref=self.H, Uref=self.Uh, d=0.0, debugMode=debugMode, uStar_init=uStar_init, z0_init=z0_init, **kwargs_z0Fit)
+        elif fitTo == 'Iu':
+            z0,_ = fitESDUgivenIuRef(self.H/lScl, self.SpectH.Iu, **kwargs_z0Fit)
+            z0 *= lScl
+        else:
+            raise NotImplementedError("Fitting to '{}' not implemented".format(fitTo))
         return z0
 
     def Je(self, kwargs_z0Fit={},
@@ -1631,7 +1683,7 @@ class profile:
             H = 1.0
             F, name = self.stat_norm(fld)
             xLabel = name if xLabel is None else xLabel
-            yLabel = 'Z/H' if yLabel is None else yLabel
+            yLabel = '$Z/H$' if yLabel is None else yLabel
         else:
             Z = self.Z
             H = self.H
@@ -1676,7 +1728,7 @@ class profile:
             U_lgnd_lbl = "U ("+self.name+")" if U_lgnd_lbl is None else U_lgnd_lbl
         Iu_lgnd_lbl = "Iu ("+self.name+")" if Iu_lgnd_lbl is None else Iu_lgnd_lbl
         if zLabel is None:
-            zLabel = 'Z/H' if normalize else 'Z'
+            zLabel = '$Z/H$' if normalize else '$Z$'
         
         self.plotProfile_any('U', ax=ax_U, label=U_lgnd_lbl, normalize=normalize, overlay_H=overlay_H, kwargs_Hline=kwargs_Hline,
                             xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_U, yLimits=yLimits, kwargs=kwargs_U)
@@ -1786,7 +1838,7 @@ class profile:
         
         label = self.name if label is None else label
         if zLabel is None:
-            zLabel = 'Z/H' if normalize else 'Z'
+            zLabel = '$Z/H$' if normalize else '$Z$'
         
         bxPltObj = None
         if 'U' in self.stats.keys():
@@ -3472,14 +3524,14 @@ class bldgCp(windCAD.building):
             raise Exception(f"The field {fld} is not a part of the available stat fields. Available stat fields: {list(self.CpStats.keys())}")
     
     def CandCLoad_factor(self, format:Literal['NBCC','ASCE']='ASCE', debugMode=False,
-                         kwargs_fit_z0={}):
+                         kwargs_fit_z0={'fitTo':'Iu'}):
         if self.T is None or self.tScl is None or self.H is None or self.profile is None:
             print(f"Cannot compute C&C Load factor. The following are required: T, tScl, H, profile")
             return None
         
         T = self.T
         full_scale_duration = T/self.tScl if np.isscalar(T) else np.mean(T)/self.tScl
-        z0_MS = self.profile.fitted_z0(**kwargs_fit_z0)
+        z0_MS = self.profile.fitted_z0(lScl=self.lScl, **kwargs_fit_z0)
         z0 = z0_MS / self.lScl
         if debugMode:
             print(f"Computing C&C Load factor ...")
@@ -3491,6 +3543,43 @@ class bldgCp(windCAD.building):
             print(f"C&C factor for case {self.name} = {factor}")
         return factor
 
+    def writeCandCloadToXLSX(self, filePath, 
+                            extremesPerNominalArea=True, areaFactor=1.0, 
+                            format:Literal['default','NBCC','ASCE']='default', debugMode=False,
+                            kwargs_fit_z0={'fitTo':'Iu'}):
+        if self.T is None or self.tScl is None or self.H is None or self.profile is None:
+            print(f"Cannot compute C&C Load factor. The following are required: T, tScl, H, profile")
+            return None
+
+        zoneDictKeys = self.zoneDictKeys
+        area = {z: np.array(self.NominalPanelArea) for z in zoneDictKeys} if extremesPerNominalArea else self.allAreasForCpAavg
+        if extremesPerNominalArea:
+            peakMax = self.CpAavg_envMax_peakMax_maxPerA
+            peakMin = self.CpAavg_envMin_peakMin_minPerA
+        else:
+            peakMax = self.CpAavg_envMax_peakMax_allA
+            peakMin = self.CpAavg_envMin_peakMin_allA
+
+        if format == 'default':
+            valueScaleFactor = 1.0
+        elif format == 'NBCC':
+            valueScaleFactor = self.CandCLoad_factor(debugMode=debugMode, format='NBCC')
+        elif format == 'ASCE':
+            valueScaleFactor = self.CandCLoad_factor(debugMode=debugMode, format='ASCE')
+        else:
+            raise Exception(f"Unknown CandCLoadFormat: {format}")
+        
+        with pd.ExcelWriter(filePath) as writer:
+            for I, zKey in enumerate(zoneDictKeys):
+                df = pd.DataFrame({'Area [m^2]':area[zKey]*areaFactor, 
+                                   'Peak Max':np.array(peakMax[zKey])*valueScaleFactor, 
+                                   'Peak Min':np.array(peakMin[zKey])*valueScaleFactor})
+                df.to_excel(writer, sheet_name=zKey, index=False)
+        if debugMode:
+            print(f"Saved C&C load to {filePath}")
+
+
+
     """--------------------------------- Plotters -------------------------------------"""
     def plotTapCpStatsPerAoA(self, figs=None, all_axes=None, addMarginDetails=False,
                             fields=['peakMin','mean','peakMax',],fldRange=[-15,10], tapsToPlot=None, includeTapName=True,
@@ -3500,15 +3589,17 @@ class bldgCp(windCAD.building):
                             ls=['-','-','-','-','-','-','-','-','-','-',],
                             mrkrSize=2,
                             kwargs_perFld=None, 
+                            simpleLabel=True,
                             xticks=None, nAoA_ticks=5, xlim=None, 
                             legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20], sharex=True, sharey=True,
-                            overlayThis=None, overlay_AoA=None, overlayLabel=None, kwargs_overlay={}):
+                            overlayThis=None, overlay_AoA=None, overlayLabel=None, kwargs_overlay=None):
         if kwargs_perFld is None:
             kwargs_perFld = [{'color':cols[i], 
                               'marker':mrkrs[i], 
                               'ls':ls[i],
                               'markersize':mrkrSize,
                               } for i in range(len(fields))]
+        kwargs_overlay = [{} for _ in range(len(fields))] if kwargs_overlay is None else kwargs_overlay
 
         tapIdxs = self.tapIdx if tapsToPlot is None else self.tapIdxOf(tapsToPlot)
         
@@ -3541,9 +3632,10 @@ class bldgCp(windCAD.building):
                     break
                 ax = axs[i//nCols,i%nCols]
                 for f,fld in enumerate(fields):
-                    ax.plot(self.AoA, self.CpStats[fld][:,tapIdx], label=fld, **kwargs_perFld[f])
+                    label = fld if simpleLabel else self.name+' ('+fld+')'
+                    ax.plot(self.AoA, self.CpStats[fld][:,tapIdx], label=label, **kwargs_perFld[f])
                     if overlayThis is not None:
-                        ax.plot(overlay_AoA, overlayThis[fld][:,tapPltCount], label=overlayLabel, color=cols[f],**kwargs_overlay)
+                        ax.plot(overlay_AoA, overlayThis[fld][:,tapPltCount], label=overlayLabel+' ('+fld+')', **kwargs_overlay[f])
                 ax.hlines([-1,0,1],0,360,colors=['k','k','k'],linestyles=['--','-','--'],lw=0.7)
                 if includeTapName:
                     if self.tapName is not None and self.tapName[tapIdx] != '':
@@ -3753,6 +3845,41 @@ class bldgCp(windCAD.building):
                             xLimits=None, yLimits=None, xLabel=None, yLabel=None,
                             kwargs_min={}, kwargs_max={}, kwargs_legend={},
                             kwargs_ax={'gridMajor':True, 'gridMinor':True}):
+        def addOverlay(ax, ar, val, overlayType, name='_', kwargs_overlay={}):
+            if overlayThese is None:
+                return
+            if overlayType == 'single':
+                ax.semilogx(ar, val, 
+                        label=name, **kwargs_overlay)
+            elif overlayType == 'errorBars':
+                if kwargs_overlay == {}:
+                    kwargs_overlay = {
+                        'widths': 0.1,
+                        'notch': True,
+                        'vert': True,
+                        'showfliers': False,
+                        'patch_artist': True,
+                        'meanline': True,
+                        'boxprops': dict(facecolor='None', color='b', linewidth=1, edgecolor='b'),
+                        'medianprops': dict(color='b', linewidth=1),
+                        'whiskerprops': dict(color='b', linewidth=1),
+                        'capprops': dict(color='b', linewidth=1.5,),
+                        'whis': [5,95],
+                        }
+                yTicks = ax.get_yticks()
+                hadYLabel = ax.get_ylabel() != ''
+                bx = ax.boxplot(val, positions=ar, 
+                        **kwargs_overlay)
+                ax.set_yticks(yTicks)
+                if hadYLabel:
+                    ax.set_yticklabels(['{:g}'.format(y) for y in yTicks])
+                if name != '_':
+                    bx['boxes'][0].set_label(name)
+                    return bx #['boxes'][0]
+            else:
+                raise NotImplementedError("Overlay type '{}' not implemented".format(overlayType))
+            return None
+
         newFig = False
         if fig is None:
             newFig = True
@@ -3785,6 +3912,8 @@ class bldgCp(windCAD.building):
         else:
             raise Exception(f"Unknown CandCLoadFormat: {CandCLoadFormat}")
         
+        bxPltObj = None
+        bxPltName = None
         for I, zKey in enumerate(zoneDictKeys):
             zoneName = zKey
             
@@ -3794,10 +3923,26 @@ class bldgCp(windCAD.building):
             ax.semilogx(area[zKey]*areaFactor, np.array(peakMin[zKey])*valueScaleFactor, 'vk', label=label_min, **kwargs_min)
             ax.axhline(0, color='k', linestyle='-', linewidth=0.7)
             if overlayThese is not None:
-                for ii, overlay_i in enumerate(overlayThese):
+                for ii, overlayThis in enumerate(overlayThese):
                     overlayFactor = overlayFactors[ii] if overlayFactors is not None else 1.0
-                    ax.semilogx(overlay_i['Min']['area'][zKey], np.array(overlay_i['Min']['value'][zKey])*overlayFactor, label=overlay_i['Name'], **kwargs_overlay[ii])
-                    ax.semilogx(overlay_i['Max']['area'][zKey], np.array(overlay_i['Max']['value'][zKey])*overlayFactor, **kwargs_overlay[ii])
+                    ar = overlayThis['Min']['area'][zKey]
+                    valMin = np.array(overlayThis['Min']['value'][zKey])*overlayFactor
+                    valMax = np.array(overlayThis['Max']['value'][zKey])*overlayFactor
+                    if np.shape(ar) == np.shape(valMin):
+                        ax.semilogx(ar, valMin, label=overlayThis['Name'], **kwargs_overlay[ii])
+                        ax.semilogx(ar, valMax, **kwargs_overlay[ii])
+                    else:
+                        dim = 0 if np.shape(ar)[0] == np.shape(valMin)[0] else 1
+                        if dim == 1:
+                            valMin = valMin.T
+                            valMax = valMax.T
+                        for a in range(np.shape(valMin)[dim]):
+                            overlayLabel = overlayThis['Name'] if a == 0 else None
+                            ax.semilogx(ar, valMin[:,a], label=overlayLabel, **kwargs_overlay[ii])
+                            ax.semilogx(ar, valMax[:,a], **kwargs_overlay[ii])
+                        bxPltName = overlayThis['Name']
+                        bxPltObj = addOverlay(ax, [ar[0],], np.array(valMin).flatten(), 'errorBars', name=bxPltName, kwargs_overlay={})
+                        addOverlay(ax, [ar[0],], np.array(valMax).flatten(), 'errorBars', name='_', kwargs_overlay={})
 
             if invertYAxis:
                 ax.invert_yaxis()
@@ -3835,8 +3980,16 @@ class bldgCp(windCAD.building):
 
                 formatAxis(ax, **kwargs_ax)
 
-        handles, labels = axs[0,0].get_legend_handles_labels()
-        axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles, labels, **kwargs_legend)
+        if bxPltObj is None:
+            print("No overlay boxplot was added")
+            handles, labels = axs[0,0].get_legend_handles_labels()
+            axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles, labels, **kwargs_legend)
+        else:
+            print("Overlay boxplot was added")
+            hndls, lbls = axs[0,0].get_legend_handles_labels()
+            hndls.append(bxPltObj["boxes"][0])
+            lbls.append(bxPltName)
+            axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles=hndls, labels=lbls, **kwargs_legend)
         
         # if there are remaining axes, remove them
         for I in range(len(zoneDictKeys), axs.size):
@@ -3957,7 +4110,7 @@ class BldgCps():
                 memberBldgs:List[bldgCp]=[],
                 masterBldg:Union[bldgCp,None]=None,
                 ) -> None:
-        self.memberBldgs = memberBldgs
+        self.memberBldgs: List[bldgCp] = memberBldgs
         print(f"Number of member bldgs: {len(memberBldgs)}")
 
         self.master = memberBldgs[0] if masterBldg is None and len(memberBldgs) > 0 else masterBldg
@@ -4006,30 +4159,79 @@ class BldgCps():
             lower[fld] = np.percentile(allData[fld], 50-errorPercentile/2, axis=-1)
         return mean, upper, lower, allData
     
+    def writeCandCloadToXLSX(self, filePath, 
+                            extremesPerNominalArea=True, areaFactor=1.0, 
+                            format:Literal['default','NBCC','ASCE']='default', debugMode=False,
+                            kwargs_fit_z0={'fitTo':'Iu'}):
+        if self.master.T is None or self.master.tScl is None or self.master.H is None or self.master.profile is None:
+            print(f"Cannot compute C&C Load factor. The following are required: T, tScl, H, profile")
+            return None
+
+        data = {}
+        for i, bldg in enumerate(self.memberBldgs):
+            zoneDictKeys = bldg.zoneDictKeys
+            if format == 'default':
+                valueScaleFactor = 1.0
+            elif format == 'NBCC':
+                valueScaleFactor = bldg.CandCLoad_factor(debugMode=debugMode, format='NBCC')
+            elif format == 'ASCE':
+                valueScaleFactor = bldg.CandCLoad_factor(debugMode=debugMode, format='ASCE')
+            else:
+                raise Exception(f"Unknown CandCLoadFormat: {format}")
+            area = {z: np.array(bldg.NominalPanelArea) for z in zoneDictKeys} if extremesPerNominalArea else bldg.allAreasForCpAavg
+            if extremesPerNominalArea:
+                peakMax = bldg.CpAavg_envMax_peakMax_maxPerA
+                peakMin = bldg.CpAavg_envMin_peakMin_minPerA
+            else:
+                peakMax = bldg.CpAavg_envMax_peakMax_allA
+                peakMin = bldg.CpAavg_envMin_peakMin_allA
+            for zKey in zoneDictKeys:
+                if i == 0:
+                    data[zKey] = pd.DataFrame({'Area [m^2]':area[zKey]*areaFactor, 
+                                   'Peak Max':np.array(peakMax[zKey])*valueScaleFactor, 
+                                   'Peak Min':np.array(peakMin[zKey])*valueScaleFactor})
+                else:
+                    data[zKey] = pd.concat([data[zKey], 
+                                    pd.DataFrame({'Area [m^2]':area[zKey]*areaFactor, 
+                                    'Peak Max':np.array(peakMax[zKey])*valueScaleFactor, 
+                                    'Peak Min':np.array(peakMin[zKey])*valueScaleFactor})], 
+                                axis=0)
+                    
+        with pd.ExcelWriter(filePath) as writer:
+            for zKey in zoneDictKeys:
+                sheetName = zKey
+                # make sure the sheet name is valid (replace apostrophe with 'prime', etc.)
+                sheetName = sheetName.replace("'", "_prime")
+                data[zKey].to_excel(writer, sheet_name=sheetName, index=False)
+
+        if debugMode:
+            print(f"Saved C&C load to {filePath}")
 
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotTapCpStatsPerAoA(self, 
-                            fields=['peakMin','mean','peakMax',],fldRange=[-15,10], tapsToPlot=None, includeTapName=True,
+                            fields=['peakMax','mean','peakMin'],fldRange=[-15,10], tapsToPlot=None, includeTapName=True,
                             nCols=7, nRows=10, 
                             cols = ['r','k','b','g','m','r','k','b','g','m'],
-                            mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], 
+                            mrkrs = ['^','o','v','s','p','d','.','*','<','>','h'], 
                             ls=['-','-','-','-','-','-','-','-','-','-',],
-                            mrkrSize=2,
+                            mrkrSize=2, lw=0.5,
                             kwargs_perFld=None, 
                             xticks=None, nAoA_ticks=5, xlim=None, 
-                            legend_bbox_to_anchor=(0.5, 0.905), nLgndCols=None,
+                            legend_bbox_to_anchor=(0.5, 0.905), nLgndCols=None, simpleLabel=False,
                             pageNo_xy=(0.5,0.1), 
                             figsize=[15,20], sharex=True, sharey=True,
                             overlayThis=None, overlay_AoA=None, overlayLabel=None, kwargs_overlay={},
                              ):
         if kwargs_perFld is None:
-            kwargs_perFld = [{'color':cols[i], 
+            kwargs_perFld = [[{'color':cols[c], 
                                 'marker':mrkrs[i], 
                                 'ls':ls[i],
                                 'markersize':mrkrSize,
-                                } for i in range(len(fields))] 
-            kwargs_perFld = [kwargs_perFld for i in range(self.Num_MemberBldgs)]
+                                'linewidth':lw,
+                                } for i in range(len(fields))]
+                                for c in range(self.Num_MemberBldgs)] 
+            
 
         tapIdxs = self.master.tapIdx if tapsToPlot is None else self.master.tapIdxOf(tapsToPlot)
         
@@ -4043,6 +4245,12 @@ class BldgCps():
         all_axes = []
         for p in range(nPages):
             fig, axs = plt.subplots(nRows, nCols, figsize=figsize, sharex=sharex, sharey=sharey)
+            if nRows == 1 and nCols == 1:
+                axs = np.array([[axs]])
+            elif nRows == 1: # make sure axs is 2D
+                axs = np.array([axs])
+            elif nCols == 1:
+                axs = np.array([[ax] for ax in axs])
             all_axes.append(axs)
             figs.append(fig)
         
@@ -4054,6 +4262,7 @@ class BldgCps():
             bldg.plotTapCpStatsPerAoA(figs=figs, all_axes=all_axes, addMarginDetails=addMarginDetails,
                                     fields=fields, fldRange=fldRange, tapsToPlot=tapsToPlot, includeTapName=includeTapName,
                                     kwargs_perFld=kwargs_perFld[i], 
+                                    simpleLabel=simpleLabel,
                                     xticks=xticks, nAoA_ticks=nAoA_ticks, xlim=xlim, 
                                     legend_bbox_to_anchor=legend_bbox_to_anchor, pageNo_xy=pageNo_xy,
                                     overlayThis=overlayThis, overlay_AoA=overlay_AoA, overlayLabel=overlayLabel, kwargs_overlay=kwargs_overlay,
@@ -4062,16 +4271,16 @@ class BldgCps():
         
         caseNames = [bldg.name for bldg in self.memberBldgs]
         nLgndCols = self.Num_MemberBldgs if nLgndCols is None else nLgndCols
+        transposeLegend = False
         for p, (axs, fig) in enumerate(zip(all_axes, figs)):
             ax = axs[0,0]
             handles, labels = ax.get_legend_handles_labels()
-
+            if transposeLegend:
+                pass
             fig.legend(handles, labels, loc='upper center',ncol=nLgndCols, bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
-            # fig.annotate(text, xy=pageNo_xy, xycoords='figure fraction', ha='center', va='top')
-            text = f"Page {p+1} of {nPages}\n Case: {caseNames}"
-            # add text to the figure
+            text = f"Page {p+1} of {nPages}\n Cases: {caseNames}"
             fig.text(pageNo_xy[0], pageNo_xy[1], text, ha='center', va='top')
-            fig.show()
-
+            
         return figs, all_axes
+
 

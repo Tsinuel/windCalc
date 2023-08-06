@@ -51,12 +51,16 @@ import datetime
 
 TIME_STEP_TOLERANCE = 1e-7
 MAX_DATA_LIMIT = 1e+50
+SHOWLOG = False
 
 __precision = 6
 
 #===============================================================================
 #=============================  FUNCTIONS  =====================================
 #===============================================================================
+def printlog(msg, showLog=SHOWLOG):
+    if showLog:
+        print(msg)
 
 #---------------------------  General CFD  -------------------------------------
 def meshSizeFromCutoffFreq(nc, Suu, Svv, Sww):
@@ -812,7 +816,7 @@ class inflowTuner:
             profs.extend(self.incidents.profiles)
         return wind.Profiles(profs)
 
-    def targetProfileTable(self, castToUniform=False, nPts=1000, smoothWindow=1, kwargs_smooth={}) -> pd.DataFrame:
+    def targetProfileTable(self, castToUniform=False, nPts=1000, smoothen=False, smoothWindow=1, kwargs_smooth={}) -> pd.DataFrame:
         if self.target is None:
             return None
         if np.isscalar(smoothWindow):
@@ -821,22 +825,32 @@ class inflowTuner:
         table = pd.DataFrame()
         if castToUniform:
             table['Z'] = np.linspace(self.target.Z[0], np.array(self.target.Z)[-1], nPts)
-            table['U'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.U), smoothWindow[0], **kwargs_smooth)
-            table['Iu'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.Iu), smoothWindow[1], **kwargs_smooth)
-            table['Iv'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.Iv), smoothWindow[2], **kwargs_smooth)
-            table['Iw'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.Iw), smoothWindow[3], **kwargs_smooth)
-            table['xLu'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.xLu), smoothWindow[4], **kwargs_smooth)
-            table['xLv'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.xLv), smoothWindow[5], **kwargs_smooth)
-            table['xLw'] = wind.smooth(np.interp(table['Z'], self.target.Z, self.target.xLw), smoothWindow[6], **kwargs_smooth)
+            table['U'] = np.interp(table['Z'], self.target.Z, self.target.U)
+            table['Iu'] = np.interp(table['Z'], self.target.Z, self.target.Iu)
+            table['Iv'] = np.interp(table['Z'], self.target.Z, self.target.Iv)
+            table['Iw'] = np.interp(table['Z'], self.target.Z, self.target.Iw)
+            table['xLu'] = np.interp(table['Z'], self.target.Z, self.target.xLu)
+            table['xLv'] = np.interp(table['Z'], self.target.Z, self.target.xLv)
+            table['xLw'] = np.interp(table['Z'], self.target.Z, self.target.xLw)
         else:
             table['Z'] = self.target.Z
-            table['U'] = wind.smooth(self.target.U, smoothWindow, **kwargs_smooth)
-            table['Iu'] = wind.smooth(self.target.Iu, smoothWindow, **kwargs_smooth)
-            table['Iv'] = wind.smooth(self.target.Iv, smoothWindow, **kwargs_smooth)
-            table['Iw'] = wind.smooth(self.target.Iw, smoothWindow, **kwargs_smooth)
-            table['xLu'] = wind.smooth(self.target.xLu, smoothWindow, **kwargs_smooth)
-            table['xLv'] = wind.smooth(self.target.xLv, smoothWindow, **kwargs_smooth)
-            table['xLw'] = wind.smooth(self.target.xLw, smoothWindow, **kwargs_smooth)
+            table['U'] = self.target.U
+            table['Iu'] = self.target.Iu
+            table['Iv'] = self.target.Iv
+            table['Iw'] = self.target.Iw
+            table['xLu'] = self.target.xLu
+            table['xLv'] = self.target.xLv
+            table['xLw'] = self.target.xLw
+
+        if smoothen:
+            table['U'] = wind.smooth(table['U'], smoothWindow[0], **kwargs_smooth)
+            table['Iu'] = wind.smooth(table['Iu'], smoothWindow[1], **kwargs_smooth)
+            table['Iv'] = wind.smooth(table['Iv'], smoothWindow[2], **kwargs_smooth)
+            table['Iw'] = wind.smooth(table['Iw'], smoothWindow[3], **kwargs_smooth)
+            table['xLu'] = wind.smooth(table['xLu'], smoothWindow[4], **kwargs_smooth)
+            table['xLv'] = wind.smooth(table['xLv'], smoothWindow[5], **kwargs_smooth)
+            table['xLw'] = wind.smooth(table['xLw'], smoothWindow[6], **kwargs_smooth)
+
         return table
     
     def addInflow(self, caseName, sampleName, name=None, nSpectAvg=None):
@@ -875,7 +889,7 @@ class inflowTuner:
         else:
             self.incidents.profiles.append(prof)
 
-    def __curveRatio(self, x1, x2, y1, y2, smoothWindow=1, castToUniform=True, nPoints=100, kwargs_smooth={}):
+    def __curveRatio____redacted(self, x1, x2, y1, y2, smoothWindow=1, castToUniform=True, nPoints=100, kwargs_smooth={}):
         if castToUniform:
             all_x = np.linspace(np.min(np.concatenate((x1, x2))), np.max(np.concatenate((x1, x2))), nPoints)
         else:
@@ -885,31 +899,31 @@ class inflowTuner:
         all_y = wind.smooth(all_y1/all_y2, window_len=smoothWindow, **kwargs_smooth)
         return all_x, all_y
 
-    def __profRatio(self, prof1, prof2, smoothWindow=1, castToUniform=True, nPoints=100, LES_useRange_Z=[0, 100], kwargs_smooth={}):
+    def __profRatio____redacted(self, prof1, prof2, smoothWindow=1, castToUniform=True, nPoints=100, LES_useRange_Z=[0, 100], kwargs_smooth={}):
         table = pd.DataFrame()
         s = np.argmin(np.abs(prof2.Z - LES_useRange_Z[0]))
         e = np.argmin(np.abs(prof2.Z - LES_useRange_Z[1]))
         
-        table['Z'], table['U'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.U, prof2.U[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+        table['Z'], table['U'] = self.__curveRatio____redacted(prof1.Z, prof2.Z[s:e], prof1.U, prof2.U[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
                                                    kwargs_smooth=kwargs_smooth)
-        _, table['Iu'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.Iu, prof2.Iu[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+        _, table['Iu'] = self.__curveRatio____redacted(prof1.Z, prof2.Z[s:e], prof1.Iu, prof2.Iu[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
                                            kwargs_smooth=kwargs_smooth)
-        _, table['Iv'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.Iv, prof2.Iv[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+        _, table['Iv'] = self.__curveRatio____redacted(prof1.Z, prof2.Z[s:e], prof1.Iv, prof2.Iv[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
                                            kwargs_smooth=kwargs_smooth)
-        _, table['Iw'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.Iw, prof2.Iw[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+        _, table['Iw'] = self.__curveRatio____redacted(prof1.Z, prof2.Z[s:e], prof1.Iw, prof2.Iw[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
                                            kwargs_smooth=kwargs_smooth)
-        _, table['xLu'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.xLu, prof2.xLu[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+        _, table['xLu'] = self.__curveRatio____redacted(prof1.Z, prof2.Z[s:e], prof1.xLu, prof2.xLu[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
                                            kwargs_smooth=kwargs_smooth)
-        _, table['xLv'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.xLv, prof2.xLv[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+        _, table['xLv'] = self.__curveRatio____redacted(prof1.Z, prof2.Z[s:e], prof1.xLv, prof2.xLv[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
                                            kwargs_smooth=kwargs_smooth)
-        _, table['xLw'] = self.__curveRatio(prof1.Z, prof2.Z[s:e], prof1.xLw, prof2.xLw[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
+        _, table['xLw'] = self.__curveRatio____redacted(prof1.Z, prof2.Z[s:e], prof1.xLw, prof2.xLw[s:e], smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, 
                                            kwargs_smooth=kwargs_smooth)
         e = np.argmin(np.abs(table['Z'] - LES_useRange_Z[1]))
         for comp in ['U', 'Iu', 'Iv', 'Iw', 'xLu', 'xLv', 'xLw']:
             table[comp][e:] = table[comp][e-1]
         return table
 
-    def getScaledTarget(self, smoothWindow=1, scaleByInflow=False, nPoints=100, castToUniform=True, LES_useRange_Z=[0, 100], kwargs_smooth={}):
+    def getScaledTarget__redacted(self, smoothWindow=1, scaleByInflow=False, nPoints=100, castToUniform=True, LES_useRange_Z=[0, 100], kwargs_smooth={}):
         # if self.target is None or self.incidents is None or (self.inflows is None and scaleByInflow):
         #     return None, None, None
         
@@ -935,7 +949,7 @@ class inflowTuner:
         factors = []
         scaledTables = []
         for i, prof in enumerate(profs.profiles):
-            factors.append(self.__profRatio(self.target, prof, smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, LES_useRange_Z=LES_useRange_Z, kwargs_smooth=kwargs_smooth))
+            factors.append(self.__profRatio____redacted(self.target, prof, smoothWindow=smoothWindow, castToUniform=castToUniform, nPoints=nPoints, LES_useRange_Z=LES_useRange_Z, kwargs_smooth=kwargs_smooth))
 
             scaledTable = target.copy()
             for col in ['U', 'Iu', 'Iv', 'Iw', 'xLu', 'xLv', 'xLw']:
@@ -944,11 +958,14 @@ class inflowTuner:
         return scaledTables, factors, names
 
     def writeProfile(self, rounds=0, dir=None, name='profile', caseName='infl', figsize=[15,15], zLim=[0,10], scaleByFixedRefHeightRatio=True, description=" ",
-                     debugMode=False, applySmoothing=True, compensateFor_xLi_in_Ii=False,
+                     debugMode=False, smoothTheTarget=True, smoothRatios=False, compensateFor_xLi_in_Ii=False,
                      zMax_scaling=None, zMin_scaling=None, scale_xLi=True, applyLimitedSmoothing=False,
-                     smoothWindow=[50, 50, 50, 50, 200, 150, 200], kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True,
-                                                                                     'paddingFactor':2, 'paddingMode':'edge'},):
-        def plotThese(profs:List[pd.DataFrame]=[], names=[], ratio:pd.DataFrame=None, mainTitle=caseName, markers=None, color=None, lwgts=None, lss=None):
+                     smoothWindow_ratios=[50, 50, 50, 50, 200, 150, 200], 
+                     smoothWindow_target=[50, 50, 50, 50, 200, 150, 200], 
+                     kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True, 'paddingFactor':2, 'paddingMode':'edge'},
+                     ):
+        def plotThese(profs:List[pd.DataFrame]=[], names=[], ratio:pd.DataFrame=None, mainTitle=caseName, markers=None, color=None, lwgts=None, lss=None,
+                      saveToFile=True):
             if not debugMode:
                 return
             if len(profs) == 0:
@@ -962,9 +979,11 @@ class inflowTuner:
             axs[1].axis('off')
             axs[2].axis('off')
             ax_legend = axs[1]
-            mrkrs = ['.', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X', '*', 'H', '1', '2', '3', '4', '+', 'x', '|', '_'] 
-            markers = mrkrs if markers is None else markers
-            cols = ['k', 'b', 'r', 'g', 'm', 'c', 'y'] if color is None else color
+            # mrkrs = ['.', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X', '*', 'H', '1', '2', '3', '4', '+', 'x', '|', '_'] 
+            longListOfMarkers = ['.', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X', '*', 'H', '1', '2', '3', '4', '+', 'x', '|', '_', 'o', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X', '*', 'H', '1', '2', '3', '4', '+', 'x', '|', '_', 'o', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X', '*', 'H', '1', '2', '3', '4', '+', 'x', '|', '_', 'o', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X', '*', 'H', '1', '2', '3', '4', '+', 'x', '|', '_', 'o', 's', 'd', 'v', '^', '<', '>', 'p', 'h', '8', 'D', 'P', 'X', '*', 'H', '1', '2', '3', '4', '+', 'x', '|', '_', ]
+            markers = longListOfMarkers if markers is None else markers
+            longListOfColors = ['k', 'b', 'r', 'g', 'm', 'c', 'y', 'tab:gray', 'tab:olive', 'tab:orange', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', ]
+            cols = longListOfColors if color is None else color
             lwgts = [1,]*len(profs) if lwgts is None else lwgts
             lss = ['-',]*len(profs) if lss is None else lss
             
@@ -987,15 +1006,16 @@ class inflowTuner:
                 wind.formatAxis(ax)
             # show all legends from ax and ax2 in one legend
             handles, labels = ax.get_legend_handles_labels()
-            handles2, labels2 = ax2.get_legend_handles_labels()
-            handles.extend(handles2)
-            labels.extend(labels2)
+            if ratio is not None:
+                handles2, labels2 = ax2.get_legend_handles_labels()
+                handles.extend(handles2)
+                labels.extend(labels2)
             ax_legend.legend(handles, labels, loc='center', ) #bbox_to_anchor=(0.5, 0.5))
             
             plt.tight_layout()
             if mainTitle is not None:
                 fig.suptitle(mainTitle)
-            if dir is not None:
+            if dir is not None and saveToFile:
                 plt.savefig(dir+caseName+"_round"+str(rounds)+".svg", dpi=300)
 
         def interpToZ(prof, Z, merge=True):
@@ -1012,7 +1032,7 @@ class inflowTuner:
             prof_out['xLw'] = np.interp(Z, prof.Z, prof.xLw) #, left=prof.xLw[0], right=prof.xLw[-1])
             return prof_out
         
-        def smooth_profile(prof,imin=0, imax=-1, smoothWindow=smoothWindow, kwargs_smooth=kwargs_smooth):
+        def smooth_profile(prof,imin=0, imax=-1, smoothWindow=smoothWindow_ratios, kwargs_smooth=kwargs_smooth):
             prof_out = prof.copy()
             prof_out['U'][imin:imax] = wind.smooth(prof['U'][imin:imax], smoothWindow[0], **kwargs_smooth)
             prof_out['Iu'][imin:imax] = wind.smooth(prof['Iu'][imin:imax], smoothWindow[1], **kwargs_smooth)
@@ -1023,14 +1043,15 @@ class inflowTuner:
             prof_out['xLw'][imin:imax] = wind.smooth(prof['xLw'][imin:imax], smoothWindow[6], **kwargs_smooth)
             return prof_out
 
-        def prof_ratio(prof_target, prof_attempt, scaleByFixedRatio, zMaxCommon=None, zMinCommon=None, include_xLi=True):
+        def prof_ratio(prof_target, prof_attempt, scaleByFixedRatio, smooth, zMaxCommon=None, zMinCommon=None, include_xLi=True):
+            printlog('    Scaling profile ...')
             if not np.array_equal(prof_target.Z, prof_attempt.Z):
                 Z = np.unique(np.sort(np.concatenate((prof_target.Z, prof_attempt.Z))))
                 prof_attempt = interpToZ(prof_attempt, Z)
                 prof_target = interpToZ(prof_target, Z)
             ratio = pd.DataFrame()
             if scaleByFixedRatio:
-                print("    Scaling type\t\t\t: Fixed roof-height ratio.")
+                printlog("    Scaling type\t\t\t: Fixed roof-height ratio.")
                 hIdx = np.argmin(np.abs(prof_target.Z - self.H))
                 ratio['Z'] = prof_target['Z']
                 ratio['U'] = np.ones_like(prof_target['Z'])*prof_target['U'][hIdx]/prof_attempt['U'][hIdx]
@@ -1041,7 +1062,7 @@ class inflowTuner:
                 ratio['xLv'] = np.ones_like(prof_target['Z'])*prof_target['xLv'][hIdx]/prof_attempt['xLv'][hIdx]
                 ratio['xLw'] = np.ones_like(prof_target['Z'])*prof_target['xLw'][hIdx]/prof_attempt['xLw'][hIdx]
             else:
-                print("    Scaling type\t\t\t: Full-profile ratio.")
+                printlog("    Scaling type\t\t\t: Full-profile ratio.")
                 ratio['Z'] = prof_target['Z']
                 ratio['U'] = prof_target['U']/prof_attempt['U']
                 ratio['Iu'] = prof_target['Iu']/prof_attempt['Iu']
@@ -1052,9 +1073,11 @@ class inflowTuner:
                 ratio['xLw'] = prof_target['xLw']/prof_attempt['xLw']
 
             if zMinCommon is None:
+                printlog(f"    Scaling range\t\t\t: Full profile from min Z = {np.min(ratio['Z'])} ...")
                 imin = 0
             else:
                 imin = np.argmin(np.abs(ratio['Z'] - zMinCommon))
+                printlog("    Scaling range\t\t\t: "+str(zMinCommon)+" < Z < "+str(zMaxCommon))
                 ratio['U'][:imin] = ratio['U'][imin]
                 ratio['Iu'][:imin] = ratio['Iu'][imin]
                 ratio['Iv'][:imin] = ratio['Iv'][imin]
@@ -1063,9 +1086,11 @@ class inflowTuner:
                 ratio['xLv'][:imin] = ratio['xLv'][imin]
                 ratio['xLw'][:imin] = ratio['xLw'][imin]
             if zMaxCommon is None:
+                printlog("    Scaling range\t\t\t: Full profile.")
                 imax = -1
             else:
                 imax = np.argmin(np.abs(ratio['Z'] - zMaxCommon))
+                printlog("    Scaling range\t\t\t: "+str(zMinCommon)+" < Z < "+str(zMaxCommon))
                 ratio['U'][imax:] = ratio['U'][imax]
                 ratio['Iu'][imax:] = ratio['Iu'][imax]
                 ratio['Iv'][imax:] = ratio['Iv'][imax]
@@ -1074,8 +1099,9 @@ class inflowTuner:
                 ratio['xLv'][imax:] = ratio['xLv'][imax]
                 ratio['xLw'][imax:] = ratio['xLw'][imax]
 
-            if applySmoothing:
+            if smooth:
                 if applyLimitedSmoothing:
+                    printlog("    Smoothing\t\t\t: Limited smoothing.")
                     ratio = smooth_profile(ratio, imin, imax)
                 else:
                     ratio = smooth_profile(ratio)
@@ -1083,6 +1109,7 @@ class inflowTuner:
                 ratio['xLu'] = 1.0
                 ratio['xLv'] = 1.0
                 ratio['xLw'] = 1.0
+
             return ratio
 
         def profileObj_to_df(prof):
@@ -1117,39 +1144,101 @@ class inflowTuner:
             prof_out['xLw'] *= prof2['xLw']
             return prof_out
 
-        target_0 = self.targetProfileTable(smoothWindow=smoothWindow, castToUniform=True, kwargs_smooth=kwargs_smooth)
-        r = 0
-        profs_in = [target_0,]
-        profs_out = []
+        def getPrintTxt(ratio_i, ratio_cum):
+            txt = 'Case name\t\t\t\t\t: '+caseName+'\n'
+            txt += 'Description\t\t\t\t\t: '+description+'\n'
+            txt += 'Date\t\t\t\t\t\t: '+str(datetime.datetime.now())+'\n'
+            txt += 'Scaling rounds\t\t\t\t: '+str(rounds)+'\n'
+            txt += 'Scale by fixed Zref ratio\t: '+str(scaleByFixedRefHeightRatio)+'\n'
+            txt += 'Scale xLi\t\t\t\t\t: '+str(scale_xLi)+'\n'
+            txt += 'Compensate for xLi in Ii\t: '+str(compensateFor_xLi_in_Ii)+'\n'
+            txt += 'Smooth the target\t\t\t: '+str(smoothTheTarget)+'\n'
+            txt += 'Smooth ratios\t\t\t\t: '+str(smoothRatios)+'\n'
+            txt += 'Smooth window (ratios) \t\t: '+str(smoothWindow_ratios)+'\n'
+            txt += 'Smooth window (target) \t\t: '+str(smoothWindow_target)+'\n'
+            txt += 'Apply limited smoothing\t\t: '+str(applyLimitedSmoothing)+'\n'
+            txt += 'Smoothing kwargs\t\t\t: '+str(kwargs_smooth)+'\n'
+            txt += 'Zmax scaling\t\t\t\t: '+str(zMax_scaling)+'\n'
+            txt += 'Zmin scaling\t\t\t\t: '+str(zMin_scaling)+'\n'
+            if dir is not None:
+                txt += 'Profile written to\t\t\t: '+str(dir)+'/'+name+'\n'
+            else:
+                txt += 'Profile written to\t\t\t: None\n'
+            txt += f'\nScaling info at roof height (H = {self.H}):\n'
+
+            for r in range(rounds):
+                i = np.argmin(np.abs(ratio_i[r+1]['Z'] - self.H))
+                txt += f"    Scaling round \t\t\t\t\t: {r+1}\n"
+                txt += f"    Fixed ratio scaling \t\t\t: {scaleByFixedRefHeightRatio[r]}\n"
+                txt += f"    Scale xLi \t\t\t\t\t\t: {scale_xLi[r]}\n"
+                txt += f"    Apply smoothing to the ratio \t: {smoothRatios[r]}\n"
+                txt += f"    Ratio \t\t\t\t\t\t\t= {profs_in_names[0]} / {profs_in_names[-1]}\n"
+                txt += f"    Roof height ratio (current) \t: U = {ratio_i[r+1]['U'][i]:.3f}, Iu = {ratio_i[r+1]['Iu'][i]:.3f}, Iv = {ratio_i[r+1]['Iv'][i]:.3f}, "+\
+                        f"Iw = {ratio_i[r+1]['Iw'][i]:.3f}, xLu = {ratio_i[r+1]['xLu'][i]:.3f}, xLv = {ratio_i[r+1]['xLv'][i]:.3f}, xLw = {ratio_i[r+1]['xLw'][i]:.3f}\n"
+                txt += f"    Roof height ratio (cumulative) \t: U = {ratio_cum[r+1]['U'][i]:.3f}, Iu = {ratio_cum[r+1]['Iu'][i]:.3f}, Iv = {ratio_cum[r+1]['Iv'][i]:.3f}, "+\
+                        f"Iw = {ratio_cum[r+1]['Iw'][i]:.3f}, xLu = {ratio_cum[r+1]['xLu'][i]:.3f}, xLv = {ratio_cum[r+1]['xLv'][i]:.3f}, xLw = {ratio_cum[r+1]['xLw'][i]:.3f}\n"
+                txt += '\n'
+            txt += '\n'
+            return txt
+
+        '''
+        # target_0 = self.targetProfileTable(smoothWindow=smoothWindow, castToUniform=True, kwargs_smooth=kwargs_smooth)
+        # r = 0
+        # profs_in = [target_0,]
+        # profs_out = []
+        # profs_in_names = [self.target.name,]
+        # profs_out_names = []
+        # ratios = [target_0/target_0]
+        # ratios[0] = ratios[0].fillna(1.0)
+        # scale_xLi = [scale_xLi,]*(rounds+1) if np.isscalar(scale_xLi) else scale_xLi
+        # scaleByFixedRefHeightRatio = [scaleByFixedRefHeightRatio,]*(rounds+1) if np.isscalar(scaleByFixedRefHeightRatio) else scaleByFixedRefHeightRatio
+
+        # while r < rounds:
+        #     print('Scaling round: '+str(r))
+        #     profs_out.append(profileObj_to_df(self.incidents.profiles[r]))
+        #     profs_out_names.append(self.incidents.profiles[r].name)
+        #     zMax_scaling = 0.8*min(np.array(profs_out[r]['Z'])[-1], np.array(target_0['Z'])[-1]) if zMax_scaling is None else zMax_scaling
+        #     zMin_scaling = 1.2*max(np.array(profs_out[r]['Z'])[0], np.array(target_0['Z'])[0]) if zMin_scaling is None else zMin_scaling
+        #     ratios.append(prof_ratio(profs_in[r], profs_out[r], zMaxCommon=zMax_scaling, zMinCommon=zMin_scaling, scaleByFixedRatio=scaleByFixedRefHeightRatio[r], 
+        #                              include_xLi=scale_xLi[r] ))
+        #     ratios[r+1] = multiply_profiles(ratios[r], ratios[r+1],)
+        #     profs_in.append(multiply_profiles(profs_in[0], ratios[r+1],))
+        #     profs_in_names.append(profs_out_names[r-1]+' (scaled)')
+        #     print('    Input \t\t\t\t: '+ str(profs_in_names[r]))
+        #     print('    Latest ED LES \t\t\t: '+ str(profs_out_names[r]))
+        #     print(f"    Latest roof height ratio \t\t: U = {ratios[r]['U'][0]:.3f}, Iu = {ratios[r]['Iu'][0]:.3f}, Iv = {ratios[r]['Iv'][0]:.3f}, "+
+        #           f"Iw = {ratios[r]['Iw'][0]:.3f}, xLu = {ratios[r]['xLu'][0]:.3f}, xLv = {ratios[r]['xLv'][0]:.3f}, xLw = {ratios[r]['xLw'][0]:.3f}")
+        #     print(f"    Cumulative roof height ratio \t: U = {ratios[r+1]['U'][0]:.3f}, Iu = {ratios[r+1]['Iu'][0]:.3f}, Iv = {ratios[r+1]['Iv'][0]:.3f}, "+
+        #             f"Iw = {ratios[r+1]['Iw'][0]:.3f}, xLu = {ratios[r+1]['xLu'][0]:.3f}, xLv = {ratios[r+1]['xLv'][0]:.3f}, xLw = {ratios[r+1]['xLw'][0]:.3f}\n")
+        #     r += 1
+        # prof_latest_incident = profileObj_to_df(self.incidents.profiles[r-1]) if rounds > 0 else None
+        # ratio = ratios[-1]
+        # prof = profs_in[-1]
+        '''
+
+        target_0 = self.targetProfileTable(smoothWindow=smoothWindow_target, castToUniform=True, smoothen=smoothTheTarget, kwargs_smooth=kwargs_smooth)
+        ratio_i = [prof_ratio(target_0, target_0, True, smoothTheTarget),]
+        ratio_cum = ratio_i.copy()
+        profs_cum = [target_0,]
         profs_in_names = [self.target.name,]
-        profs_out_names = []
-        ratios = [target_0/target_0]
-        ratios[0] = ratios[0].fillna(1.0)
-        scale_xLi = [scale_xLi,]*(rounds+1) if np.isscalar(scale_xLi) else scale_xLi
-        scaleByFixedRefHeightRatio = [scaleByFixedRefHeightRatio,]*(rounds+1) if np.isscalar(scaleByFixedRefHeightRatio) else scaleByFixedRefHeightRatio
 
-        while r < rounds:
-            print('Scaling round: '+str(r))
-            profs_out.append(profileObj_to_df(self.incidents.profiles[r]))
-            profs_out_names.append(self.incidents.profiles[r].name)
-            zMax_scaling = 0.8*min(np.array(profs_out[r]['Z'])[-1], np.array(target_0['Z'])[-1]) if zMax_scaling is None else zMax_scaling
-            zMin_scaling = 1.2*max(np.array(profs_out[r]['Z'])[0], np.array(target_0['Z'])[0]) if zMin_scaling is None else zMin_scaling
-            ratios.append(prof_ratio(profs_in[r], profs_out[r], zMaxCommon=zMax_scaling, zMinCommon=zMin_scaling, scaleByFixedRatio=scaleByFixedRefHeightRatio[r], 
-                                     include_xLi=scale_xLi[r] ))
-            ratios[r+1] = multiply_profiles(ratios[r], ratios[r+1],)
-            profs_in.append(multiply_profiles(profs_in[0], ratios[r+1],))
-            profs_in_names.append(profs_out_names[r-1]+' (scaled)')
-            print('    Input \t\t\t\t: '+ str(profs_in_names[r]))
-            print('    Latest ED LES \t\t\t: '+ str(profs_out_names[r]))
-            print(f"    Latest roof height ratio \t\t: U = {ratios[r]['U'][0]:.3f}, Iu = {ratios[r]['Iu'][0]:.3f}, Iv = {ratios[r]['Iv'][0]:.3f}, "+
-                  f"Iw = {ratios[r]['Iw'][0]:.3f}, xLu = {ratios[r]['xLu'][0]:.3f}, xLv = {ratios[r]['xLv'][0]:.3f}, xLw = {ratios[r]['xLw'][0]:.3f}")
-            print(f"    Cumulative roof height ratio \t: U = {ratios[r+1]['U'][0]:.3f}, Iu = {ratios[r+1]['Iu'][0]:.3f}, Iv = {ratios[r+1]['Iv'][0]:.3f}, "+
-                    f"Iw = {ratios[r+1]['Iw'][0]:.3f}, xLu = {ratios[r+1]['xLu'][0]:.3f}, xLv = {ratios[r+1]['xLv'][0]:.3f}, xLw = {ratios[r+1]['xLw'][0]:.3f}\n")
-            r += 1
-        prof_latest_incident = profileObj_to_df(self.incidents.profiles[r-1]) if rounds > 0 else None
-        ratio = ratios[-1]
-        prof = profs_in[-1]
+        smoothRatios = [smoothRatios,]*(rounds+1) if np.isscalar(smoothRatios) else smoothRatios
+        
+        for r in range(rounds):
+            LES = profileObj_to_df(self.incidents.profiles[r])
+            profs_in_names.append(self.incidents.profiles[r].name)
+            zMax_scaling = 0.8*min(np.array(LES['Z'])[-1], np.array(target_0['Z'])[-1]) if zMax_scaling is None else zMax_scaling
+            zMin_scaling = 1.2*max(np.array(LES['Z'])[0], np.array(target_0['Z'])[0]) if zMin_scaling is None else zMin_scaling
 
+            ratio = prof_ratio(target_0, LES, zMaxCommon=zMax_scaling, zMinCommon=zMin_scaling, scaleByFixedRatio=scaleByFixedRefHeightRatio[r],
+                               smooth=smoothRatios[r], include_xLi=scale_xLi[r])
+            ratio_i.append(ratio)
+            ratio_cum.append(multiply_profiles(ratio_cum[-1], ratio))
+            profs_cum.append(multiply_profiles(target_0, ratio_cum[r+1]))
+
+        print(getPrintTxt(ratio_i, ratio_cum))
+        prof = profs_cum[-1]
+        ratio = ratio_cum[-1]
 
         if dir is not None:
             if not os.path.exists(dir):
@@ -1157,42 +1246,29 @@ class inflowTuner:
             prof.to_csv(dir+'/'+name, index=False, sep=' ', float_format='%.6e', header=False)
             print('Profile written to: '+dir+'/'+name)
             with open(dir+'/'+caseName+'_info.txt', 'w') as f:
-                f.write('Case name\t\t\t\t\t: '+caseName+'\n')
-                f.write('Description\t\t\t\t\t: '+description+'\n')
-                f.write('Date\t\t\t\t\t\t: '+str(datetime.datetime.now())+'\n')
-                f.write('Scaling rounds\t\t\t\t: '+str(rounds)+'\n')
-                f.write('Scale by fixed Zref ratio\t: '+str(scaleByFixedRefHeightRatio)+'\n')
-                f.write('Scale xLi\t\t\t\t\t: '+str(scale_xLi)+'\n')
-                f.write('Apply smoothing\t\t\t\t: '+str(applySmoothing)+'\n')
-                f.write('Compensate for xLi in Ii\t: '+str(compensateFor_xLi_in_Ii)+'\n')
-                f.write('Apply limited smoothing\t\t: '+str(applyLimitedSmoothing)+'\n')
-                f.write('Smooth window\t\t\t\t: '+str(smoothWindow)+'\n')
-                f.write('Smooth kwargs\t\t\t\t: '+str(kwargs_smooth)+'\n')
-                f.write('Zmax scaling\t\t\t\t: '+str(zMax_scaling)+'\n')
-                f.write('Zmin scaling\t\t\t\t: '+str(zMin_scaling)+'\n')
-                f.write('Profile written to\t\t\t: '+dir+'/'+name+'\n')
-                f.write('\nScaling info:\n')
-                for r in range(rounds):
-                    f.write('  SCALING ROUND '+str(r)+':\n')
-                    f.write('    Input\t\t\t\t\t: '+ str(profs_in_names[r])+'\n')
-                    f.write('    Latest ED LES\t\t\t\t: '+ str(profs_out_names[r])+'\n')
-                    f.write(f"    Latest Zref ratio \t\t: U = {ratios[r]['U'][0]:.3f}, Iu = {ratios[r]['Iu'][0]:.3f}, Iv = {ratios[r]['Iv'][0]:.3f}, "+
-                            f"Iw = {ratios[r]['Iw'][0]:.3f}, xLu = {ratios[r]['xLu'][0]:.3f}, xLv = {ratios[r]['xLv'][0]:.3f}, xLw = {ratios[r]['xLw'][0]:.3f}\n")
-                    f.write(f"    Cumulative Zref ratio \t: U = {ratios[r+1]['U'][0]:.3f}, Iu = {ratios[r+1]['Iu'][0]:.3f}, Iv = {ratios[r+1]['Iv'][0]:.3f}, "+
-                            f"Iw = {ratios[r+1]['Iw'][0]:.3f}, xLu = {ratios[r+1]['xLu'][0]:.3f}, xLv = {ratios[r+1]['xLv'][0]:.3f}, xLw = {ratios[r+1]['xLw'][0]:.3f}\n")
-                    f.write('\n')
-                f.write('\n')
+                f.write(getPrintTxt(ratio_i, ratio_cum))
                         
         if debugMode:
             toPlot = [profileObj_to_df(self.target), target_0]
             names = ['target'+' ('+self.target.name+')', 'target(smooth)']
-            if r > 0:
-                toPlot.append(prof_latest_incident)
-                names.append('latest EDS ('+self.incidents.profiles[r-1].name+')')
+            # if r > 0:
+            #     toPlot.append(prof_latest_incident)
+            #     names.append('latest EDS ('+self.incidents.profiles[r-1].name+')')
             toPlot.append(prof)
             names.append('next_prof')
             plotThese(profs=toPlot, names=names, ratio=ratio, mainTitle=caseName, color=['k', 'k', 'r', 'g'], lwgts=[1, 2, 2, 3], lss=['None', '-', '-', '-'], 
                       markers=['.', 'None', 'None', 'None'])
+            
+            toPlot = [profileObj_to_df(self.target), target_0]
+            names = ['target'+' ('+self.target.name+')', 'target(smooth)']
+            for r in range(rounds+1):
+                toPlot.append(profs_cum[r])
+                names.append(profs_in_names[r])
+            plotThese(profs=toPlot, names=names, ratio=None, mainTitle=caseName, 
+                      color=['k', 'k', 'r', 'g', 'b', 'c', 'm', 'y', 'tab:gray', 'tab:olive', 'tab:orange', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red',], 
+                      lwgts=[1, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, ], 
+                      lss=['None', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', ],
+                      markers=['.', 'None', 'None', 'None', 'None', 'None', 'None', 'None', 'None', 'None', 'None', 'None', 'None', 'None', 'None'])
             
         return prof
 

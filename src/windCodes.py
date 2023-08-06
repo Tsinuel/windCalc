@@ -189,10 +189,6 @@ def CpConversionFactor(from_: Literal['simulated', 'NBCC', 'ASCE'], to_: Literal
     """
     if debugMode:
         print(f"Calculating the lumped reference velocity conversion factors for C&C wind loads.")
-        print(f"\t\t  From \t\t---> \t To")
-        print(f"Type\t\t: {from_} \t---> \t {to_}")
-        print(f"z0\t\t: {from_z0:.3g} \t---> \t {to_z0:.3g}")
-        print(f"Z\t\t: {from_Z:.3g} \t\t---> \t {to_Z:.3g}")
         
     from_Z = np.array(from_Z) if isinstance(from_Z, list) or isinstance(from_Z, tuple) else from_Z
     if from_ == 'simulated':
@@ -212,8 +208,6 @@ def CpConversionFactor(from_: Literal['simulated', 'NBCC', 'ASCE'], to_: Literal
         to_gustDuration = 3600
     elif to_ == 'ASCE':
         to_gustDuration = 3
-    if debugMode:
-        print(f"gust_dur\t: {from_gustDuration:.5g} \t\t---> \t {to_gustDuration:.5g}")
     
     F_exp = velRatio_exposureChange(from_z0=from_z0, to_z0=to_z0, zg=zg, zref=to_Z) ** -2
     F_height = velRatio_heightChange(from_Z=from_Z, to_Z=to_Z, z0=from_z0) ** -2
@@ -221,10 +215,12 @@ def CpConversionFactor(from_: Literal['simulated', 'NBCC', 'ASCE'], to_: Literal
 
     factor = F_exp * F_height * F_gustDuration
     if debugMode:
-        print(f"\tExposure factor\t\t: {F_exp:.3g}")
-        print(f"\tHeight factor\t\t: {F_height:.3g}")
-        print(f"\tGust duration factor\t: {F_gustDuration:.3g}")
-        print(f"Combined factor\t\t\t: {factor:.3g}")
+        print(f"\t\tFrom \t\t---> \t To\t===>\tFactor")
+        print(f"Type\t\t{from_} \t---> \t {to_}")
+        print(f"z0\t\t{from_z0:.3g} \t\t---> \t {to_z0:.3g}\t===>\t{F_exp:.3g}")
+        print(f"Z\t\t{from_Z:.3g} \t\t---> \t {to_Z:.3g}\t===>\t{F_height:.3g}")
+        print(f"gust_dur\t{from_gustDuration:.5g} \t\t---> \t {to_gustDuration:.5g}\t===>\t{F_gustDuration:.3g}")
+        print(f"\t\t\tCOMBINED FACTOR\t\t\t{factor:.4g}\n")
     return factor
 
 
