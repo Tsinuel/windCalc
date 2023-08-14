@@ -632,7 +632,7 @@ def readVelProfile(caseDir, probeName,
                                                                 showLog=showLog)
                 pressure = np.transpose(pressure)
                 idxOfP = np.where(np.isin(np.round(time_p,decimals=6),np.round(time,decimals=6),assume_unique=True))[0]
-                pressure = pressure[:,idxOfP]
+                pressure = pressure[idxOfP,:]
                 time_p = time_p[idxOfP]
 
                 idxOfV = np.where(np.isin(np.round(time,decimals=6),np.round(time_p,decimals=6),assume_unique=True))[0]
@@ -653,6 +653,9 @@ def readVelProfile(caseDir, probeName,
         else:
             pressure = None
             # time_p = None
+    else:
+        pressure = None
+        # time_p = None
     if showLog:
         print("             << Done!")
         print("  >> Finished reading probe data.")
@@ -671,22 +674,41 @@ def readVelProfile(caseDir, probeName,
 def readSurfacePressure(caseDir, probeName, 
                     trimTimeSegs:List[List[float]]=[[0,0.5]],
                     shiftTimeToZero=True,
-                    showLog=True
+                    showLog=True,
+                    writeToFile=False,
+                    outDir=None,
+                    readFromNPY_file=False,
                     ):
     # caseName = os.path.abspath(caseDir).split(os.sep)[-1]
     postProcDir = caseDir+"/postProcessing/"
-    outDir = caseDir+"/_processed/"
-    os.makedirs(outDir, exist_ok=True)
+    outDir = caseDir+"/_processed/" if outDir is None else outDir
+    if writeToFile or readFromNPY_file:
+        if outDir is None:
+            outDir = caseDir+"/_processed/"
+        os.makedirs(outDir, exist_ok=True)
+
     if showLog:
         print("Processing OpenFOAM case:\t"+caseDir)
         print("Probe read from:\t\t"+postProcDir+probeName)
         print("  >> Reading probe data ...")
-    probes,time,pressure = read_OF_probe(probeName, postProcDir, "p", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
-    if showLog:
-        print("             << Done!")
-    
-    # name = caseName+"__"+probeName if name is None else name
 
+    if not readFromNPY_file:
+        probes,time,pressure = read_OF_probe(probeName, postProcDir, "p", trimTimeSegs=trimTimeSegs, showLog=showLog, shiftTimeToZero=shiftTimeToZero)
+        pressure = np.transpose(pressure)
+        if writeToFile:
+            if showLog:
+                print("  >> Writing data to NPY file.")
+                print("             << Done!")
+            np.save(outDir+probeName+"_pressure.npy",pressure)
+            np.save(outDir+probeName+"_probes.npy",probes)
+            np.save(outDir+probeName+"_time.npy",time)
+    else:
+        if showLog:
+            print("  >> Reading data from NPY file.")
+        pressure = np.load(outDir+probeName+"_pressure.npy")
+        probes = np.load(outDir+probeName+"_probes.npy")
+        time = np.load(outDir+probeName+"_time.npy")
+   
     if showLog:
         print("             << Done!")
         print("  >> Finished reading probe data.")
@@ -752,42 +774,49 @@ def writeProbeDict(file, points, fields=['p','U'], writeControl='adjustableRunTi
 
 class foamCase:
     def __init__(self, 
-                caseDir=None,
                 name=None,
-                trimTimeSegs:List[List[float]]=[0,0.5],
-                velProbeName_main=None,
-                velProbeName_all=None,
-                cpProbeName=None,
+                parentDir=None,
+                mainCaseDict= {},
+                    # {
+                    # 0.0: 'tngE2.00d.m0.v0', 
+                    # 10.0: 'tngE2.10d.m0.v0', 
+                    # 20.0: 'tngE2.20d.m0.v0',
+                    # 45.0: 'tngE2.45d.m0.v0',
+                    # 90.0: 'tngE2.90d.m0.v0',
+                    # },
+                mainProfileDict={'dir':None, 'probeName':None},
+
+                probeOrder=None,
+                trimTimeSegs:List[List[float]]=[0,1.0],
                 ) -> None:
-        self.caseDir = caseDir
         self.name = name
+        self.parentDir = parentDir
+        self.mainProfileDict = mainProfileDict
+
+        self.AoAs = list(mainCaseDict.keys())
+        self.mainCaseDirs = [parentDir+"/"+mainCaseDict[aoa] for aoa in self.AoAs]
+
+        self.probeOrder = probeOrder
         self.trimTimeSegs = trimTimeSegs
-        self.velProbeName_main = velProbeName_main
-        self.velProbeName_all = velProbeName_all
-        self.cpProbeName = cpProbeName
 
-        self.mainProfile = None
-        self.__allProfiles = None
-
+        self.pOfT = None
+        self.p0ofT = None
+        
         self.Refresh()
 
     def Refresh(self, **kwargs):
-        if self.caseDir is not None:
+        if self.parentDir is not None:
             if self.velProbeName_main is not None:
-                self.mainProfile = processVelProfile(self.caseDir, self.velProbeName_main, name=self.name, 
+                self.mainProfile = processVelProfile(self.parentDir, self.velProbeName_main, name=self.name, 
                                                      exportPlots=False,trimTimeSegs=self.trimTimeSegs, H=self.H, showLog=False, **kwargs)
             if self.velProbeName_all is not None:
                 self.__allProfiles = []
                 for probe in self.velProbeName_all:
-                    self.__allProfiles.append(processVelProfile(self.caseDir, probe, name=probe, exportPlots=False, 
+                    self.__allProfiles.append(processVelProfile(self.parentDir, probe, name=probe, exportPlots=False, 
                                                                 trimTimeSegs=self.trimTimeSegs, H=self.H, showLog=False, **kwargs))
 
-    @property
-    def allProfiles(self):
-        if self.__allProfiles is not None:
-            return wind.Profiles(self.__allProfiles)
-        else:
-            return None
+    def readProfile(self):
+        pass
 
 class inflowTuner:
     def __init__(self,
@@ -1345,6 +1374,47 @@ class inflowTuner:
         profs = wind.Profiles(profs)
 
         return profs.plotSpectra(figsize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_plt=kwargs_plt, **kwargs_pltSpectra)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

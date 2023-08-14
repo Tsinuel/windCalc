@@ -97,6 +97,7 @@ class BLWTL_HFPI:
                  pressureExtraChannels_tapNos:dict=None,
                  lowpassFreq=None,
                  Ntaps=-1,
+                 AoAsToRead=None,
                  trimTimeStart=None,
                  trimTimeEnd=None,
                  ) -> None:
@@ -105,6 +106,7 @@ class BLWTL_HFPI:
         self.Z_MainPitot = Z_MainPitot
         self.lowpassFreq = lowpassFreq
         self.Ntaps = Ntaps
+        self.AoAsToRead = AoAsToRead
         self.trimTimeStart = trimTimeStart
         self.trimTimeEnd = trimTimeEnd
 
@@ -153,22 +155,33 @@ class BLWTL_HFPI:
 
     def read(self):
         print("Reading HFPI data from: {}".format(self.caseDir))
-        self.files_pssr = glob.glob(os.path.join(self.caseDir, '*.pssr'))
-        file_names = [os.path.splitext(os.path.basename(file_name))[0] for file_name in self.files_pssr]
-        self.files_pssd = [os.path.join(self.caseDir, file+'.pssd') for file in file_names]
+        files_pssr = glob.glob(os.path.join(self.caseDir, '*.pssr'))
+        file_names = [os.path.splitext(os.path.basename(file_name))[0] for file_name in files_pssr]
+        files_pssd = [os.path.join(self.caseDir, file+'.pssd') for file in file_names]
+        self.files_pssr = []
+        self.files_pssd = []
 
         self.AoA = np.array([])
         self.sampleRate_orig = np.array([])
         self.all_WTTDATALOGs = []
-        N_AoA = len(self.files_pssd)
+        N_RawFiles = len(files_pssd) 
+        N_AoA = N_RawFiles if self.AoAsToRead is None else len(self.AoAsToRead)
 
-        for d,(file_pssd,file_pssr) in enumerate(zip(self.files_pssd,self.files_pssr)):
+        i = 0
+        for d,(file_pssd,file_pssr) in enumerate(zip(files_pssd,files_pssr)):
             print("   Reading file: {}".format(file_pssd))
             cp_data,analog,WTTDATALOG = readPSSfile(file_pssr,file_pssd)
+            AoA = float(WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][24][0][0][5][0][0])
+            if self.AoAsToRead is not None:
+                if not AoA in self.AoAsToRead:
+                    print(f"       AoA {AoA} is not in the list of AoAs to read: {self.AoAsToRead}. Skipping.")
+                    continue
+            self.files_pssd.append(file_pssd)
+            self.files_pssr.append(file_pssr)
             analog = np.transpose(analog)
             cp_data = np.transpose(cp_data)
             self.all_WTTDATALOGs.append(WTTDATALOG)
-            self.AoA = np.append(self.AoA,float(WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][24][0][0][5][0][0]))
+            self.AoA = np.append(self.AoA,AoA)
             self.CAL_factors.append({
                                 'Z':        WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][2][0][0][1], 
                                 'Zrms':     WTTDATALOG["APPSPE"][0][0][0][0][0][0][0][4][0][0][2][0][0][2],
@@ -186,8 +199,9 @@ class BLWTL_HFPI:
                 CpTH = np.zeros((N_AoA,Ntaps,N_t))
                 Nchnl,_ = np.shape(analog)
                 anTH = np.zeros((N_AoA,Nchnl,N_t))
-            CpTH[d,:,:] = cp_data[0:Ntaps,:]
-            anTH[d,:,:] = analog
+            CpTH[i,:,:] = cp_data[0:Ntaps,:]
+            anTH[i,:,:] = analog
+            i += 1
             
         if self.lowpassFreq is None:
             self.sampleRate = self.sampleRate_orig

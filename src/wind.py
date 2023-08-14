@@ -503,10 +503,10 @@ def coherence(pts1: np.ndarray, pts2: np.ndarray,
 def fitESDUgivenIuRef(
                     Zref,
                     IuRef,
-                    z0i=[1e-7,1e1],
+                    z0i=[1e-7,1.0],
                     Uref=10.0,
                     phi=30,
-                    ESDUversion='ESDU85',
+                    ESDUversion:Literal['ESDU74', 'ESDU85']='ESDU85',
                     tolerance=0.0001,
                     ):
     if ESDUversion == 'ESDU85':
@@ -796,6 +796,9 @@ def formatAxis(ax, gridMajor=True, gridMinor=False, tickLabelSize=10, labelSize=
     if gridMinor:
         ax.grid(True, which='minor', linestyle='--', linewidth=0.5, color=gridColor_mnr)
     return ax
+
+def getPlotParams(pltType:Literal['default','Prof-BLWT','Prof-LES','Prof-ANAL','Spect-BLWT','Spect-LES','Spect-ANAL']='default') -> dict:
+    pass
 
 #===============================================================================
 #================================ CLASSES ======================================
@@ -1287,9 +1290,9 @@ class profile:
 
         self.name = name
         self.profType = profType
-        self.X: Union[np.ndarray, None] = X  # [N_pts]
-        self.Y: Union[np.ndarray, None] = Y  # [N_pts]
-        self.Z: Union[np.ndarray, None] = Z  # [N_pts]
+        self.X: Union[np.ndarray, None] = np.array(X, float) if X is not None else None
+        self.Y: Union[np.ndarray, None] = np.array(Y, float) if Y is not None else None
+        self.Z: Union[np.ndarray, None] = np.array(Z, float) if Z is not None else None
         self.stats: Dict = stats
         self.fields = fields
 
@@ -1899,7 +1902,8 @@ class profile:
             fig.set_size_inches(figsize)
 
         self.plotProfile_basic1(fig=fig, ax_U=ax_U, ax_Iu=ax_Iu, **kwargs_profile)
-        self.SpectH.plot(fig=fig, ax_Suu=ax_Spect, **kwargs_spect)
+        if self.SpectH is not None:
+            self.SpectH.plot(fig=fig, ax_Suu=ax_Spect, **kwargs_spect)
 
         if newFig:
             formatAxis(ax_U, tickTop=False, gridMajor=False, gridMinor=False)
@@ -2035,8 +2039,8 @@ class Profiles:
         return copy.deepcopy(self)
 
     def plot(self, figsize=None, landscape=True, 
-             kwargs_profile={}, 
-             kwargs_spect={}):
+             kwargs_profile=None, 
+             kwargs_spect=None):
         if landscape:
             figsize = [12,5] if figsize is None else figsize
             fig, axs = plt.subplots(1,2)
@@ -2048,12 +2052,15 @@ class Profiles:
         ax_Spect = axs[1]
         fig.set_size_inches(figsize)
 
+        kwargs_profile = [{} if kwargs_profile is None else kwargs_profile[i] for i in range(self.N)]
+        kwargs_spect = [{} if kwargs_spect is None else kwargs_spect[i] for i in range(self.N)]
+
         for i, prof in enumerate(self.profiles):
             if i == 0:
-                kwargs_profile['overlay_H'] = True
+                kwargs_profile[i]['overlay_H'] = True
             else:
-                kwargs_profile['overlay_H'] = False
-            prof.plot(fig=fig, ax_U=ax_U, ax_Iu=ax_Iu, ax_Spect=ax_Spect, kwargs_profile=kwargs_profile, kwargs_spect=kwargs_spect)
+                kwargs_profile[i]['overlay_H'] = False
+            prof.plot(fig=fig, ax_U=ax_U, ax_Iu=ax_Iu, ax_Spect=ax_Spect, kwargs_profile=kwargs_profile[i], kwargs_spect=kwargs_spect[i])
 
         formatAxis(ax_U, tickTop=False, gridMajor=False, gridMinor=False)
         formatAxis(ax_Iu, tickRight=False, gridMajor=False, gridMinor=False)
@@ -2699,7 +2706,7 @@ class ESDU74:
 
     def toProfileObj(self,name=None,n=None) -> profile:
         if name is None:
-            name = 'ESDU-74 (z0='+str(self.z0)+'m)'
+            name = f'ESDU-74 (z0={self.z0:.3g}m)'
 
         if n is None:
             n = np.multiply(DEFAULT_RF, np.divide(self.Uref, self.Zref))
@@ -2990,7 +2997,7 @@ class ESDU85:
 
     def toProfileObj(self,name=None,n=None) -> profile:
         if name is None:
-            name = 'ESDU-85 (z0='+str(self.z0)+'m)'
+            name = f'ESDU-85 (z0={self.z0:.3g}m)'
 
         if n is None:
             n = np.multiply(DEFAULT_RF, np.divide(self.Uref, self.Zref))
@@ -3176,10 +3183,10 @@ class bldgCp(windCAD.building):
         self.fluidDensity = fluidDensity
 
         self.Zref = Zref_input
-        self.Uref = [Uref_input,] if np.isscalar(Uref_input) else Uref_input
+        self.AoA = [AoA,] if np.isscalar(AoA) else AoA          # [N_AoA]
+        self.Uref = [Uref_input for _ in AoA] if np.isscalar(Uref_input) else Uref_input
         self.Uref_FS = Uref_FS
         self.badTaps = badTaps
-        self.AoA = [AoA,] if np.isscalar(AoA) else AoA          # [N_AoA]
         self.AoA_zero_deg_basisVector = AoA_zero_deg_basisVector
         self.AoA_rotation_direction: Literal['CW','CCW'] = AoA_rotation_direction
         self.CpOfT = CpOfT      # [N_AoA,Ntaps,Ntime]
@@ -3234,9 +3241,19 @@ class bldgCp(windCAD.building):
         p0ofT = 0.0 if self.p0ofT is None else self.p0ofT
         if not np.isscalar(p0ofT) and not np.shape(p0ofT)[-1] == np.shape(self.pOfT)[-1]:
             raise Exception(f"The p and p0 time series for Cp calculation do not match in time steps. Shapes of p0ofT : {np.shape(p0ofT)}, pOfT : {np.shape(self.pOfT)}")
-        pOfT = np.empty(np.shape(self.pOfT))
-        self.CpOfT = np.divide(np.subtract(self.pOfT,p0ofT),
-                                0.5*self.fluidDensity*self.Uref**2)
+        CpOfT = np.empty(np.shape(self.pOfT))
+        print(f"Uref = {self.Uref}")
+        print(f"Shape of self.pOfT = {np.shape(self.pOfT)}")
+        print(f"Shape of p0ofT = {np.shape(p0ofT)}")
+        print(f"Shape of pOfT = {np.shape(CpOfT)}")
+        print(f"Shape of self.fluidDensity = {np.shape(self.fluidDensity)}")
+        for i, Uref in enumerate(self.Uref):
+            CpOfT[i,:,:] = np.divide(np.subtract(self.pOfT[i,:,:],p0ofT),
+                                    0.5*self.fluidDensity*Uref**2)
+        self.CpOfT = CpOfT 
+        #np.divide(np.subtract(self.pOfT,p0ofT),
+                                # 0.5*self.fluidDensity*self.Uref**2)
+        pass
 
     def __computeAreaAveragedCp(self):
         if self.NumPanels == 0 or self.CpOfT is None:
@@ -3683,7 +3700,8 @@ class bldgCp(windCAD.building):
         else:
             return None, None
 
-    def plotTapCpStatContour(self, fieldName, dxnIdx=None, envelopeType:Literal['high','low','both']='both', figSize=[15,10], ax=None, 
+    def plotTapCpStatContour(self, fieldName:Literal['mean','std','peak','peakMin','peakMax','skewness','kurtosis'], 
+                             dxnIdx=None, envelopeType:Literal['high','low','both']='both', figSize=[15,10], ax=None, 
                             fldRange=None, nLvl=100, cmap='RdBu', extend='both', title=None, colBarOrientation='horizontal',
                             showValuesOnContour=True, kwargs_contourTxt={'inline':True, 'fmt':'%.2g','fontsize':4, 'colors':'b'},
                             showContourEdge=True, kwargs_contourEdge={'colors':'k', 'linewidths':0.3, 'linestyles':'solid'},
@@ -3833,18 +3851,18 @@ class bldgCp(windCAD.building):
         return fig, axs
 
     def plotCandC_load(self, fig=None, axs=None,
-                            figSize=[15,10], sharex=True, sharey=True,
-                            plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, CandCLoadFormat:Literal['default','NBCC','ASCE']='default', 
-                            invertYAxis=True,
-                            label_min='Min', label_max='Max',
-                            overlayThese=None, overlayFactors=None, kwargs_overlay={'color':'k', 'linewidth':2, 'linestyle':'-'},
-                            subplotLabels=None, subplotLabels_xy=[0.05,0.95], kwargs_subplotLabels={'fontsize':14},
-                            legend_ax_idx=0,
-                            debugMode=False,
-                            plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], zoneShadeColor='k', kwargs_zonePlots={},
-                            xLimits=None, yLimits=None, xLabel=None, yLabel=None,
-                            kwargs_min={}, kwargs_max={}, kwargs_legend={},
-                            kwargs_ax={'gridMajor':True, 'gridMinor':True}):
+                    figSize=[15,10], sharex=False, sharey=False,
+                    plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, CandCLoadFormat:Literal['default','NBCC','ASCE']='default', 
+                    invertYAxis=False,
+                    label_min='Min', label_max='Max',
+                    overlayThese=None, overlayFactors=None, kwargs_overlay={'color':'k', 'linewidth':2, 'linestyle':'-'},
+                    subplotLabels=None, subplotLabels_xy=[0.05,0.95], kwargs_subplotLabels={'fontsize':14},
+                    legend_ax_idx=0,
+                    debugMode=False,
+                    plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], zoneShadeColor='k', kwargs_zonePlots={},
+                    xLimits=None, yLimits=None, xLabel=None, yLabel=None,
+                    kwargs_min={}, kwargs_max={}, kwargs_legend={},
+                    kwargs_ax={'gridMajor':True, 'gridMinor':True}):
         def addOverlay(ax, ar, val, overlayType, name='_', kwargs_overlay={}):
             if overlayThese is None:
                 return
@@ -3981,11 +3999,9 @@ class bldgCp(windCAD.building):
                 formatAxis(ax, **kwargs_ax)
 
         if bxPltObj is None:
-            print("No overlay boxplot was added")
             handles, labels = axs[0,0].get_legend_handles_labels()
             axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles, labels, **kwargs_legend)
         else:
-            print("Overlay boxplot was added")
             hndls, lbls = axs[0,0].get_legend_handles_labels()
             hndls.append(bxPltObj["boxes"][0])
             lbls.append(bxPltName)
@@ -4280,7 +4296,30 @@ class BldgCps():
             fig.legend(handles, labels, loc='upper center',ncol=nLgndCols, bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
             text = f"Page {p+1} of {nPages}\n Cases: {caseNames}"
             fig.text(pageNo_xy[0], pageNo_xy[1], text, ha='center', va='top')
+        
+        # turn off the remaining axes
+        if len(tapIdxs) < nPltPerPage*nPages:
+            axs = all_axes[-1]
+            nTapsOnLastPage = len(tapIdxs) - nPltPerPage*(nPages-1)
+            for i in range(nTapsOnLastPage, nPltPerPage):
+                ax = axs[np.unravel_index(i, axs.shape)]
+                ax.axis('off')
             
         return figs, all_axes
 
+#---------------------------------- GENERAL ------------------------------------
+class validator():
+    def __init__(self, 
+                target:Union[None, bldgCp, BldgCps]=None,
+                model:Union[None, bldgCp, BldgCps]=None,
+                refProfiles:Union[None, Profiles]=None,
+                ) -> None:
+        self.target: bldgCp = target
+        self.model: bldgCp = model
 
+        self.profiles = Profiles([self.target.profile, self.model.profile, refProfiles.profiles])
+        self.difference = None
+        pass
+
+    def compareProfiles(self):
+        pass
