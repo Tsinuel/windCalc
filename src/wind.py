@@ -14,6 +14,8 @@ import copy
 
 from typing import List,Literal,Dict,Tuple,Any,Union,Set
 from scipy import signal
+from scipy.stats import pearsonr
+from sklearn.metrics import r2_score
 from scipy.stats import skew,kurtosis
 from scipy.interpolate import interp1d
 from matplotlib.patches import Arc
@@ -61,6 +63,8 @@ PATH_SRC = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_RF = np.logspace(-5,3,400)
 
 VON_KARMAN_CONST = 0.4
+
+VALID_ERROR_TYPES = ['RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R2']
 
 with open(PATH_SRC+r'/refData/bluecoeff.json', 'r') as f:
     BLUE_COEFFS = json.load(f)
@@ -412,7 +416,9 @@ def get_velTH_stats_1pt(UofT: np.ndarray=None,
                     VofT: np.ndarray=None, 
                     WofT: np.ndarray=None,
                     timeAxis=1, dt=None,
-                    fields: List[Literal['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']]=DEFAULT_VELOCITY_STAT_FIELDS):
+                    fields: List[Literal['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']]=DEFAULT_VELOCITY_STAT_FIELDS,
+                    orderFields=True,
+                    ):
     if not all(x in VALID_VELOCITY_STAT_FIELDS for x in fields):
         msg = "Not all elements given as fields are valid. Choose from: "+str(VALID_VELOCITY_STAT_FIELDS)
         raise Exception(msg)
@@ -483,6 +489,9 @@ def get_velTH_stats_1pt(UofT: np.ndarray=None,
         if 'vw' in fields and vIsHere:
             stats['vw'] = np.mean(v_ofT*w_ofT, axis=timeAxis)
     
+    if orderFields:
+        stats = {k: stats[k] for k in fields}
+
     return stats
 
 def coherence(pts1: np.ndarray, pts2: np.ndarray,
@@ -515,8 +524,6 @@ def fitESDUgivenIuRef(
         es = ESDU74(z0=z0i[0],Zref=Zref,Uref=Uref,phi=phi)
     else:
         raise Exception("Unknown ESDU version: "+ESDUversion)
-    print("Zref = "+str(Zref))
-    print("IuRef = "+str(IuRef))
 
     z0_0 = z0i[0]
     z0_1 = z0i[1]
@@ -555,15 +562,17 @@ def fitESDUgivenIuRef(
 
 def getMathName(rawname):
     if rawname == 'U':
-        return '$U$'
+        return '$U$ [$m/s$]'
     elif rawname == 'U/Uh':
         return '$U/U_h$'
+    elif rawname == 'Uh':
+        return '$U_h$ [$m/s$]'
     elif rawname == 'V':
-        return '$V$'
+        return '$V$ [$m/s$]'
     elif rawname == 'V/Uh':
         return '$V/U_h$'
     elif rawname == 'W':
-        return '$W$'
+        return '$W$ [$m/s$]'
     elif rawname == 'W/Uh':
         return '$W/U_h$'
     elif rawname == 'Iu':
@@ -573,29 +582,49 @@ def getMathName(rawname):
     elif rawname == 'Iw':
         return '$I_w$'
     elif rawname == 'xLu':
-        return '$^xL_u$'
+        return '$^xL_u$ [$m$]'
     elif rawname == 'xLu/H':
         return '$^xL_u/H$'
     elif rawname == 'xLv':
-        return '$^xL_v$'
+        return '$^xL_v$ [$m$]'
     elif rawname == 'xLv/H':
         return '$^xL_v/H$'
     elif rawname == 'xLw':
-        return '$^xL_w$'
+        return '$^xL_w$ [$m/s$]'
     elif rawname == 'xLw/H':
         return '$^xL_w/H$'
     elif rawname == 'uv': 
-        return '$\\overline{u\'v\'}$'
+        return '$\\overline{u\'v\'}$ [$m^2/s^2$]'
     elif rawname == 'uv/Uh^2':
         return '$\\overline{u\'v\'}/U_h^2$'
     elif rawname == 'uw':
-        return '$\\overline{u\'w\'}$'
+        return '$\\overline{u\'w\'}$ [$m^2/s^2$]'
     elif rawname == 'uw/Uh^2':
         return '$\\overline{u\'w\'}/U_h^2$'
     elif rawname == 'vw':
-        return '$\\overline{v\'w\'}$'
+        return '$\\overline{v\'w\'}$ [$m^2/s^2$]'
     elif rawname == 'vw/Uh^2':
         return '$\\overline{v\'w\'}/U_h^2$'
+    elif rawname == 'H':
+        return '$H$ [$m$]'
+    elif rawname == 'z0':
+        return '$z_0$ [$m$]'
+    elif rawname == 'Je':
+        return '$Je$'
+    elif rawname == 'T':
+        return '$T$ [$s$]'
+    elif rawname == 'T_star':
+        return '$T^*$'
+    elif rawname == 'n_smpl':
+        return r'$n_{smpl}$ [$Hz$]'
+    elif rawname == 'f_smpl':
+        return r'$n_{smpl}H/U_h$'
+    elif rawname == 'lScl':
+        return '$\lambda_L$ = 1:'
+    elif rawname == 'vScl':
+        return '$\lambda_V$ = 1:'
+    elif rawname == 'tScl':
+        return '$\lambda_T$ = 1:'
     else:
         warnings.warn("Unknown rawname: "+rawname)
         return rawname
@@ -768,6 +797,80 @@ def get_CpTH_stats(TH,axis=0,
         stats['kurtosis'] = kurtosis(TH, axis=axis)
     return stats
 
+def measureError(model, data, errorTypes:Literal['all','RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R2']=['RMSE','NRMSE','MAE','PCC','R2']):
+    '''
+    Parameters
+    ----------
+    model : np.ndarray
+        The model data.
+    data : np.ndarray
+        The data to be compared with the model.
+    errorTypes : str or list of str, optional
+        The error type(s) to be calculated. The default is 'all'.
+        Error definitions:
+            RMSE: Root Mean Square Error. 
+                    $$\sqrt{\frac{1}{N}\sum_{i=1}^{N}(model_i - data_i)^2}$$
+            MAE: Mean Absolute Error.
+                    $$\frac{1}{N}\sum_{i=1}^{N}|model_i - data_i|$$
+            NMAE: Normalized Mean Absolute Error.
+                    $$\frac{1}{N}\sum_{i=1}^{N}\frac{|model_i - data_i|}{\bar{data}}$$
+            SMAPE: Symmetric Mean Absolute Percentage Error.
+                    $$\frac{1}{N}\sum_{i=1}^{N}\frac{|model_i - data_i|}{(|model_i| + |data_i|)/2}$$
+            MSLE: Mean Squared Logarithmic Error.
+                    $$\frac{1}{N}\sum_{i=1}^{N}(\log(model_i + 1) - \log(data_i + 1))^2$$
+            NRMSE: Normalized Root Mean Square Error.
+                    $$\frac{\sqrt{\frac{1}{N}\sum_{i=1}^{N}(model_i - data_i)^2}}{\bar{data}}$$
+            RAE: Relative Absolute Error.
+                    $$\frac{\sum_{i=1}^{N}|model_i - data_i|}{\sum_{i=1}^{N}|data_i - \bar{data}|}$$
+            MBD: Mean Bias Deviation.
+                    $$\frac{\sum_{i=1}^{N}(model_i - data_i)}{\sum_{i=1}^{N}data_i}$$
+            PCC: Pearson Correlation Coefficient.
+                    $$\frac{\sum_{i=1}^{N}(model_i - \bar{model})(data_i - \bar{data})}{\sqrt{\sum_{i=1}^{N}(model_i - \bar{model})^2}\sqrt{\sum_{i=1}^{N}(data_i - \bar{data})^2}}$$
+            RAW: Relative Absolute Error.
+                    $$\frac{\sum_{i=1}^{N}|model_i - data_i|}{\sum_{i=1}^{N}|data_i - \bar{data}|}$$
+
+    Returns
+    -------
+    error : dict
+        The error value(s) for the given error type(s).
+    '''
+
+    if errorTypes == 'all':
+        errorTypes = VALID_ERROR_TYPES
+    elif isinstance(errorTypes, str):
+        errorTypes = [errorTypes]
+    elif not isinstance(errorTypes, list):
+        raise Exception("Unknown error type(s): "+str(errorTypes))
+    errorTypes = [x.upper() for x in errorTypes]
+    if not all(x in VALID_ERROR_TYPES for x in errorTypes):
+        raise Exception("Unknown error type(s): "+str(errorTypes))
+    error = {}
+    for errorType in errorTypes:
+        if errorType == 'RMSE':
+            error['RMSE'] = np.sqrt(np.mean((model - data)**2))
+        elif errorType == 'MAE':
+            error['MAE'] = np.mean(np.abs(model - data))
+        elif errorType == 'NMAE':
+            error['NMAE'] = np.mean(np.abs(model - data)) / np.mean(data)
+        elif errorType == 'SMAPE':
+            error['SMAPE'] = np.mean(np.abs(model - data)) / (np.mean(np.abs(model)) + np.mean(np.abs(data)))
+        elif errorType == 'MSLE':
+            error['MSLE'] = np.mean((np.log(model + 1) - np.log(data + 1))**2)
+        elif errorType == 'NRMSE':
+            error['NRMSE'] = np.sqrt(np.mean((model - data)**2)) / np.mean(data)
+        elif errorType == 'RAE':
+            error['RAE'] = np.sum(np.abs(model - data)) / np.sum(np.abs(data - np.mean(data)))
+        elif errorType == 'MBD':
+            error['MBD'] = np.sum(model - data) / np.sum(data)
+        elif errorType == 'PCC':
+            error['PCC'] = pearsonr(model, data)[0]
+        elif errorType == 'RAE':
+            error['RAE'] = np.sum(np.abs(model - data)) / np.sum(np.abs(data - np.mean(data)))
+        elif errorType == 'R2':
+            error['R2'] = r2_score(data, model)
+        else:
+            raise Exception("Unknown error type: "+errorType)
+
 #-------------------------------- PLOTTING -------------------------------------
 def formatAxis(ax, gridMajor=True, gridMinor=False, tickLabelSize=10, labelSize=12,
                tickTop=True, tickRight=True, gridColor_mjr=[0.8,0.8,0.8], gridColor_mnr=[0.85,0.85,0.85], numFormat: Literal['general','scientific','default']='general',
@@ -797,7 +900,7 @@ def formatAxis(ax, gridMajor=True, gridMinor=False, tickLabelSize=10, labelSize=
         ax.grid(True, which='minor', linestyle='--', linewidth=0.5, color=gridColor_mnr)
     return ax
 
-def getPlotParams(pltType:Literal['default','Prof-BLWT','Prof-LES','Prof-ANAL','Spect-BLWT','Spect-LES','Spect-ANAL']='default') -> dict:
+def getPlotParams(pltType:Literal['default','Prof-BLWT','Prof-LES','Prof-CONT','Spect-BLWT','Spect-LES','Spect-CONT']='default') -> dict:
     pass
 
 #===============================================================================
@@ -1223,6 +1326,7 @@ class profile:
                 H=None, 
                 dt=None, 
                 t=None,
+                lScl=1.0,
                 UofT: np.ndarray=None, 
                 VofT: np.ndarray=None,
                 WofT: np.ndarray=None,
@@ -1300,6 +1404,7 @@ class profile:
         self.dt = dt
         self.samplingFreq = None if dt is None else 1/dt
         self.t = t
+        self.lScl = lScl
         self.UofT: np.ndarray = UofT  # [N_pts x nTime]
         self.VofT: np.ndarray = VofT  # [N_pts x nTime]
         self.WofT: np.ndarray = WofT  # [N_pts x nTime]
@@ -1509,6 +1614,7 @@ class profile:
         else:
             return self.uw/(self.Uh**2)
 
+    """----------------------------------- Methods ------------------------------------"""
     def stat_at_H(self, field):
         if self.H is None or self.stats is None:
             return None
@@ -1556,6 +1662,44 @@ class profile:
             else:
                 raise NotImplementedError("Normalization for field '{}' not implemented".format(field))
     
+    def paramsTable(self, normalized=True, fields=None,) -> dict:
+        if fields is None:
+            fields = list(self.stats.keys())
+            fields.extend(['Name','H','Uh','T','n_smpl','z0','Je'])
+            
+        data = {}
+        if 'Name' in fields:
+            data['Name'] = self.name
+        if 'H' in fields:
+            data[getMathName('H')] = self.H
+        if 'Uh' in fields:
+            data[getMathName('Uh')] = self.Uh
+
+        for st in self.stats.keys():
+            if st in fields:                
+                if normalized:
+                    temp,name = self.stat_norm(st)
+                    data[name] = temp[self.H_idx]
+                else:
+                    data[getMathName(st)] = self.stat_at_H(st)
+        if 'z0' in fields:
+            data[getMathName('z0')] = self.fitted_z0()
+        if 'Je' in fields:
+            data[getMathName('Je')] = self.Je()
+
+        if 'T' in fields:
+            if normalized:
+                data[getMathName('T_star')] = self.T_star
+            else:
+                data[getMathName('T')] = self.T
+        if 'n_smpl' in fields:
+            if normalized:
+                data[getMathName('f_smpl')] = self.samplingFreq * self.H/self.Uh
+            else:
+                data[getMathName('n_smpl')] = self.samplingFreq
+
+        return data
+
     """-------------------------------- Data handlers ---------------------------------"""
     def Refresh(self):
         self.__verifyData()
@@ -1635,7 +1779,7 @@ class profile:
         Z10 = 10*lScl
         return np.interp(Z10, self.Z, self.U)
 
-    def fitted_z0(self, fitTo:Literal['U','Iu']='Iu', lScl=1.0, uStar_init=1.0, z0_init=0.001, debugMode=False,
+    def fitted_z0(self, fitTo:Literal['U','Iu']='Iu', uStar_init=1.0, z0_init=0.001, debugMode=False,
                   kwargs_z0Fit={}) -> Union[float, None]:
         if fitTo == 'U':
             [zMin, zMax] = self.workSect_zLim
@@ -1645,8 +1789,8 @@ class profile:
             U = self.U[idxMin:idxMax+1]
             z0, _, _ = fitVelDataToLogProfile(Z, U, Zref=self.H, Uref=self.Uh, d=0.0, debugMode=debugMode, uStar_init=uStar_init, z0_init=z0_init, **kwargs_z0Fit)
         elif fitTo == 'Iu':
-            z0,_ = fitESDUgivenIuRef(self.H/lScl, self.SpectH.Iu, **kwargs_z0Fit)
-            z0 *= lScl
+            z0,_ = fitESDUgivenIuRef(self.H/self.lScl, self.SpectH.Iu, **kwargs_z0Fit)
+            z0 *= self.lScl
         else:
             raise NotImplementedError("Fitting to '{}' not implemented".format(fitTo))
         return z0
@@ -2038,6 +2182,22 @@ class Profiles:
     def copy(self):
         return copy.deepcopy(self)
 
+    def paramsTable(self, normalized=True, fields=None) -> dict:
+        params = None
+        for i, prof in enumerate(self.profiles):
+            if i == 0:
+                params = prof.paramsTable(normalized=normalized, fields=fields)
+                # change each entry to a list
+                for key in params.keys():
+                    params[key] = [params[key],]
+            else:
+                temp = prof.paramsTable(normalized=normalized, fields=fields)
+                # append each entry to the list
+                for key in temp.keys():
+                    params[key].append(temp[key])
+
+        return params
+
     def plot(self, figsize=None, landscape=True, 
              kwargs_profile=None, 
              kwargs_spect=None):
@@ -2195,6 +2355,21 @@ class Profiles:
         fig.set_size_inches(figsize)
 
         kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
+
+        if yLimits is None:
+            
+            allYlims = [] 
+            for i, prof in enumerate(self.profiles):
+                if prof.workSect_zLim is None:
+                    continue
+                else:
+                    normFactor = 1/prof.H if normalize else 1
+                    yl = [prof.workSect_zLim[0]*normFactor, prof.workSect_zLim[1]*normFactor] if prof.workSect_zLim is not None else None
+                    allYlims.append(yl)
+            if len(allYlims) == 0:
+                yLimits = None
+            else:
+                yLimits = [min([y[0] for y in allYlims]), max([y[1] for y in allYlims])]
 
         for i, prof in enumerate(self.profiles):
             if i == 0 and overlayThese is not None:
@@ -2479,6 +2654,60 @@ class Profiles:
             for key, cell in table.get_celld().items():
                 cell.set_linewidth(0)
 
+        fig.tight_layout()
+        plt.show()
+        return fig, ax
+
+    def plotParamsTable(self,
+                        fig=None,figsize=[0,5],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}',
+                        fontSz=10, normalize=True, colColors=None, colTxtColors=None,
+                        showBorder=True,
+                        kwargs_table={'loc':'center',
+                                        'cellLoc': 'center',
+                                        'bbox': [0.0, 0.0, 1.0, 1.0],}):
+        if fig is None:
+            fntFctr = 1.0 if fontSz is None else fontSz/10.0
+            if autoFigSize:
+                figsize[0] = 2*(self.N+1)*fntFctr*figWidthFctr
+            fig = plt.figure(figsize=figsize)
+        if ax is None:
+            ax = plt.subplot()
+        ax.axis('off')
+        ax.axis('tight')
+
+        tableContent = self.paramsTable(normalized=normalize)
+        cell_text = []
+        for key in tableContent.keys():
+            if key == 'Name':
+                continue
+            val = [strFmt.format(tableContent[key][i]) for i in range(self.N)]
+            val.insert(0,key)
+            cell_text.append(val)
+
+        table = ax.table(cellText=cell_text,
+                    colLabels=['Field',*[prof.name for prof in self.profiles]],
+                    **kwargs_table)
+        if fontSz is not None:
+            table.auto_set_font_size(False)
+            table.set_fontsize(fontSz)
+
+        # decorative edits
+        nRows = len(cell_text)+1
+        if colColors is not None:
+            for i in range(self.N):
+                for j in range(nRows):
+                    table[(j,i+1)].set_facecolor(colColors[i])
+        if colTxtColors is not None:
+            for i in range(self.N):
+                for j in range(nRows):
+                    table[(j,i+1)].set_text_props(color=colTxtColors[i])
+        for i in range(self.N+1):
+            table[(0,i)].set_text_props(weight='bold')
+        # for i in range(nRows):
+        #     table[(i,0)].set_text_props(weight='bold')
+        if not showBorder:
+            for key, cell in table.get_celld().items():
+                cell.set_linewidth(0)
 
         fig.tight_layout()
         plt.show()
@@ -3064,6 +3293,7 @@ class bldgCp(windCAD.building):
                 CpStats=None,
                 peakSpecs=DEFAULT_PEAK_SPECS,
                 keepTH=True,
+                reScaleProfileToMatchUref=True,
                 ):
         """
         This class handles the computation of building wind load by inheriting the windCAD.building 
@@ -3210,6 +3440,8 @@ class bldgCp(windCAD.building):
             self.tScl = self.lScl/self.vScl
         else:
             self.vScl = self.tScl = None
+        if reScaleProfileToMatchUref:
+            self.__reScaleProfileToMatchUref()
         self.Refresh()
         self.__N_t__ = None if self.CpOfT is None else np.shape(self.CpOfT)[-1]
         if not keepTH:
@@ -3302,6 +3534,47 @@ class bldgCp(windCAD.building):
             for fld in self.CpStats:
                 if fld in SCALABLE_CP_STATS:
                     self.CpStats[fld] = self.CpStats[fld]*factor
+
+    def __reScaleProfileToMatchUref(self, uref_tol=0.01):
+        if self.profile is None or self.Uref is None or self.Zref is None:
+            return
+        Uref_avg = np.mean(self.Uref)
+        U_ref_prof = np.interp(self.Zref, self.profile.Z, self.profile.U)
+        if np.abs(Uref_avg - U_ref_prof) < uref_tol:
+            return
+        if self.profile.UofT is None or self.profile.dt is None or self.profile.VofT is None or self.profile.WofT is None:
+            raise Exception(f"Cannot re-scale profile to match Uref of Cp. Profile time history (UofT, VofT, WofT, dt) is not available.")
+        
+        import inspect
+
+        print(f"Re-scaling profile to match Uref ...")
+        prof = self.profile.copy()
+        U_ratio = Uref_avg / U_ref_prof
+        time_ratio = 1/U_ratio
+        print(f"    Uref_avg = {Uref_avg:.3f} m/s")
+        print(f"    U_ref_prof = {U_ref_prof:.3f} m/s")
+        print(f"    U_ratio = {U_ratio:.3f}")
+        print(f"    time_ratio = {time_ratio:.3f}")
+
+        params = inspect.signature(profile.__init__).parameters
+        params = list(params.values())[1:]
+        args = {}
+        for p in params:
+            if p.name == 'UofT':
+                args[p.name] = prof.UofT.copy()*U_ratio
+            elif p.name == 'VofT':
+                args[p.name] = prof.VofT.copy()*U_ratio
+            elif p.name == 'WofT':
+                args[p.name] = prof.WofT.copy()*U_ratio
+            elif p.name == 'dt':
+                args[p.name] = prof.dt*time_ratio
+            elif p.name in ['stats','SpectH',]:
+                continue
+            elif hasattr(prof, p.name):
+                args[p.name] = getattr(prof, p.name)
+        self.profile = profile(**args)
+        
+    
 
     def __str__(self):
         return self.name
@@ -3595,7 +3868,16 @@ class bldgCp(windCAD.building):
         if debugMode:
             print(f"Saved C&C load to {filePath}")
 
+    def paramsTable(self, normalized=True, fields=None) -> dict:
+        
+        data = {}
+        if self.profile is not None:
+            data = self.profile.paramsTable(normalized=normalized)
+        data[getMathName('lScl')] = np.nan if self.lScl is None else 1/self.lScl
+        data[getMathName('vScl')] = np.nan if self.vScl is None else 1/self.vScl
+        data[getMathName('tScl')] = np.nan if self.tScl is None else 1/self.tScl
 
+        return data
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotTapCpStatsPerAoA(self, figs=None, all_axes=None, addMarginDetails=False,
@@ -4145,12 +4427,12 @@ class BldgCps():
             stat[fld] = np.zeros_like(self.master.CpStats[fld])
             for i, bldg in enumerate(self.memberBldgs):
                 stat[fld] += bldg.CpStats[fld]
-            stat[fld] /= self.Num_MemberBldgs
+            stat[fld] /= self.N_bldgs
         pass
 
     """-------------------------------- Properties ------------------------------------"""
     @property
-    def Num_MemberBldgs(self):
+    def N_bldgs(self):
         return len(self.memberBldgs)
     
 
@@ -4165,7 +4447,7 @@ class BldgCps():
         allData = {}
         for fld in flds:
             # initialize clctd{} by zeros like the master bldg CpStats with one extra dimension for the member bldgs as the last dimension
-            allData[fld] = np.zeros(np.shape(self.master.CpStats[fld]) + (self.Num_MemberBldgs,))
+            allData[fld] = np.zeros(np.shape(self.master.CpStats[fld]) + (self.N_bldgs,))
             for i, bldg in enumerate(self.memberBldgs):
                 # collect the CpStats of the member bldgs into the last dimension of clctd{} without explicitly knowing the dimensionality of the CpStats
                 allData[fld][...,i] = bldg.CpStats[fld]
@@ -4223,7 +4505,22 @@ class BldgCps():
         if debugMode:
             print(f"Saved C&C load to {filePath}")
 
+    def paramsTable(self, normalized=True, fields=None) -> dict:
+        params = None
+        for i, bldg in enumerate(self.memberBldgs):
+            if i == 0:
+                params = bldg.paramsTable(normalized=normalized, fields=fields)
+                # change each entry to a list
+                for key in params.keys():
+                    params[key] = [params[key],]
+            else:
+                temp = bldg.paramsTable(normalized=normalized, fields=fields)
+                # append each entry to the list
+                for key in temp.keys():
+                    params[key].append(temp[key])
 
+        return params
+    
     """--------------------------------- Plotters -------------------------------------"""
     def plotTapCpStatsPerAoA(self, 
                             fields=['peakMax','mean','peakMin'],fldRange=[-15,10], tapsToPlot=None, includeTapName=True,
@@ -4246,7 +4543,7 @@ class BldgCps():
                                 'markersize':mrkrSize,
                                 'linewidth':lw,
                                 } for i in range(len(fields))]
-                                for c in range(self.Num_MemberBldgs)] 
+                                for c in range(self.N_bldgs)] 
             
 
         tapIdxs = self.master.tapIdx if tapsToPlot is None else self.master.tapIdxOf(tapsToPlot)
@@ -4286,7 +4583,7 @@ class BldgCps():
                                     )
         
         caseNames = [bldg.name for bldg in self.memberBldgs]
-        nLgndCols = self.Num_MemberBldgs if nLgndCols is None else nLgndCols
+        nLgndCols = self.N_bldgs if nLgndCols is None else nLgndCols
         transposeLegend = False
         for p, (axs, fig) in enumerate(zip(all_axes, figs)):
             ax = axs[0,0]
@@ -4306,6 +4603,64 @@ class BldgCps():
                 ax.axis('off')
             
         return figs, all_axes
+
+    def plotParamsTable(self,
+                        fig=None,figsize=[0,8],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}',
+                        fontSz=10, normalize=True, colColors=None, colTxtColors=None,
+                        showBorder=True,
+                        kwargs_table={'loc':'center',
+                                        'cellLoc': 'center',
+                                        'bbox': [0.0, 0.0, 1.0, 1.0],}):
+        if fig is None:
+            fntFctr = 1.0 if fontSz is None else fontSz/10.0
+            if autoFigSize:
+                figsize[0] = 2*(self.N_bldgs+1)*fntFctr*figWidthFctr
+            fig = plt.figure(figsize=figsize)
+        if ax is None:
+            ax = plt.subplot()
+        ax.axis('off')
+        ax.axis('tight')
+
+        tableContent = self.paramsTable(normalized=normalize)
+        cell_text = []
+        for key in tableContent.keys():
+            if key == 'Name':
+                continue
+            val = [strFmt.format(tableContent[key][i]) for i in range(self.N_bldgs)]
+            val.insert(0,key)
+            cell_text.append(val)
+
+        table = ax.table(cellText=cell_text,
+                    colLabels=['Field',*[bldg.name for bldg in self.memberBldgs]],
+                    **kwargs_table)
+        if fontSz is not None:
+            table.auto_set_font_size(False)
+            table.set_fontsize(fontSz)
+        else:
+            table.auto_set_font_size(True)
+
+        # decorative edits
+        nRows = len(cell_text)+1
+        if colColors is not None:
+            for i in range(self.N_bldgs):
+                for j in range(nRows):
+                    table[(j,i+1)].set_facecolor(colColors[i])
+        if colTxtColors is not None:
+            for i in range(self.N_bldgs):
+                for j in range(nRows):
+                    table[(j,i+1)].set_text_props(color=colTxtColors[i])
+        for i in range(self.N_bldgs+1):
+            table[(0,i)].set_text_props(weight='bold')
+        # for i in range(nRows):
+        #     table[(i,0)].set_text_props(weight='bold')
+        if not showBorder:
+            for key, cell in table.get_celld().items():
+                cell.set_linewidth(0)
+
+        fig.tight_layout()
+        plt.show()
+        return fig, ax
+    
 
 #---------------------------------- GENERAL ------------------------------------
 class validator():

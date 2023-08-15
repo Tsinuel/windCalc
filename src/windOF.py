@@ -821,6 +821,7 @@ class foamCase:
 class inflowTuner:
     def __init__(self,
                  H = None,
+                 lScl=1.0,
                  nSpectAvg=8,
                  target:wind.profile=None,
                  inflows:wind.Profiles=None,
@@ -828,6 +829,7 @@ class inflowTuner:
                  refProfiles:wind.Profiles=None,
                  ) -> None:
         self.H = H
+        self.lScl = lScl
         self.nSpectAvg = nSpectAvg
         self.target = target
         self.inflows = inflows
@@ -900,7 +902,7 @@ class inflowTuner:
 
         nSpectAvg = self.nSpectAvg if nSpectAvg is None else nSpectAvg
 
-        prof = wind.profile(name=name, Z=probes[:,2], UofT=UofT, VofT=VofT, WofT=WofT, H=self.H, dt=dt, nSpectAvg=nSpectAvg)
+        prof = wind.profile(name=name, Z=probes[:,2], UofT=UofT, VofT=VofT, WofT=WofT, H=self.H, dt=dt, nSpectAvg=nSpectAvg, lScl=self.lScl)
         if self.inflows is None:
             self.inflows = wind.Profiles([prof,])
         else:
@@ -909,6 +911,8 @@ class inflowTuner:
     def addIncident(self, caseDir, probeName, name=None, readFromNPY_file=True, writeToDataFile=False,
                     trimTimeSegs=[[0, 1.0],], showLog=True, kwargs_profile={},
                     kwargs_readVelProfile={},):
+        if kwargs_profile == {}:
+            kwargs_profile = {'lScl':self.lScl, 'nSpectAvg':self.nSpectAvg,}
         
         prof = readVelProfile(caseDir=caseDir,probeName=probeName,name=name, showLog=showLog, trimTimeSegs=trimTimeSegs,H=self.H, readFromNPY_file=readFromNPY_file,
                                 writeToFile=writeToDataFile, kwargs_profile=kwargs_profile,
@@ -1334,7 +1338,7 @@ class inflowTuner:
             profs.extend(self.refProfiles.profiles)
         profs = wind.Profiles(profs)
 
-        table = profs.plotRefHeightStatsTable(colTxtColors=[p['color'] for p in kwargs_plt], 
+        table = profs.plotParamsTable(colTxtColors=[p['color'] for p in kwargs_plt], 
                                       fontSz=12,
                                       **kwargs_StatsTable)
 
