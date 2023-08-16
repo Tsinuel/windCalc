@@ -30,10 +30,20 @@ import windCodes as wc
 #==================== CONSTANTS & GLOBAL VARIABLES  ============================
 #===============================================================================
 
-fps2mps = 0.3048
-
-mm2m = 0.001
-
+UNIT_CONV = {
+    'fps2mps':0.3048,
+    'mm2m':0.001,
+    'mps2fps':1/0.3048,
+    'm2mm':1/0.001,
+    'in2m':0.0254,
+    'm2in':1/0.0254,
+    'ft2m':0.3048,
+    'm2ft':1/0.3048,
+    'mph2mps':0.44704,
+    'mps2mph':1/0.44704,
+    'kph2mps':1/3.6,
+    'mps2kph':3.6,
+    }
 DEFAULT_SI_UNITS = {
                     'L':'m',
                     'T':'s',
@@ -41,13 +51,9 @@ DEFAULT_SI_UNITS = {
                     'P':'Pa',
                     'M':'kg'
                 }
-
 VALID_CP_TH_STAT_FIELDS = ['mean','std','peak','peakMin','peakMax','skewness','kurtosis']
-
 VALID_VELOCITY_STAT_FIELDS = ['U','V','W','Iu','Iv','Iw','xLu','xLv','xLw','uv','uw','vw']
-
 SCALABLE_CP_STATS = ['mean','std','peakMin','peakMax']
-
 DEFAULT_PEAK_SPECS = {
                         'method':'gumbel',
                         'fit_method':'BLUE',
@@ -55,23 +61,199 @@ DEFAULT_PEAK_SPECS = {
                         'Duration':16, 
                         'prob_non_excd':0.5704,
                     }
-
 DEFAULT_VELOCITY_STAT_FIELDS = ['U','Iu','Iv','Iw','xLu','xLv','xLw','uw']
-
 PATH_SRC = os.path.dirname(os.path.abspath(__file__))
-
 DEFAULT_RF = np.logspace(-5,3,400)
-
 VON_KARMAN_CONST = 0.4
-
 VALID_ERROR_TYPES = ['RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R2']
-
 with open(PATH_SRC+r'/refData/bluecoeff.json', 'r') as f:
     BLUE_COEFFS = json.load(f)
+
 
 #===============================================================================
 #=============================== FUNCTIONS =====================================
 #===============================================================================
+
+#---------------------------------- GENERAL ------------------------------------
+def smooth(x, window_len=11, window:Literal['flat', 'hanning', 'hamming', 'bartlett', 'blackman']='hanning', 
+           mode:Literal['same', 'valid', 'full', 'wrap', 'constant']='valid',
+           usePadding=True, paddingFactor=0.5, paddingMode='edge'):
+    if window_len<3:
+        return x
+    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
+        raise ValueError("Window must be one of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
+    
+    half_window = np.floor(window_len*paddingFactor).astype(int)
+    if usePadding:
+        x = np.pad(x, (half_window,half_window), mode=paddingMode)
+
+    s=np.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]]
+    if window == 'flat': #moving average
+        w=np.ones(window_len,'d')
+    else:
+        w=eval('np.'+window+'(window_len)')
+    y=np.convolve(w/w.sum(),s,mode=mode)
+    y = y[int(window_len/2-1):-int(window_len/2)]
+    if usePadding:
+        return y[half_window:-half_window]
+    else:
+        return y
+
+def lowpass(x, fs, fc, axis=-1, order = 4, resample=False):
+    Wn = fc / (fs / 2)
+    b, a = signal.butter(order, Wn, 'low')
+    y = signal.filtfilt(b, a, x, axis=axis)
+    if resample:
+        y = signal.resample(y, int(np.shape(y)[axis] * fc / fs), axis=axis)
+    return y
+
+def getMathName(rawname):
+    if rawname == 'U':
+        return '$U$ [$m/s$]'
+    elif rawname == 'U/Uh':
+        return '$U/U_h$'
+    elif rawname == 'Uh':
+        return '$U_h$ [$m/s$]'
+    elif rawname == 'V':
+        return '$V$ [$m/s$]'
+    elif rawname == 'V/Uh':
+        return '$V/U_h$'
+    elif rawname == 'W':
+        return '$W$ [$m/s$]'
+    elif rawname == 'W/Uh':
+        return '$W/U_h$'
+    elif rawname == 'Iu':
+        return '$I_u$'
+    elif rawname == 'Iv':
+        return '$I_v$'
+    elif rawname == 'Iw':
+        return '$I_w$'
+    elif rawname == 'xLu':
+        return '$^xL_u$ [$m$]'
+    elif rawname == 'xLu/H':
+        return '$^xL_u/H$'
+    elif rawname == 'xLv':
+        return '$^xL_v$ [$m$]'
+    elif rawname == 'xLv/H':
+        return '$^xL_v/H$'
+    elif rawname == 'xLw':
+        return '$^xL_w$ [$m/s$]'
+    elif rawname == 'xLw/H':
+        return '$^xL_w/H$'
+    elif rawname == 'uv': 
+        return '$\\overline{u\'v\'}$ [$m^2/s^2$]'
+    elif rawname == 'uv/Uh^2':
+        return '$\\overline{u\'v\'}/U_h^2$'
+    elif rawname == 'uw':
+        return '$\\overline{u\'w\'}$ [$m^2/s^2$]'
+    elif rawname == 'uw/Uh^2':
+        return '$\\overline{u\'w\'}/U_h^2$'
+    elif rawname == 'vw':
+        return '$\\overline{v\'w\'}$ [$m^2/s^2$]'
+    elif rawname == 'vw/Uh^2':
+        return '$\\overline{v\'w\'}/U_h^2$'
+    elif rawname == 'H':
+        return '$H$ [$m$]'
+    elif rawname == 'z0':
+        return '$z_0$ [$m$]'
+    elif rawname == 'Je':
+        return '$Je$'
+    elif rawname == 'T':
+        return '$T$ [$s$]'
+    elif rawname == 'T_star':
+        return '$T^*$'
+    elif rawname == 'n_smpl':
+        return r'$n_{smpl}$ [$Hz$]'
+    elif rawname == 'f_smpl':
+        return r'$n_{smpl}H/U_h$'
+    elif rawname == 'lScl':
+        return '$\lambda_L$ = 1:'
+    elif rawname == 'vScl':
+        return '$\lambda_V$ = 1:'
+    elif rawname == 'tScl':
+        return '$\lambda_T$ = 1:'
+    elif rawname == 'Re':
+        return '$Re$'
+    else:
+        warnings.warn("Unknown rawname: "+rawname)
+        return rawname
+
+def measureError(model, data, errorTypes:Literal['all','RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R2',]=['RMSE','NRMSE','MAE','PCC','R2']):
+    '''
+    Parameters
+    ----------
+    model : np.ndarray
+        The model data.
+    data : np.ndarray
+        The data to be compared with the model.
+    errorTypes : str or list of str, optional
+        The error type(s) to be calculated. The default is 'all'.
+        Error definitions:
+            RMSE: Root Mean Square Error. 
+                    $$\sqrt{\frac{1}{N}\sum_{i=1}^{N}(model_i - data_i)^2}$$
+            MAE: Mean Absolute Error.
+                    $$\frac{1}{N}\sum_{i=1}^{N}|model_i - data_i|$$
+            NMAE: Normalized Mean Absolute Error.
+                    $$\frac{1}{N}\sum_{i=1}^{N}\frac{|model_i - data_i|}{\bar{data}}$$
+            SMAPE: Symmetric Mean Absolute Percentage Error.
+                    $$\frac{1}{N}\sum_{i=1}^{N}\frac{|model_i - data_i|}{(|model_i| + |data_i|)/2}$$
+            MSLE: Mean Squared Logarithmic Error.
+                    $$\frac{1}{N}\sum_{i=1}^{N}(\log(model_i + 1) - \log(data_i + 1))^2$$
+            NRMSE: Normalized Root Mean Square Error.
+                    $$\frac{\sqrt{\frac{1}{N}\sum_{i=1}^{N}(model_i - data_i)^2}}{\bar{data}}$$
+            RAE: Relative Absolute Error.
+                    $$\frac{\sum_{i=1}^{N}|model_i - data_i|}{\sum_{i=1}^{N}|data_i - \bar{data}|}$$
+            MBD: Mean Bias Deviation.
+                    $$\frac{\sum_{i=1}^{N}(model_i - data_i)}{\sum_{i=1}^{N}data_i}$$
+            PCC: Pearson Correlation Coefficient.
+                    $$\frac{\sum_{i=1}^{N}(model_i - \bar{model})(data_i - \bar{data})}{\sqrt{\sum_{i=1}^{N}(model_i - \bar{model})^2}\sqrt{\sum_{i=1}^{N}(data_i - \bar{data})^2}}$$
+            RAW: Relative Absolute Error.
+                    $$\frac{\sum_{i=1}^{N}|model_i - data_i|}{\sum_{i=1}^{N}|data_i - \bar{data}|}$$
+
+    Returns
+    -------
+    error : dict
+        The error value(s) for the given error type(s).
+    '''
+
+    if errorTypes == 'all':
+        errorTypes = VALID_ERROR_TYPES
+    elif isinstance(errorTypes, str):
+        errorTypes = [errorTypes]
+    elif not isinstance(errorTypes, list):
+        raise Exception("Unknown error type(s): "+str(errorTypes))
+    
+    errorTypes = [x.upper() for x in errorTypes]
+    if not all(x in VALID_ERROR_TYPES for x in errorTypes):
+        raise Exception("Unknown error type(s): "+str(errorTypes))
+    
+    error = {}
+    for errorType in errorTypes:
+        if errorType == 'RMSE':
+            error['RMSE'] = np.sqrt(np.mean((model - data)**2))
+        elif errorType == 'MAE':
+            error['MAE'] = np.mean(np.abs(model - data))
+        elif errorType == 'NMAE':
+            error['NMAE'] = np.mean(np.abs(model - data)) / np.mean(data)
+        elif errorType == 'SMAPE':
+            error['SMAPE'] = np.mean(np.abs(model - data)) / (np.mean(np.abs(model)) + np.mean(np.abs(data)))
+        elif errorType == 'MSLE':
+            error['MSLE'] = np.mean((np.log(model + 1) - np.log(data + 1))**2)
+        elif errorType == 'NRMSE':
+            error['NRMSE'] = np.sqrt(np.mean((model - data)**2)) / np.mean(data)
+        elif errorType == 'RAE':
+            error['RAE'] = np.sum(np.abs(model - data)) / np.sum(np.abs(data - np.mean(data)))
+        elif errorType == 'MBD':
+            error['MBD'] = np.sum(model - data) / np.sum(data)
+        elif errorType == 'PCC':
+            error['PCC'] = pearsonr(model, data)[0]
+        elif errorType == 'RAE':
+            error['RAE'] = np.sum(np.abs(model - data)) / np.sum(np.abs(data - np.mean(data)))
+        elif errorType == 'R2':
+            error['R2'] = r2_score(data, model)
+        else:
+            raise Exception("Unknown error type: "+errorType)
+    return error
 
 #------------------------------- WIND FIELD ------------------------------------
 def integTimeScale(x,dt,rho_tol=0.0001,showPlots=False,removeNaNs=True):
@@ -201,38 +383,6 @@ def psd(x, fs, nAvg=8, overlapRatio=0.5, window:Literal['hanning', 'hamming', 'b
         plt.ylabel('PSD [V**2/Hz]')
         plt.show()
     return f, Pxxf
-
-def lowpass(x, fs, fc, axis=-1, order = 4, resample=False):
-    Wn = fc / (fs / 2)
-    b, a = signal.butter(order, Wn, 'low')
-    y = signal.filtfilt(b, a, x, axis=axis)
-    if resample:
-        y = signal.resample(y, int(np.shape(y)[axis] * fc / fs), axis=axis)
-    return y
-
-def smooth(x, window_len=11, window:Literal['flat', 'hanning', 'hamming', 'bartlett', 'blackman']='hanning', 
-           mode:Literal['same', 'valid', 'full', 'wrap', 'constant']='valid',
-           usePadding=True, paddingFactor=0.5, paddingMode='edge'):
-    if window_len<3:
-        return x
-    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-        raise ValueError("Window must be one of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'")
-    
-    half_window = np.floor(window_len*paddingFactor).astype(int)
-    if usePadding:
-        x = np.pad(x, (half_window,half_window), mode=paddingMode)
-
-    s=np.r_[x[window_len-1:0:-1],x,x[-1:-window_len:-1]]
-    if window == 'flat': #moving average
-        w=np.ones(window_len,'d')
-    else:
-        w=eval('np.'+window+'(window_len)')
-    y=np.convolve(w/w.sum(),s,mode=mode)
-    y = y[int(window_len/2-1):-int(window_len/2)]
-    if usePadding:
-        return y[half_window:-half_window]
-    else:
-        return y
 
 def vonKarmanSuu(n,U,Iu,xLu):
     return np.divide((4*xLu*(Iu**2)*U), np.power((1 + 70.8*np.power(n*xLu/U,2)),5/6))
@@ -559,76 +709,6 @@ def fitESDUgivenIuRef(
             err_0 = err
     z0 = (z0_0 + z0_1)/2
     return z0, es
-
-def getMathName(rawname):
-    if rawname == 'U':
-        return '$U$ [$m/s$]'
-    elif rawname == 'U/Uh':
-        return '$U/U_h$'
-    elif rawname == 'Uh':
-        return '$U_h$ [$m/s$]'
-    elif rawname == 'V':
-        return '$V$ [$m/s$]'
-    elif rawname == 'V/Uh':
-        return '$V/U_h$'
-    elif rawname == 'W':
-        return '$W$ [$m/s$]'
-    elif rawname == 'W/Uh':
-        return '$W/U_h$'
-    elif rawname == 'Iu':
-        return '$I_u$'
-    elif rawname == 'Iv':
-        return '$I_v$'
-    elif rawname == 'Iw':
-        return '$I_w$'
-    elif rawname == 'xLu':
-        return '$^xL_u$ [$m$]'
-    elif rawname == 'xLu/H':
-        return '$^xL_u/H$'
-    elif rawname == 'xLv':
-        return '$^xL_v$ [$m$]'
-    elif rawname == 'xLv/H':
-        return '$^xL_v/H$'
-    elif rawname == 'xLw':
-        return '$^xL_w$ [$m/s$]'
-    elif rawname == 'xLw/H':
-        return '$^xL_w/H$'
-    elif rawname == 'uv': 
-        return '$\\overline{u\'v\'}$ [$m^2/s^2$]'
-    elif rawname == 'uv/Uh^2':
-        return '$\\overline{u\'v\'}/U_h^2$'
-    elif rawname == 'uw':
-        return '$\\overline{u\'w\'}$ [$m^2/s^2$]'
-    elif rawname == 'uw/Uh^2':
-        return '$\\overline{u\'w\'}/U_h^2$'
-    elif rawname == 'vw':
-        return '$\\overline{v\'w\'}$ [$m^2/s^2$]'
-    elif rawname == 'vw/Uh^2':
-        return '$\\overline{v\'w\'}/U_h^2$'
-    elif rawname == 'H':
-        return '$H$ [$m$]'
-    elif rawname == 'z0':
-        return '$z_0$ [$m$]'
-    elif rawname == 'Je':
-        return '$Je$'
-    elif rawname == 'T':
-        return '$T$ [$s$]'
-    elif rawname == 'T_star':
-        return '$T^*$'
-    elif rawname == 'n_smpl':
-        return r'$n_{smpl}$ [$Hz$]'
-    elif rawname == 'f_smpl':
-        return r'$n_{smpl}H/U_h$'
-    elif rawname == 'lScl':
-        return '$\lambda_L$ = 1:'
-    elif rawname == 'vScl':
-        return '$\lambda_V$ = 1:'
-    elif rawname == 'tScl':
-        return '$\lambda_T$ = 1:'
-    else:
-        warnings.warn("Unknown rawname: "+rawname)
-        return rawname
-    
     
 #---------------------------- SURFACE PRESSURE ---------------------------------
 def peak_gumbel(x, axis:int=0, 
@@ -797,80 +877,6 @@ def get_CpTH_stats(TH,axis=0,
         stats['kurtosis'] = kurtosis(TH, axis=axis)
     return stats
 
-def measureError(model, data, errorTypes:Literal['all','RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R2']=['RMSE','NRMSE','MAE','PCC','R2']):
-    '''
-    Parameters
-    ----------
-    model : np.ndarray
-        The model data.
-    data : np.ndarray
-        The data to be compared with the model.
-    errorTypes : str or list of str, optional
-        The error type(s) to be calculated. The default is 'all'.
-        Error definitions:
-            RMSE: Root Mean Square Error. 
-                    $$\sqrt{\frac{1}{N}\sum_{i=1}^{N}(model_i - data_i)^2}$$
-            MAE: Mean Absolute Error.
-                    $$\frac{1}{N}\sum_{i=1}^{N}|model_i - data_i|$$
-            NMAE: Normalized Mean Absolute Error.
-                    $$\frac{1}{N}\sum_{i=1}^{N}\frac{|model_i - data_i|}{\bar{data}}$$
-            SMAPE: Symmetric Mean Absolute Percentage Error.
-                    $$\frac{1}{N}\sum_{i=1}^{N}\frac{|model_i - data_i|}{(|model_i| + |data_i|)/2}$$
-            MSLE: Mean Squared Logarithmic Error.
-                    $$\frac{1}{N}\sum_{i=1}^{N}(\log(model_i + 1) - \log(data_i + 1))^2$$
-            NRMSE: Normalized Root Mean Square Error.
-                    $$\frac{\sqrt{\frac{1}{N}\sum_{i=1}^{N}(model_i - data_i)^2}}{\bar{data}}$$
-            RAE: Relative Absolute Error.
-                    $$\frac{\sum_{i=1}^{N}|model_i - data_i|}{\sum_{i=1}^{N}|data_i - \bar{data}|}$$
-            MBD: Mean Bias Deviation.
-                    $$\frac{\sum_{i=1}^{N}(model_i - data_i)}{\sum_{i=1}^{N}data_i}$$
-            PCC: Pearson Correlation Coefficient.
-                    $$\frac{\sum_{i=1}^{N}(model_i - \bar{model})(data_i - \bar{data})}{\sqrt{\sum_{i=1}^{N}(model_i - \bar{model})^2}\sqrt{\sum_{i=1}^{N}(data_i - \bar{data})^2}}$$
-            RAW: Relative Absolute Error.
-                    $$\frac{\sum_{i=1}^{N}|model_i - data_i|}{\sum_{i=1}^{N}|data_i - \bar{data}|}$$
-
-    Returns
-    -------
-    error : dict
-        The error value(s) for the given error type(s).
-    '''
-
-    if errorTypes == 'all':
-        errorTypes = VALID_ERROR_TYPES
-    elif isinstance(errorTypes, str):
-        errorTypes = [errorTypes]
-    elif not isinstance(errorTypes, list):
-        raise Exception("Unknown error type(s): "+str(errorTypes))
-    errorTypes = [x.upper() for x in errorTypes]
-    if not all(x in VALID_ERROR_TYPES for x in errorTypes):
-        raise Exception("Unknown error type(s): "+str(errorTypes))
-    error = {}
-    for errorType in errorTypes:
-        if errorType == 'RMSE':
-            error['RMSE'] = np.sqrt(np.mean((model - data)**2))
-        elif errorType == 'MAE':
-            error['MAE'] = np.mean(np.abs(model - data))
-        elif errorType == 'NMAE':
-            error['NMAE'] = np.mean(np.abs(model - data)) / np.mean(data)
-        elif errorType == 'SMAPE':
-            error['SMAPE'] = np.mean(np.abs(model - data)) / (np.mean(np.abs(model)) + np.mean(np.abs(data)))
-        elif errorType == 'MSLE':
-            error['MSLE'] = np.mean((np.log(model + 1) - np.log(data + 1))**2)
-        elif errorType == 'NRMSE':
-            error['NRMSE'] = np.sqrt(np.mean((model - data)**2)) / np.mean(data)
-        elif errorType == 'RAE':
-            error['RAE'] = np.sum(np.abs(model - data)) / np.sum(np.abs(data - np.mean(data)))
-        elif errorType == 'MBD':
-            error['MBD'] = np.sum(model - data) / np.sum(data)
-        elif errorType == 'PCC':
-            error['PCC'] = pearsonr(model, data)[0]
-        elif errorType == 'RAE':
-            error['RAE'] = np.sum(np.abs(model - data)) / np.sum(np.abs(data - np.mean(data)))
-        elif errorType == 'R2':
-            error['R2'] = r2_score(data, model)
-        else:
-            raise Exception("Unknown error type: "+errorType)
-
 #-------------------------------- PLOTTING -------------------------------------
 def formatAxis(ax, gridMajor=True, gridMinor=False, tickLabelSize=10, labelSize=12,
                tickTop=True, tickRight=True, gridColor_mjr=[0.8,0.8,0.8], gridColor_mnr=[0.85,0.85,0.85], numFormat: Literal['general','scientific','default']='general',
@@ -902,6 +908,7 @@ def formatAxis(ax, gridMajor=True, gridMinor=False, tickLabelSize=10, labelSize=
 
 def getPlotParams(pltType:Literal['default','Prof-BLWT','Prof-LES','Prof-CONT','Spect-BLWT','Spect-LES','Spect-CONT']='default') -> dict:
     pass
+
 
 #===============================================================================
 #================================ CLASSES ======================================
@@ -1397,7 +1404,7 @@ class profile:
         self.X: Union[np.ndarray, None] = np.array(X, float) if X is not None else None
         self.Y: Union[np.ndarray, None] = np.array(Y, float) if Y is not None else None
         self.Z: Union[np.ndarray, None] = np.array(Z, float) if Z is not None else None
-        self.stats: Dict = stats
+        self.stats_core: Dict = stats
         self.fields = fields
 
         self.H = H
@@ -1449,7 +1456,7 @@ class profile:
         if self.dt is None and self.t is not None:
             self.dt = np.mean(np.diff(self.t))
 
-        self.stats = get_velTH_stats_1pt(UofT=self.UofT, VofT=self.VofT, WofT=self.WofT, dt=self.dt,
+        self.stats_core = get_velTH_stats_1pt(UofT=self.UofT, VofT=self.VofT, WofT=self.WofT, dt=self.dt,
                                      fields=self.fields)
         self.__computeSpectra()
         
@@ -1470,6 +1477,20 @@ class profile:
         return self.name
 
     """----------------------------------- Properties ---------------------------------"""
+    @property
+    def idx_eff(self):
+        if self.Z is None or self.workSect_zLim is None:
+            return None
+        else:
+            return np.where((self.Z >= self.workSect_zLim[0]) & (self.Z <= self.workSect_zLim[1]))[0]
+
+    @property
+    def Z_eff(self):
+        if self.Z is None or self.idx_eff is None:
+            return None
+        else:
+            return self.Z[self.idx_eff]
+
     @property
     def T(self):
         '''Duration of the time series in seconds'''
@@ -1527,51 +1548,51 @@ class profile:
     
     @property
     def U(self) -> Union[np.ndarray, None]:
-        if self.stats is None or 'U' not in self.stats:
+        if self.stats_core is None or 'U' not in self.stats_core:
             return None
-        return self.stats['U']
+        return self.stats_core['U']
 
     @property
     def Iu(self) -> Union[np.ndarray, None]:
-        if self.stats is None or 'Iu' not in self.stats:
+        if self.stats_core is None or 'Iu' not in self.stats_core:
             return None
-        return self.stats['Iu']
+        return self.stats_core['Iu']
     
     @property
     def Iv(self) -> Union[np.ndarray, None]:
-        if self.stats is None or 'Iv' not in self.stats:
+        if self.stats_core is None or 'Iv' not in self.stats_core:
             return None
-        return self.stats['Iv']
+        return self.stats_core['Iv']
     
     @property
     def Iw(self) -> Union[np.ndarray, None]:
-        if self.stats is None or 'Iw' not in self.stats:
+        if self.stats_core is None or 'Iw' not in self.stats_core:
             return None
-        return self.stats['Iw']
+        return self.stats_core['Iw']
     
     @property
     def xLu(self) -> Union[np.ndarray, None]:
-        if self.stats is None or 'xLu' not in self.stats:
+        if self.stats_core is None or 'xLu' not in self.stats_core:
             return None
-        return self.stats['xLu']
+        return self.stats_core['xLu']
     
     @property
     def xLv(self) -> Union[np.ndarray, None]:
-        if self.stats is None or 'xLv' not in self.stats:
+        if self.stats_core is None or 'xLv' not in self.stats_core:
             return None
-        return self.stats['xLv']
+        return self.stats_core['xLv']
     
     @property
     def xLw(self) -> Union[np.ndarray, None]:
-        if self.stats is None or 'xLw' not in self.stats:
+        if self.stats_core is None or 'xLw' not in self.stats_core:
             return None
-        return self.stats['xLw']
+        return self.stats_core['xLw']
     
     @property
     def uw(self) -> Union[np.ndarray, None]:
-        if self.stats is None or 'uw' not in self.stats:
+        if self.stats_core is None or 'uw' not in self.stats_core:
             return None
-        return self.stats['uw']
+        return self.stats_core['uw']
 
     """---------------------------------- Normalizers ---------------------------------"""
     @property
@@ -1613,13 +1634,42 @@ class profile:
             return None
         else:
             return self.uw/(self.Uh**2)
+    
+    @property
+    def stats_norm(self):
+        if self.stats_core is None:
+            return None
+        stats = {}
+        for st in self.stats_core.keys():
+            temp,_ = self.stat_norm(st)
+            stats[st] = temp
+        return stats
+    
+    @property
+    def stats_norm_eff(self):
+        if self.stats_core is None:
+            return None
+        stats = {}
+        for st in self.stats_core.keys():
+            temp,_ = self.stat_norm(st)
+            stats[st] = temp[self.idx_eff]
+        return stats
+
+    @property
+    def stats_at_H(self):
+        if self.stats_core is None:
+            return None
+        stats = {}
+        for st in self.stats_core.keys():
+            stats[st] = self.stat_at_H(st)
+        return stats
 
     """----------------------------------- Methods ------------------------------------"""
     def stat_at_H(self, field):
-        if self.H is None or self.stats is None:
+        if self.H is None or self.stats_core is None:
             return None
         else:
-            return self.stats[field][self.H_idx]
+            return self.stats_core[field][self.H_idx]
 
     def stat_norm(self, field):
         '''Returns the normalized value of the given field at the given height and the name of the normalization
@@ -1642,29 +1692,39 @@ class profile:
             If the normalization for the given field is not implemented yet
 
             '''
-        if self.stats is None:
+        if self.stats_core is None:
             return None, ''
         else:
             if field in ['U','V','W']:
                 if self.Uh is None:
                     return None, ''
-                return self.stats[field]/self.Uh, getMathName(field+'/Uh')
+                return self.stats_core[field]/self.Uh, getMathName(field+'/Uh')
             elif field in ['Iu','Iv','Iw']:
-                return self.stats[field], getMathName(field)
+                return self.stats_core[field], getMathName(field)
             elif field in ['xLu','xLv','xLw']:
                 if self.H is None:
                     return None, ''
-                return self.stats[field]/self.H, getMathName(field+'/H')
+                return self.stats_core[field]/self.H, getMathName(field+'/H')
             elif field in ['uv','uw','vw']:
                 if self.Uh is None:
                     return None, ''
-                return self.stats[field]/(self.Uh**2), getMathName(field+'/Uh^2')
+                return self.stats_core[field]/(self.Uh**2), getMathName(field+'/Uh^2')
             else:
                 raise NotImplementedError("Normalization for field '{}' not implemented".format(field))
-    
+
+    def stats_norm_interp_to_Z(self, Z):
+        if self.stats_core is None:
+            return None
+        stats_full = self.stats_norm_eff
+        Z_full = self.Z_eff
+        stats = {}
+        for st in stats_full.keys():
+            stats[st] = np.interp(Z, Z_full, stats_full[st])
+        return stats
+
     def paramsTable(self, normalized=True, fields=None,) -> dict:
         if fields is None:
-            fields = list(self.stats.keys())
+            fields = list(self.stats_core.keys())
             fields.extend(['Name','H','Uh','T','n_smpl','z0','Je'])
             
         data = {}
@@ -1675,7 +1735,7 @@ class profile:
         if 'Uh' in fields:
             data[getMathName('Uh')] = self.Uh
 
-        for st in self.stats.keys():
+        for st in self.stats_core.keys():
             if st in fields:                
                 if normalized:
                     temp,name = self.stat_norm(st)
@@ -1774,7 +1834,7 @@ class profile:
         return f, Coh, dist
 
     def U10_atModelScale(self, lScl) -> Union[np.ndarray, None]:
-        if self.stats is None or 'U' not in self.stats:
+        if self.stats_core is None or 'U' not in self.stats_core:
             return None
         Z10 = 10*lScl
         return np.interp(Z10, self.Z, self.U)
@@ -1782,11 +1842,12 @@ class profile:
     def fitted_z0(self, fitTo:Literal['U','Iu']='Iu', uStar_init=1.0, z0_init=0.001, debugMode=False,
                   kwargs_z0Fit={}) -> Union[float, None]:
         if fitTo == 'U':
-            [zMin, zMax] = self.workSect_zLim
-            idxMin = np.argmin(np.abs(self.Z-zMin))
-            idxMax = np.argmin(np.abs(self.Z-zMax))
-            Z = self.Z[idxMin:idxMax+1]
-            U = self.U[idxMin:idxMax+1]
+            # [zMin, zMax] = self.workSect_zLim
+            # idxMin = np.argmin(np.abs(self.Z-zMin))
+            # idxMax = np.argmin(np.abs(self.Z-zMax))
+            # Z = self.Z[idxMin:idxMax+1]
+            # U = self.U[idxMin:idxMax+1]
+            Z, U = self.Z_eff, self.U[self.idx_eff]
             z0, _, _ = fitVelDataToLogProfile(Z, U, Zref=self.H, Uref=self.Uh, d=0.0, debugMode=debugMode, uStar_init=uStar_init, z0_init=z0_init, **kwargs_z0Fit)
         elif fitTo == 'Iu':
             z0,_ = fitESDUgivenIuRef(self.H/self.lScl, self.SpectH.Iu, **kwargs_z0Fit)
@@ -1810,7 +1871,7 @@ class profile:
             Jensen number.
         '''
         z0 = self.fitted_z0(**kwargs_z0Fit)
-        if self.stats is None or self.H is None or z0 is None:
+        if self.stats_core is None or self.H is None or z0 is None:
             return None
         else:
             return self.H/z0
@@ -1834,7 +1895,7 @@ class profile:
         else:
             Z = self.Z
             H = self.H
-            F = self.stats[fld]
+            F = self.stats_core[fld]
             xLabel = fld if xLabel is None else xLabel
             yLabel = 'Z' if yLabel is None else yLabel
 
@@ -1988,29 +2049,29 @@ class profile:
             zLabel = '$Z/H$' if normalize else '$Z$'
         
         bxPltObj = None
-        if 'U' in self.stats.keys():
+        if 'U' in self.stats_core.keys():
             self.plotProfile_any('U', ax=axs[0,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_U, yLimits=yLimits, kwargs=kwargs_plt)
             name = overlayThese['name'] if overlayThese is not None and 'name' in overlayThese else '_'
             bxPltObj = addOverlay(axs[0,0], 'U', name, kwargs_overlay=kwargs_overlay)
-        if 'uw' in self.stats.keys():
+        if 'uw' in self.stats_core.keys():
             self.plotProfile_any('uw', ax=axs[0,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_uw, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[0,1], 'uw', kwargs_overlay=kwargs_overlay)
-        if 'Iu' in self.stats.keys():
+        if 'Iu' in self.stats_core.keys():
             self.plotProfile_any('Iu', ax=axs[1,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iu, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[1,0], 'Iu', kwargs_overlay=kwargs_overlay)
-        if 'Iv' in self.stats.keys():
+        if 'Iv' in self.stats_core.keys():
             self.plotProfile_any('Iv', ax=axs[1,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iv, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[1,1], 'Iv', kwargs_overlay=kwargs_overlay)
-        if 'Iw' in self.stats.keys():
+        if 'Iw' in self.stats_core.keys():
             self.plotProfile_any('Iw', ax=axs[1,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iw, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[1,2], 'Iw', kwargs_overlay=kwargs_overlay)
-        if 'xLu' in self.stats.keys():
+        if 'xLu' in self.stats_core.keys():
             self.plotProfile_any('xLu', ax=axs[2,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLu, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[2,0], 'xLu', kwargs_overlay=kwargs_overlay)
-        if 'xLv' in self.stats.keys():
+        if 'xLv' in self.stats_core.keys():
             self.plotProfile_any('xLv', ax=axs[2,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLv, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[2,1], 'xLv', kwargs_overlay=kwargs_overlay)
-        if 'xLw' in self.stats.keys():
+        if 'xLw' in self.stats_core.keys():
             self.plotProfile_any('xLw', ax=axs[2,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLw, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[2,2], 'xLw', kwargs_overlay=kwargs_overlay)
         
@@ -2114,7 +2175,7 @@ class profile:
                                 fig=None,
                                 ax=None,
                                 precision=2,):
-        if self.stats is None:
+        if self.stats_core is None:
             return
         if fig is None:
             fig = plt.figure()
@@ -2128,8 +2189,8 @@ class profile:
         cell_text.append(['H', np.round(self.H, precision)])
         cell_text.append(['Uh', np.round(self.Uh, precision)])
         
-        for key in self.stats.keys():
-            cell_text.append([key, np.round(self.stats[key][self.H_idx], precision)])
+        for key in self.stats_core.keys():
+            cell_text.append([key, np.round(self.stats_core[key][self.H_idx], precision)])
         # manually add some parameters
         cell_text.append(['T', self.T])
         cell_text.append(['T*', self.T_star])
@@ -2141,578 +2202,6 @@ class profile:
                  loc='center')
         fig.tight_layout()
         plt.show()
-
-class Profiles:
-    def __init__(self, profiles=[]):
-        self._currentIndex = 0
-        self.profiles:List[profile] = profiles
-
-    def __numOfProfiles(self):
-        if self.profiles is None:
-            return 0
-        return len(self.profiles)
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if self._currentIndex < self.__numOfProfiles():
-            member = self.profiles[self._currentIndex]
-            self._currentIndex += 1
-            return member
-        self._currentIndex = 0
-        raise StopIteration
-
-    def __getitem__(self, key):
-        return self.profiles[key]
-    
-    def __setitem__(self, key, value):
-        self.profiles[key] = value
-
-    def __len__(self):
-        return self.__numOfProfiles()
-    
-    def __str__(self):
-        return str(self.profiles)
-    
-    @property
-    def N(self):
-        return len(self.profiles)
-
-    def copy(self):
-        return copy.deepcopy(self)
-
-    def paramsTable(self, normalized=True, fields=None) -> dict:
-        params = None
-        for i, prof in enumerate(self.profiles):
-            if i == 0:
-                params = prof.paramsTable(normalized=normalized, fields=fields)
-                # change each entry to a list
-                for key in params.keys():
-                    params[key] = [params[key],]
-            else:
-                temp = prof.paramsTable(normalized=normalized, fields=fields)
-                # append each entry to the list
-                for key in temp.keys():
-                    params[key].append(temp[key])
-
-        return params
-
-    def plot(self, figsize=None, landscape=True, 
-             kwargs_profile=None, 
-             kwargs_spect=None):
-        if landscape:
-            figsize = [12,5] if figsize is None else figsize
-            fig, axs = plt.subplots(1,2)
-        else:
-            figsize = [5,12] if figsize is None else figsize
-            fig, axs = plt.subplots(2,1)
-        ax_U = axs[0]
-        ax_Iu = ax_U.twiny()
-        ax_Spect = axs[1]
-        fig.set_size_inches(figsize)
-
-        kwargs_profile = [{} if kwargs_profile is None else kwargs_profile[i] for i in range(self.N)]
-        kwargs_spect = [{} if kwargs_spect is None else kwargs_spect[i] for i in range(self.N)]
-
-        for i, prof in enumerate(self.profiles):
-            if i == 0:
-                kwargs_profile[i]['overlay_H'] = True
-            else:
-                kwargs_profile[i]['overlay_H'] = False
-            prof.plot(fig=fig, ax_U=ax_U, ax_Iu=ax_Iu, ax_Spect=ax_Spect, kwargs_profile=kwargs_profile[i], kwargs_spect=kwargs_spect[i])
-
-        formatAxis(ax_U, tickTop=False, gridMajor=False, gridMinor=False)
-        formatAxis(ax_Iu, tickRight=False, gridMajor=False, gridMinor=False)
-        formatAxis(ax_Spect, gridMajor=False, gridMinor=False)
-
-    def plot__(self, fig=None, prof_ax=None, spect_ax=None, zLim=None, col=None, 
-             linestyle_U=None, linestyle_Iu=None, marker_U=None, marker_Iu=None, mfc_U=None, mfc_Iu=None, linestyle_Spect=None, marker_Spect=None, alpha_Spect=None,
-             Iu_factr=100.0, IuLim=[0,100], Ulim=None, IuLgndLoc='upper left', UlgndLoc='upper right',
-             fontSz_axNum=10, fontSz_axLbl=12, fontSz_lgnd=12,
-             freqLim=None, rSuuLim=None):
-
-        N = len(self.profiles)
-        c = plt.cm.Dark2(np.linspace(0,1,N))
-        ls = ['solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
-              'solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
-              'solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
-              'solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
-              ]
-        mrkr = ['.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', 's', 'p', '*', 'h', 'H', '+', 'x', 'D', 'd', '|', '_',
-                '.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', 's', 'p', '*', 'h', 'H', '+', 'x', 'D', 'd', '|', '_',
-                '.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', 's', 'p', '*', 'h', 'H', '+', 'x', 'D', 'd', '|', '_',
-                ]
-
-        fig=plt.figure(figsize=[8, 6]) if fig is None else fig
-        ax = plt.subplot(1,2,1) if prof_ax is None else prof_ax
-        ax2 = ax.twiny()
-        for i,prof in enumerate(self.profiles):
-            col_i = c[i] if col is None else col[i]
-            ls_U_i = ls[i] if linestyle_U is None else linestyle_U[i]
-            ls_Iu_i = ls[i+N] if linestyle_Iu is None else linestyle_Iu[i]
-            mrkr_U_i = mrkr[i] if marker_U is None else marker_U[i]
-            mrkr_Iu_i = mrkr[i+N] if marker_Iu is None else marker_Iu[i]
-            mfc_U_i = col_i if mfc_U is None else mfc_U[i]
-            mfc_Iu_i = 'w' if mfc_Iu is None else mfc_Iu[i]
-            alpha_S_i = 1.0 if alpha_Spect is None else alpha_Spect[i]
-
-            ax.plot(prof.UbyUh, prof.ZbyH, 
-                    ls=ls_U_i, marker=mrkr_U_i, markerfacecolor=mfc_U_i, color=col_i, label=r"$U/U_H$ "+prof.name)
-            ax2.plot(prof.Iu*Iu_factr, prof.ZbyH, 
-                    ls=ls_Iu_i, marker=mrkr_Iu_i, markerfacecolor=mfc_Iu_i, color=col_i, label=r"$I_u$ "+prof.name)
-
-        ax2.set_xlabel(r"$I_u$",fontsize=fontSz_axLbl)
-
-        if zLim is not None:
-            ax.set_ylim(zLim)
-            ax2.set_ylim(zLim)
-        if IuLim is not None:
-            ax2.set_xlim(IuLim)
-        if Ulim is not None:
-            ax.set_xlim(Ulim)
-        ax2.legend(loc=IuLgndLoc,fontsize=fontSz_lgnd)
-        ax.set_xlabel(r"$U/U_H$",fontsize=fontSz_axLbl)
-        ax.set_ylabel(r"$Z/H$",fontsize=fontSz_axLbl)
-        ax.legend(loc=UlgndLoc,fontsize=fontSz_lgnd)
-        ax.axhline(y=1.0, color='k',linestyle='--',linewidth=0.5)
-        ax.tick_params(axis='both',direction='in',which='both',top=False,right=True)
-        ax2.tick_params(axis='both',direction='in',which='both',top=True,right=False)
-        ax.tick_params(axis='both', which='major', labelsize=fontSz_axNum)
-        ax2.tick_params(axis='both', which='major', labelsize=fontSz_axNum)
-
-
-        ax = plt.subplot(1,2,2) if spect_ax is None else spect_ax
-        for i,prof in enumerate(self.profiles):
-            col_i = c[i] if col is None else col[i]
-            ls_Spect_i = ls[i] if linestyle_Spect is None else linestyle_Spect[i]
-            mrkr_Spect_i = mrkr[i] if marker_Spect is None else marker_Spect[i]
-            
-            S = prof.SpectH
-            if S is None:
-                continue
-            if S.Suu is None:
-                continue
-            ax.loglog(S.rf(), S.rSuu(normU='sigUi'),
-                       ls=ls_Spect_i, marker=mrkr_Spect_i, color=col_i, label=prof.SpectH.name, alpha=alpha_S_i)
-        ax.set_xlabel(r"$nH/U_H$",fontsize=fontSz_axLbl)
-        ax.set_ylabel(r"$nS_{uu}/\sigma_u^2$",fontsize=fontSz_axLbl)
-        ax.legend(fontsize=fontSz_lgnd)
-        if freqLim is not None:
-            ax.set_xlim(freqLim)
-        if rSuuLim is not None:
-            ax.set_ylim(rSuuLim)
-        ax.tick_params(axis='both',direction='in',which='both',top=True,right=True)
-        ax.tick_params(axis='both', which='major', labelsize=fontSz_axNum)
-        return fig
-    
-    def plotProfiles(self,figFile=None,xLimits='auto',zLimits='auto',figSize=[14,6],normalize=True):
-        Z = ()
-        val = ()
-        names = ()
-        # maxU = 0
-        if normalize:
-            for i in range(self.N):
-                Z += (self.profiles[i].Z/self.profiles[i].H,)
-                val += (np.transpose(np.stack((self.profiles[i].U/self.profiles[i].Uh, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
-                names += (self.profiles[i].name,)
-                # maxU = max(maxU, max(val[i][:,0]))
-            xlabels = (r"$U/U_{ref}$",r"$I_u$",r"$I_v$",r"$I_w$")
-            zlabel = r"$Z/Z_{ref}$"
-        else:
-            for i in range(self.N):
-                Z += (self.profiles[i].Z,)
-                val += (np.transpose(np.stack((self.profiles[i].U, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
-                names += (self.profiles[i].name,)
-                # maxU = max(maxU, max(val[i][:,0]))
-            xlabels = (r"$U$",r"$I_u$",r"$I_v$",r"$I_w$")
-            zlabel = r"$Z$"
-
-        if xLimits is None:
-            xLimits = [[0, 2],[0,0.4],[0,0.4],[0,0.3]]
-
-        wplt.plotProfiles(
-                        Z, # ([n1,], [n2,], ... [nN,])
-                        val, # ([n1,M], [n2,M], ... [nN,M])
-                        dataLabels=names, # ("str1", "str2", ... "strN")
-                        pltFile=figFile, # "/path/to/plot/file.pdf"
-                        xLabels=xlabels, # ("str1", "str2", ... "str_m")
-                        yLabel=zlabel,
-                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                        yLimits=zLimits, # [zMin, zMax]
-                        figSize=figSize,
-                        nCols=4
-                        )
-    
-    def plotProfile_basic2(self, figsize=[12,10], label=None, normalize=True,
-                            xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
-                            xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
-                            overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
-                            yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
-                            kwargs_plt=None, kwargs_ax={}):
-        
-        fig, axs = plt.subplots(3,3)
-        fig.set_size_inches(figsize)
-
-        kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
-
-        if yLimits is None:
-            
-            allYlims = [] 
-            for i, prof in enumerate(self.profiles):
-                if prof.workSect_zLim is None:
-                    continue
-                else:
-                    normFactor = 1/prof.H if normalize else 1
-                    yl = [prof.workSect_zLim[0]*normFactor, prof.workSect_zLim[1]*normFactor] if prof.workSect_zLim is not None else None
-                    allYlims.append(yl)
-            if len(allYlims) == 0:
-                yLimits = None
-            else:
-                yLimits = [min([y[0] for y in allYlims]), max([y[1] for y in allYlims])]
-
-        for i, prof in enumerate(self.profiles):
-            if i == 0 and overlayThese is not None:
-                _,_,bxPltObj = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, 
-                                                    xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, 
-                                                    xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, xLimits_uw=xLimits_uw, 
-                                                    overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay,
-                                                    yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
-            else:
-                _,_,_ = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, 
-                                        xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
-                                        xLimits_uw=xLimits_uw, 
-                                        yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
-                bxPltObj = None if i == 0 else bxPltObj
-        
-        axs[0,2].axis('off')
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=UserWarning)
-            if bxPltObj is None:
-                axs[0,2].legend(handles=axs[0,0].get_legend_handles_labels()[0],
-                                labels=axs[0,0].get_legend_handles_labels()[1],
-                                **lgnd_kwargs)
-            else:
-                hndls, lbls = axs[0, 0].get_legend_handles_labels()
-
-                # Add the boxplot handle to the legend handles
-                hndls.append(bxPltObj["boxes"][0])
-
-                # Add the label for the boxplot handle
-                lbls.append(overlayThese['name'])
-
-                axs[0, 2].legend(handles=hndls, labels=lbls, **lgnd_kwargs)
-        for ax in axs.flatten():
-            formatAxis(ax, **kwargs_ax)
-        # plt.show()
-        return fig, axs
-
-    def plotTimeHistory(self,
-                    figFile=None,
-                    xLabel='t [s]',
-                    yLabels=("U(t)","V(t)","W(t)"), 
-                    xLimits='auto', # [tMin,tMax]
-                    yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
-                    figSize=[15, 5],
-                    overlay=False,
-                    ):
-        
-        T = U = V = W = names = ()
-        for i in range(self.N):
-            t = self.profiles[i].t
-            dt = self.profiles[i].dt
-            iH = self.profiles[i].iH
-            UofT = self.profiles[i].UofT
-            VofT = self.profiles[i].VofT
-            WofT = self.profiles[i].WofT
-
-            if all((UofT is None, VofT is None, WofT is None)):
-                raise Exception("At least one of UofT, VofT, or WofT has to be provided to plot time history.")
-            if all((dt is None, t is None)):
-                raise Exception("Either dt or t has to be provided to plot time history.")
-            if UofT is not None:
-                N_T = np.shape(UofT)[1]
-                U += (UofT[iH,:],)
-            if VofT is not None:
-                N_T = np.shape(VofT)[1]
-                V += (VofT[iH,:],)
-            if WofT is not None:
-                N_T = np.shape(WofT)[1]
-                W += (WofT[iH,:],)
-            
-            if t is None:
-                t = np.linspace(0,(N_T-1)*dt,num=N_T)
-            if dt is None:
-                dt = np.mean(np.diff(t))
-            T += (t,)
-            names += (self.profiles[i].name,)
-        
-        wplt.plotVelTimeHistories(
-                                T=T,
-                                U=U,
-                                V=V,
-                                W=W,
-                                dataLabels=names,
-                                pltFile=figFile,
-                                xLabel=xLabel,
-                                yLabels=yLabels,
-                                xLimits=xLimits,
-                                yLimits=yLimits,
-                                figSize=figSize
-                                )   
-
-    def plotSpectra(self, 
-                    figFile=None, 
-                    figsize=[15,5], 
-                    normalize=True,
-                    normZ:Literal['Z','xLi']='Z',
-                    normU:Literal['U','sigUi']='U',
-                    smoothFactor=1,
-                    kwargs_smooth={},
-                    plotType='loglog',
-                    xLimits='auto', # [nMin,nMax]
-                    yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
-                    overlayVonK=False, # Either one entry or array equal to N
-                    kwargs_plt=None, # kwargs for the plot
-                    ):
-        overlayVonK = (overlayVonK,)*self.N if isinstance(overlayVonK,bool) else overlayVonK
-
-        n = Suu = Svv = Sww = names = ()
-        if normalize:
-            for i in range(self.N):
-                if self.profiles[i].SpectH is None:
-                    continue
-                n += (self.profiles[i].SpectH.rf(normZ=normZ),)
-                Suu += (self.profiles[i].SpectH.rSuu(normU=normU),)
-                Svv += (self.profiles[i].SpectH.rSvv(normU=normU),)
-                Sww += (self.profiles[i].SpectH.rSww(normU=normU),)
-                names += (self.profiles[i].SpectH.name,)
-
-            if normU == 'U':
-                ylabels = (r"$nS_{uu}/U_{ref}^2$",r"$nS_{vv}/U_{ref}^2$",r"$nS_{ww}/U_{ref}^2$")
-            elif normU == 'sigUi':
-                ylabels = (r"$nS_{uu}/\sigma_u^2$",r"$nS_{vv}/\sigma_v^2$",r"$nS_{ww}/\sigma_w^2$")
-            if normZ == 'Z':
-                xlabel = r"$n Z_{ref}/U$"
-            elif normZ == 'xLi':
-                xlabel = r"$n ^xL_u/U$"
-            drawXlineAt_rf1 = True
-        else:
-            for i in range(self.N):
-                if self.profiles[i].SpectH is None:
-                    continue
-                n += (self.profiles[i].SpectH.n,)
-                Suu += (self.profiles[i].SpectH.Suu,)
-                Svv += (self.profiles[i].SpectH.Svv,)
-                Sww += (self.profiles[i].SpectH.Sww,)
-                names += (self.profiles[i].SpectH.name,)
-            ylabels = (r"$S_{uu}$",r"$S_{vv}$",r"$S_{ww}$")
-            xlabel = r"$n [Hz]$"
-            drawXlineAt_rf1 = False
-        if np.isscalar(smoothFactor):
-            smoothFactor = (smoothFactor,)*self.N
-        for i in range(self.N):
-            if overlayVonK[i]:
-                n += (self.profiles[i].SpectH.rf(normZ=normZ),) if normalize else (self.profiles[i].SpectH.n,)
-                if smoothFactor[i] > 1:
-                    Suu += (self.profiles[i].SpectH.Suu_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
-                    Svv += (self.profiles[i].SpectH.Svv_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
-                    Sww += (self.profiles[i].SpectH.Sww_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
-                else:
-                    Suu += (smooth(self.profiles[i].SpectH.Suu_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
-                    Svv += (smooth(self.profiles[i].SpectH.Svv_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
-                    Sww += (smooth(self.profiles[i].SpectH.Sww_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
-                names += (self.profiles[i].SpectH.name+'-vonK',)
-        Nplts = len(n)
-        kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(Nplts)]
-
-        fig = wplt.plotSpectra(
-                        freq=n, # ([n1,], [n2,], ... [nN,])
-                        Suu=Suu, # ([n1,], [n2,], ... [nN,])
-                        Svv=Svv, # ([n1,], [n2,], ... [nN,])
-                        Sww=Sww, # ([n1,], [n2,], ... [nN,])
-                        dataLabels=names, # ("str1", "str2", ... "strN")
-                        pltFile=figFile, # "/path/to/plot/file.pdf"
-                        xLabel=xlabel,
-                        yLabels=ylabels, # ("str1", "str2", ... "str_m")
-                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
-                        yLimits=yLimits, # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
-                        figSize=figsize,
-                        plotType=plotType,
-                        drawXlineAt_rf1=drawXlineAt_rf1,
-                        kwargs_plt=kwargs_plt
-                        )
-        return fig
-
-    def plotSpect(self, 
-                fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], label=None, 
-                xLabel=None, yLabel_Suu=None, yLabel_Svv=None, yLabel_Sww=None,
-                xLimits=None, yLimits=None, 
-                normalize=True, normZ:Literal['Z','xLi']='Z', normU:Literal['U','sigUi']='U',         
-                plotType: Literal['loglog', 'semilogx', 'semilogy']='loglog', avoidZeroFreq=True, 
-                overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, kwargs_overlay_all={},
-                lgnd_kwargs={'loc': 'best', 'ncol': 1},
-                kwargs_plt=None, kwargs_ax={}):
-        fig, axs = plt.subplots(1,3)
-        fig.set_size_inches(figsize)
-
-        ax_Suu = axs[0] if ax_Suu is None else ax_Suu
-        ax_Svv = axs[1] if ax_Svv is None else ax_Svv
-        ax_Sww = axs[2] if ax_Sww is None else ax_Sww
-
-        kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
-
-        for i, prof in enumerate(self.profiles):
-            if i == 0 and overlayThese is not None:
-                _ = prof.SpectH.plot(fig=fig, ax_Suu=ax_Suu, ax_Svv=ax_Svv, ax_Sww=ax_Sww, figsize=figsize, label=prof.SpectH.name,
-                                        xLabel=xLabel, yLabel_Suu=yLabel_Suu, yLabel_Svv=yLabel_Svv, yLabel_Sww=yLabel_Sww,
-                                        xLimits=xLimits, yLimits=yLimits,
-                                        normalize=normalize, normZ=normZ, normU=normU,
-                                        plotType=plotType, avoidZeroFreq=avoidZeroFreq,
-                                        overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay, kwargs_overlay_all=kwargs_overlay_all,
-                                        kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
-            else:
-                _ = prof.SpectH.plot(fig=fig, ax_Suu=ax_Suu, ax_Svv=ax_Svv, ax_Sww=ax_Sww, figsize=figsize, label=prof.SpectH.name,
-                                        xLabel=xLabel, yLabel_Suu=yLabel_Suu, yLabel_Svv=yLabel_Svv, yLabel_Sww=yLabel_Sww,
-                                        xLimits=xLimits, yLimits=yLimits,
-                                        normalize=normalize, normZ=normZ, normU=normU,
-                                        plotType=plotType, avoidZeroFreq=avoidZeroFreq,
-                                        kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
-        
-        # with warnings.catch_warnings():
-        #     warnings.filterwarnings("ignore", category=UserWarning)
-        ax_Suu.legend(handles=ax_Suu.get_legend_handles_labels()[0],
-                        labels=ax_Suu.get_legend_handles_labels()[1],
-                        **lgnd_kwargs)
-        
-        for ax in axs.flatten():
-            formatAxis(ax, **kwargs_ax, numFormat='default')
-        # plt.show()
-        return fig, axs
-
-    def plotRefHeightStatsTable(self,
-                                fig=None,figsize=[0,5],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}', 
-                                fontSz=None, normalize=True, colColors=None, colTxtColors=None, 
-                                showBorder=False, 
-                                kwargs_table={'loc':'center',
-                                              'cellLoc': 'center',
-                                              'bbox': [0.0, 0.0, 1.0, 1.0],}):
-        if fig is None:
-            fntFctr = 1.0 if fontSz is None else fontSz/10.0
-            if autoFigSize:
-                figsize[0] = 2*(self.N+1)*fntFctr*figWidthFctr
-            fig = plt.figure(figsize=figsize)
-        if ax is None:
-            ax = plt.subplot()
-        ax.axis('off')
-        ax.axis('tight')
-
-        # each profile will have its own column and each field will have its own row. If there is missing value or non-existent field, it will be filled with ' '
-        cell_text = []
-        for key in self.profiles[0].stats.keys():
-            if normalize:
-                # val = [np.round(prof.stat_norm(key)[prof.H_idx], precision) if key in prof.stats.keys() else ' ' for prof in self.profiles]
-                val = []
-                for prof in self.profiles:
-                    if key in prof.stats.keys():
-                        val_norm, key_name = prof.stat_norm(key)
-                        if val_norm is None:
-                            val.append(' ')
-                        else:
-                            val.append(strFmt.format(val_norm[prof.H_idx]))
-                    else:
-                        val.append(' ')
-            else:
-                key_name = key
-                # val = [np.round(prof.stats[key][prof.H_idx], decimals) if key in prof.stats.keys() else ' ' for prof in self.profiles]
-                val = [strFmt.format(prof.stats[key][prof.H_idx]) if key in prof.stats.keys() else ' ' for prof in self.profiles]
-            val.insert(0,key_name)
-            cell_text.append(val)
-
-        table = ax.table(cellText=cell_text,
-                    colLabels=['Field',*[prof.name for prof in self.profiles]],
-                    **kwargs_table)
-        if fontSz is not None:
-            table.auto_set_font_size(False)
-            table.set_fontsize(fontSz)
-
-        # decorative edits
-        nRows = len(cell_text)+1
-        if colColors is not None:
-            for i in range(self.N):
-                for j in range(nRows):
-                    table[(j,i+1)].set_facecolor(colColors[i])
-        if colTxtColors is not None:
-            for i in range(self.N):
-                for j in range(nRows):
-                    table[(j,i+1)].set_text_props(color=colTxtColors[i])
-        for i in range(self.N+1):
-            table[(0,i)].set_text_props(weight='bold')
-        for i in range(nRows):
-            table[(i,0)].set_text_props(weight='bold')
-        if not showBorder:
-            for key, cell in table.get_celld().items():
-                cell.set_linewidth(0)
-
-        fig.tight_layout()
-        plt.show()
-        return fig, ax
-
-    def plotParamsTable(self,
-                        fig=None,figsize=[0,5],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}',
-                        fontSz=10, normalize=True, colColors=None, colTxtColors=None,
-                        showBorder=True,
-                        kwargs_table={'loc':'center',
-                                        'cellLoc': 'center',
-                                        'bbox': [0.0, 0.0, 1.0, 1.0],}):
-        if fig is None:
-            fntFctr = 1.0 if fontSz is None else fontSz/10.0
-            if autoFigSize:
-                figsize[0] = 2*(self.N+1)*fntFctr*figWidthFctr
-            fig = plt.figure(figsize=figsize)
-        if ax is None:
-            ax = plt.subplot()
-        ax.axis('off')
-        ax.axis('tight')
-
-        tableContent = self.paramsTable(normalized=normalize)
-        cell_text = []
-        for key in tableContent.keys():
-            if key == 'Name':
-                continue
-            val = [strFmt.format(tableContent[key][i]) for i in range(self.N)]
-            val.insert(0,key)
-            cell_text.append(val)
-
-        table = ax.table(cellText=cell_text,
-                    colLabels=['Field',*[prof.name for prof in self.profiles]],
-                    **kwargs_table)
-        if fontSz is not None:
-            table.auto_set_font_size(False)
-            table.set_fontsize(fontSz)
-
-        # decorative edits
-        nRows = len(cell_text)+1
-        if colColors is not None:
-            for i in range(self.N):
-                for j in range(nRows):
-                    table[(j,i+1)].set_facecolor(colColors[i])
-        if colTxtColors is not None:
-            for i in range(self.N):
-                for j in range(nRows):
-                    table[(j,i+1)].set_text_props(color=colTxtColors[i])
-        for i in range(self.N+1):
-            table[(0,i)].set_text_props(weight='bold')
-        # for i in range(nRows):
-        #     table[(i,0)].set_text_props(weight='bold')
-        if not showBorder:
-            for key, cell in table.get_celld().items():
-                cell.set_linewidth(0)
-
-        fig.tight_layout()
-        plt.show()
-        return fig, ax
-
 
 class ESDU74:
     __Omega = 72.7e-6       # Angular rate of rotation of the earth in [rad/s].  ESDU 74031 sect. A.1
@@ -3284,6 +2773,7 @@ class bldgCp(windCAD.building):
                 vScl=None,        # Scaling factor for velocity
                 samplingFreq=None,
                 fluidDensity=1.204,
+                fluidKinematicViscosity=1.48e-5,
                 AoA=None,
                 CpOfT=None,  # Cp TH referenced to Uref at Zref
                 badTaps=None, # tap numbers to remove
@@ -3411,10 +2901,11 @@ class bldgCp(windCAD.building):
         self.profile : profile = refProfile
         self.samplingFreq = samplingFreq
         self.fluidDensity = fluidDensity
+        self.fluidKinematicViscosity = fluidKinematicViscosity
 
         self.Zref = Zref_input
         self.AoA = [AoA,] if np.isscalar(AoA) else AoA          # [N_AoA]
-        self.Uref = [Uref_input for _ in AoA] if np.isscalar(Uref_input) else Uref_input
+        self.Uref = np.array([Uref_input for _ in AoA]) if np.isscalar(Uref_input) else Uref_input
         self.Uref_FS = Uref_FS
         self.badTaps = badTaps
         self.AoA_zero_deg_basisVector = AoA_zero_deg_basisVector
@@ -3431,6 +2922,8 @@ class bldgCp(windCAD.building):
         self.__handleBadTaps()
         if reReferenceCpToH:
             self.__reReferenceCp()
+        elif self.Zref is None:
+            self.Zref = self.H
         
         if vScl is not None:
             self.vScl = vScl
@@ -3490,7 +2983,7 @@ class bldgCp(windCAD.building):
     def __computeAreaAveragedCp(self):
         if self.NumPanels == 0 or self.CpOfT is None:
             return
-        print(f"Computing area-averaged Cp time history ...")
+        print(f"Computing area-averaging ...")
 
         axT = len(np.shape(self.CpOfT))-1
         nT = np.shape(self.CpOfT)[-1]
@@ -3498,7 +2991,7 @@ class bldgCp(windCAD.building):
         self.CpStatsAreaAvg = [] # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
 
         for _, fc in enumerate(self.faces):
-            print(f"    Computing area-averaged Cp time history for face {fc.name} ...")
+            print(f"    Computing area-averaging for face {fc.name} ...")
             avgCp_f = []
             for _,(wght_z,idx_z) in enumerate(zip(fc.tapWghtPerPanel,fc.tapIdxPerPanel)):
                 avgCp_z = []
@@ -3573,9 +3066,7 @@ class bldgCp(windCAD.building):
             elif hasattr(prof, p.name):
                 args[p.name] = getattr(prof, p.name)
         self.profile = profile(**args)
-        
     
-
     def __str__(self):
         return self.name
 
@@ -3618,6 +3109,12 @@ class bldgCp(windCAD.building):
             return None
         else:
             return dur * self.Uref/self.Zref
+
+    @property
+    def Re(self):
+        if self.Uref is None or self.Zref is None:
+            return None
+        return np.multiply(self.Uref, self.Zref) / self.fluidKinematicViscosity
 
     @property
     def NumAoA(self) -> int:
@@ -3873,6 +3370,12 @@ class bldgCp(windCAD.building):
         data = {}
         if self.profile is not None:
             data = self.profile.paramsTable(normalized=normalized)
+        Re = self.Re
+        if Re is not None and not np.isscalar(Re):
+            Re = [r for r in Re if r is not None]
+            Re = np.mean(Re) if len(Re) > 0 else None
+        data[getMathName('Re')] = np.nan if Re is None else Re
+        data[getMathName('U')+' (@ FS)'] = np.nan if self.Uref_FS is None else self.Uref_FS
         data[getMathName('lScl')] = np.nan if self.lScl is None else 1/self.lScl
         data[getMathName('vScl')] = np.nan if self.vScl is None else 1/self.vScl
         data[getMathName('tScl')] = np.nan if self.tScl is None else 1/self.tScl
@@ -4403,6 +3906,578 @@ class bldgCp(windCAD.building):
             plt.show()
             return fig, ax
 
+#-------------------------------- COLLECTIONS ----------------------------------
+class Profiles:
+    def __init__(self, profiles=[]):
+        self._currentIndex = 0
+        self.profiles:List[profile] = profiles
+
+    def __numOfProfiles(self):
+        if self.profiles is None:
+            return 0
+        return len(self.profiles)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self._currentIndex < self.__numOfProfiles():
+            member = self.profiles[self._currentIndex]
+            self._currentIndex += 1
+            return member
+        self._currentIndex = 0
+        raise StopIteration
+
+    def __getitem__(self, key):
+        return self.profiles[key]
+    
+    def __setitem__(self, key, value):
+        self.profiles[key] = value
+
+    def __len__(self):
+        return self.__numOfProfiles()
+    
+    def __str__(self):
+        return str(self.profiles)
+    
+    @property
+    def N(self):
+        return len(self.profiles)
+
+    def copy(self):
+        return copy.deepcopy(self)
+
+    def paramsTable(self, normalized=True, fields=None) -> dict:
+        params = None
+        for i, prof in enumerate(self.profiles):
+            if i == 0:
+                params = prof.paramsTable(normalized=normalized, fields=fields)
+                # change each entry to a list
+                for key in params.keys():
+                    params[key] = [params[key],]
+            else:
+                temp = prof.paramsTable(normalized=normalized, fields=fields)
+                # append each entry to the list
+                for key in temp.keys():
+                    params[key].append(temp[key])
+
+        return params
+
+    def plot(self, figsize=None, landscape=True, 
+             kwargs_profile=None, 
+             kwargs_spect=None):
+        if landscape:
+            figsize = [12,5] if figsize is None else figsize
+            fig, axs = plt.subplots(1,2)
+        else:
+            figsize = [5,12] if figsize is None else figsize
+            fig, axs = plt.subplots(2,1)
+        ax_U = axs[0]
+        ax_Iu = ax_U.twiny()
+        ax_Spect = axs[1]
+        fig.set_size_inches(figsize)
+
+        kwargs_profile = [{} if kwargs_profile is None else kwargs_profile[i] for i in range(self.N)]
+        kwargs_spect = [{} if kwargs_spect is None else kwargs_spect[i] for i in range(self.N)]
+
+        for i, prof in enumerate(self.profiles):
+            if i == 0:
+                kwargs_profile[i]['overlay_H'] = True
+            else:
+                kwargs_profile[i]['overlay_H'] = False
+            prof.plot(fig=fig, ax_U=ax_U, ax_Iu=ax_Iu, ax_Spect=ax_Spect, kwargs_profile=kwargs_profile[i], kwargs_spect=kwargs_spect[i])
+
+        formatAxis(ax_U, tickTop=False, gridMajor=False, gridMinor=False)
+        formatAxis(ax_Iu, tickRight=False, gridMajor=False, gridMinor=False)
+        formatAxis(ax_Spect, gridMajor=False, gridMinor=False)
+
+    def plot__(self, fig=None, prof_ax=None, spect_ax=None, zLim=None, col=None, 
+             linestyle_U=None, linestyle_Iu=None, marker_U=None, marker_Iu=None, mfc_U=None, mfc_Iu=None, linestyle_Spect=None, marker_Spect=None, alpha_Spect=None,
+             Iu_factr=100.0, IuLim=[0,100], Ulim=None, IuLgndLoc='upper left', UlgndLoc='upper right',
+             fontSz_axNum=10, fontSz_axLbl=12, fontSz_lgnd=12,
+             freqLim=None, rSuuLim=None):
+
+        N = len(self.profiles)
+        c = plt.cm.Dark2(np.linspace(0,1,N))
+        ls = ['solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
+              'solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
+              'solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
+              'solid', 'dashed', 'dashdot', 'dotted', (0, (1, 1)), (0, (5, 10)), (0, (5, 5)), (0, (3, 10, 1, 10)), (0, (3, 5, 1, 5)), (0, (3, 5, 1, 5, 1, 5)),
+              ]
+        mrkr = ['.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', 's', 'p', '*', 'h', 'H', '+', 'x', 'D', 'd', '|', '_',
+                '.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', 's', 'p', '*', 'h', 'H', '+', 'x', 'D', 'd', '|', '_',
+                '.', ',', 'o', 'v', '^', '<', '>', '1', '2', '3', '4', 's', 'p', '*', 'h', 'H', '+', 'x', 'D', 'd', '|', '_',
+                ]
+
+        fig=plt.figure(figsize=[8, 6]) if fig is None else fig
+        ax = plt.subplot(1,2,1) if prof_ax is None else prof_ax
+        ax2 = ax.twiny()
+        for i,prof in enumerate(self.profiles):
+            col_i = c[i] if col is None else col[i]
+            ls_U_i = ls[i] if linestyle_U is None else linestyle_U[i]
+            ls_Iu_i = ls[i+N] if linestyle_Iu is None else linestyle_Iu[i]
+            mrkr_U_i = mrkr[i] if marker_U is None else marker_U[i]
+            mrkr_Iu_i = mrkr[i+N] if marker_Iu is None else marker_Iu[i]
+            mfc_U_i = col_i if mfc_U is None else mfc_U[i]
+            mfc_Iu_i = 'w' if mfc_Iu is None else mfc_Iu[i]
+            alpha_S_i = 1.0 if alpha_Spect is None else alpha_Spect[i]
+
+            ax.plot(prof.UbyUh, prof.ZbyH, 
+                    ls=ls_U_i, marker=mrkr_U_i, markerfacecolor=mfc_U_i, color=col_i, label=r"$U/U_H$ "+prof.name)
+            ax2.plot(prof.Iu*Iu_factr, prof.ZbyH, 
+                    ls=ls_Iu_i, marker=mrkr_Iu_i, markerfacecolor=mfc_Iu_i, color=col_i, label=r"$I_u$ "+prof.name)
+
+        ax2.set_xlabel(r"$I_u$",fontsize=fontSz_axLbl)
+
+        if zLim is not None:
+            ax.set_ylim(zLim)
+            ax2.set_ylim(zLim)
+        if IuLim is not None:
+            ax2.set_xlim(IuLim)
+        if Ulim is not None:
+            ax.set_xlim(Ulim)
+        ax2.legend(loc=IuLgndLoc,fontsize=fontSz_lgnd)
+        ax.set_xlabel(r"$U/U_H$",fontsize=fontSz_axLbl)
+        ax.set_ylabel(r"$Z/H$",fontsize=fontSz_axLbl)
+        ax.legend(loc=UlgndLoc,fontsize=fontSz_lgnd)
+        ax.axhline(y=1.0, color='k',linestyle='--',linewidth=0.5)
+        ax.tick_params(axis='both',direction='in',which='both',top=False,right=True)
+        ax2.tick_params(axis='both',direction='in',which='both',top=True,right=False)
+        ax.tick_params(axis='both', which='major', labelsize=fontSz_axNum)
+        ax2.tick_params(axis='both', which='major', labelsize=fontSz_axNum)
+
+
+        ax = plt.subplot(1,2,2) if spect_ax is None else spect_ax
+        for i,prof in enumerate(self.profiles):
+            col_i = c[i] if col is None else col[i]
+            ls_Spect_i = ls[i] if linestyle_Spect is None else linestyle_Spect[i]
+            mrkr_Spect_i = mrkr[i] if marker_Spect is None else marker_Spect[i]
+            
+            S = prof.SpectH
+            if S is None:
+                continue
+            if S.Suu is None:
+                continue
+            ax.loglog(S.rf(), S.rSuu(normU='sigUi'),
+                       ls=ls_Spect_i, marker=mrkr_Spect_i, color=col_i, label=prof.SpectH.name, alpha=alpha_S_i)
+        ax.set_xlabel(r"$nH/U_H$",fontsize=fontSz_axLbl)
+        ax.set_ylabel(r"$nS_{uu}/\sigma_u^2$",fontsize=fontSz_axLbl)
+        ax.legend(fontsize=fontSz_lgnd)
+        if freqLim is not None:
+            ax.set_xlim(freqLim)
+        if rSuuLim is not None:
+            ax.set_ylim(rSuuLim)
+        ax.tick_params(axis='both',direction='in',which='both',top=True,right=True)
+        ax.tick_params(axis='both', which='major', labelsize=fontSz_axNum)
+        return fig
+    
+    def plotProfiles(self,figFile=None,xLimits='auto',zLimits='auto',figSize=[14,6],normalize=True):
+        Z = ()
+        val = ()
+        names = ()
+        # maxU = 0
+        if normalize:
+            for i in range(self.N):
+                Z += (self.profiles[i].Z/self.profiles[i].H,)
+                val += (np.transpose(np.stack((self.profiles[i].U/self.profiles[i].Uh, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
+                names += (self.profiles[i].name,)
+                # maxU = max(maxU, max(val[i][:,0]))
+            xlabels = (r"$U/U_{ref}$",r"$I_u$",r"$I_v$",r"$I_w$")
+            zlabel = r"$Z/Z_{ref}$"
+        else:
+            for i in range(self.N):
+                Z += (self.profiles[i].Z,)
+                val += (np.transpose(np.stack((self.profiles[i].U, self.profiles[i].Iu, self.profiles[i].Iv, self.profiles[i].Iw))),)
+                names += (self.profiles[i].name,)
+                # maxU = max(maxU, max(val[i][:,0]))
+            xlabels = (r"$U$",r"$I_u$",r"$I_v$",r"$I_w$")
+            zlabel = r"$Z$"
+
+        if xLimits is None:
+            xLimits = [[0, 2],[0,0.4],[0,0.4],[0,0.3]]
+
+        wplt.plotProfiles(
+                        Z, # ([n1,], [n2,], ... [nN,])
+                        val, # ([n1,M], [n2,M], ... [nN,M])
+                        dataLabels=names, # ("str1", "str2", ... "strN")
+                        pltFile=figFile, # "/path/to/plot/file.pdf"
+                        xLabels=xlabels, # ("str1", "str2", ... "str_m")
+                        yLabel=zlabel,
+                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                        yLimits=zLimits, # [zMin, zMax]
+                        figSize=figSize,
+                        nCols=4
+                        )
+    
+    def plotProfile_basic2(self, figsize=[12,10], label=None, normalize=True,
+                            xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
+                            xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
+                            overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
+                            yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
+                            kwargs_plt=None, kwargs_ax={}):
+        
+        fig, axs = plt.subplots(3,3)
+        fig.set_size_inches(figsize)
+
+        kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
+
+        if yLimits is None:
+            
+            allYlims = [] 
+            for i, prof in enumerate(self.profiles):
+                if prof.workSect_zLim is None:
+                    continue
+                else:
+                    normFactor = 1/prof.H if normalize else 1
+                    yl = [prof.workSect_zLim[0]*normFactor, prof.workSect_zLim[1]*normFactor] if prof.workSect_zLim is not None else None
+                    allYlims.append(yl)
+            if len(allYlims) == 0:
+                yLimits = None
+            else:
+                yLimits = [min([y[0] for y in allYlims]), max([y[1] for y in allYlims])]
+
+        for i, prof in enumerate(self.profiles):
+            if i == 0 and overlayThese is not None:
+                _,_,bxPltObj = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, 
+                                                    xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, 
+                                                    xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, xLimits_uw=xLimits_uw, 
+                                                    overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay,
+                                                    yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+            else:
+                _,_,_ = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, 
+                                        xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
+                                        xLimits_uw=xLimits_uw, 
+                                        yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+                bxPltObj = None if i == 0 else bxPltObj
+        
+        axs[0,2].axis('off')
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=UserWarning)
+            if bxPltObj is None:
+                axs[0,2].legend(handles=axs[0,0].get_legend_handles_labels()[0],
+                                labels=axs[0,0].get_legend_handles_labels()[1],
+                                **lgnd_kwargs)
+            else:
+                hndls, lbls = axs[0, 0].get_legend_handles_labels()
+
+                # Add the boxplot handle to the legend handles
+                hndls.append(bxPltObj["boxes"][0])
+
+                # Add the label for the boxplot handle
+                lbls.append(overlayThese['name'])
+
+                axs[0, 2].legend(handles=hndls, labels=lbls, **lgnd_kwargs)
+        for ax in axs.flatten():
+            formatAxis(ax, **kwargs_ax)
+        # plt.show()
+        return fig, axs
+
+    def plotTimeHistory(self,
+                    figFile=None,
+                    xLabel='t [s]',
+                    yLabels=("U(t)","V(t)","W(t)"), 
+                    xLimits='auto', # [tMin,tMax]
+                    yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
+                    figSize=[15, 5],
+                    overlay=False,
+                    ):
+        
+        T = U = V = W = names = ()
+        for i in range(self.N):
+            t = self.profiles[i].t
+            dt = self.profiles[i].dt
+            iH = self.profiles[i].iH
+            UofT = self.profiles[i].UofT
+            VofT = self.profiles[i].VofT
+            WofT = self.profiles[i].WofT
+
+            if all((UofT is None, VofT is None, WofT is None)):
+                raise Exception("At least one of UofT, VofT, or WofT has to be provided to plot time history.")
+            if all((dt is None, t is None)):
+                raise Exception("Either dt or t has to be provided to plot time history.")
+            if UofT is not None:
+                N_T = np.shape(UofT)[1]
+                U += (UofT[iH,:],)
+            if VofT is not None:
+                N_T = np.shape(VofT)[1]
+                V += (VofT[iH,:],)
+            if WofT is not None:
+                N_T = np.shape(WofT)[1]
+                W += (WofT[iH,:],)
+            
+            if t is None:
+                t = np.linspace(0,(N_T-1)*dt,num=N_T)
+            if dt is None:
+                dt = np.mean(np.diff(t))
+            T += (t,)
+            names += (self.profiles[i].name,)
+        
+        wplt.plotVelTimeHistories(
+                                T=T,
+                                U=U,
+                                V=V,
+                                W=W,
+                                dataLabels=names,
+                                pltFile=figFile,
+                                xLabel=xLabel,
+                                yLabels=yLabels,
+                                xLimits=xLimits,
+                                yLimits=yLimits,
+                                figSize=figSize
+                                )   
+
+    def plotSpectra(self, 
+                    figFile=None, 
+                    figsize=[15,5], 
+                    normalize=True,
+                    normZ:Literal['Z','xLi']='Z',
+                    normU:Literal['U','sigUi']='U',
+                    smoothFactor=1,
+                    kwargs_smooth={},
+                    plotType='loglog',
+                    xLimits='auto', # [nMin,nMax]
+                    yLimits='auto', # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
+                    overlayVonK=False, # Either one entry or array equal to N
+                    kwargs_plt=None, # kwargs for the plot
+                    ):
+        overlayVonK = (overlayVonK,)*self.N if isinstance(overlayVonK,bool) else overlayVonK
+
+        n = Suu = Svv = Sww = names = ()
+        if normalize:
+            for i in range(self.N):
+                if self.profiles[i].SpectH is None:
+                    continue
+                n += (self.profiles[i].SpectH.rf(normZ=normZ),)
+                Suu += (self.profiles[i].SpectH.rSuu(normU=normU),)
+                Svv += (self.profiles[i].SpectH.rSvv(normU=normU),)
+                Sww += (self.profiles[i].SpectH.rSww(normU=normU),)
+                names += (self.profiles[i].SpectH.name,)
+
+            if normU == 'U':
+                ylabels = (r"$nS_{uu}/U_{ref}^2$",r"$nS_{vv}/U_{ref}^2$",r"$nS_{ww}/U_{ref}^2$")
+            elif normU == 'sigUi':
+                ylabels = (r"$nS_{uu}/\sigma_u^2$",r"$nS_{vv}/\sigma_v^2$",r"$nS_{ww}/\sigma_w^2$")
+            if normZ == 'Z':
+                xlabel = r"$n Z_{ref}/U$"
+            elif normZ == 'xLi':
+                xlabel = r"$n ^xL_u/U$"
+            drawXlineAt_rf1 = True
+        else:
+            for i in range(self.N):
+                if self.profiles[i].SpectH is None:
+                    continue
+                n += (self.profiles[i].SpectH.n,)
+                Suu += (self.profiles[i].SpectH.Suu,)
+                Svv += (self.profiles[i].SpectH.Svv,)
+                Sww += (self.profiles[i].SpectH.Sww,)
+                names += (self.profiles[i].SpectH.name,)
+            ylabels = (r"$S_{uu}$",r"$S_{vv}$",r"$S_{ww}$")
+            xlabel = r"$n [Hz]$"
+            drawXlineAt_rf1 = False
+        if np.isscalar(smoothFactor):
+            smoothFactor = (smoothFactor,)*self.N
+        for i in range(self.N):
+            if overlayVonK[i]:
+                n += (self.profiles[i].SpectH.rf(normZ=normZ),) if normalize else (self.profiles[i].SpectH.n,)
+                if smoothFactor[i] > 1:
+                    Suu += (self.profiles[i].SpectH.Suu_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
+                    Svv += (self.profiles[i].SpectH.Svv_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
+                    Sww += (self.profiles[i].SpectH.Sww_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU),)
+                else:
+                    Suu += (smooth(self.profiles[i].SpectH.Suu_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
+                    Svv += (smooth(self.profiles[i].SpectH.Svv_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
+                    Sww += (smooth(self.profiles[i].SpectH.Sww_vonK(self.profiles[i].SpectH.n,normalized=normalize,normU=normU), window_len=smoothFactor[i], **kwargs_smooth), )
+                names += (self.profiles[i].SpectH.name+'-vonK',)
+        Nplts = len(n)
+        kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(Nplts)]
+
+        fig = wplt.plotSpectra(
+                        freq=n, # ([n1,], [n2,], ... [nN,])
+                        Suu=Suu, # ([n1,], [n2,], ... [nN,])
+                        Svv=Svv, # ([n1,], [n2,], ... [nN,])
+                        Sww=Sww, # ([n1,], [n2,], ... [nN,])
+                        dataLabels=names, # ("str1", "str2", ... "strN")
+                        pltFile=figFile, # "/path/to/plot/file.pdf"
+                        xLabel=xlabel,
+                        yLabels=ylabels, # ("str1", "str2", ... "str_m")
+                        xLimits=xLimits, # ([vMin1,vMax1], [vMin2,vMax2], ... [vMin_m,vMax_m])
+                        yLimits=yLimits, # ([SuuMin, SuuMax], [SvvMin, SvvMax], [SwwMin, SwwMax])
+                        figSize=figsize,
+                        plotType=plotType,
+                        drawXlineAt_rf1=drawXlineAt_rf1,
+                        kwargs_plt=kwargs_plt
+                        )
+        return fig
+
+    def plotSpect(self, 
+                fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], label=None, 
+                xLabel=None, yLabel_Suu=None, yLabel_Svv=None, yLabel_Sww=None,
+                xLimits=None, yLimits=None, 
+                normalize=True, normZ:Literal['Z','xLi']='Z', normU:Literal['U','sigUi']='U',         
+                plotType: Literal['loglog', 'semilogx', 'semilogy']='loglog', avoidZeroFreq=True, 
+                overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, kwargs_overlay_all={},
+                lgnd_kwargs={'loc': 'best', 'ncol': 1},
+                kwargs_plt=None, kwargs_ax={}):
+        fig, axs = plt.subplots(1,3)
+        fig.set_size_inches(figsize)
+
+        ax_Suu = axs[0] if ax_Suu is None else ax_Suu
+        ax_Svv = axs[1] if ax_Svv is None else ax_Svv
+        ax_Sww = axs[2] if ax_Sww is None else ax_Sww
+
+        kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
+
+        for i, prof in enumerate(self.profiles):
+            if i == 0 and overlayThese is not None:
+                _ = prof.SpectH.plot(fig=fig, ax_Suu=ax_Suu, ax_Svv=ax_Svv, ax_Sww=ax_Sww, figsize=figsize, label=prof.SpectH.name,
+                                        xLabel=xLabel, yLabel_Suu=yLabel_Suu, yLabel_Svv=yLabel_Svv, yLabel_Sww=yLabel_Sww,
+                                        xLimits=xLimits, yLimits=yLimits,
+                                        normalize=normalize, normZ=normZ, normU=normU,
+                                        plotType=plotType, avoidZeroFreq=avoidZeroFreq,
+                                        overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay, kwargs_overlay_all=kwargs_overlay_all,
+                                        kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+            else:
+                _ = prof.SpectH.plot(fig=fig, ax_Suu=ax_Suu, ax_Svv=ax_Svv, ax_Sww=ax_Sww, figsize=figsize, label=prof.SpectH.name,
+                                        xLabel=xLabel, yLabel_Suu=yLabel_Suu, yLabel_Svv=yLabel_Svv, yLabel_Sww=yLabel_Sww,
+                                        xLimits=xLimits, yLimits=yLimits,
+                                        normalize=normalize, normZ=normZ, normU=normU,
+                                        plotType=plotType, avoidZeroFreq=avoidZeroFreq,
+                                        kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+        
+        # with warnings.catch_warnings():
+        #     warnings.filterwarnings("ignore", category=UserWarning)
+        ax_Suu.legend(handles=ax_Suu.get_legend_handles_labels()[0],
+                        labels=ax_Suu.get_legend_handles_labels()[1],
+                        **lgnd_kwargs)
+        
+        for ax in axs.flatten():
+            formatAxis(ax, **kwargs_ax, numFormat='default')
+        # plt.show()
+        return fig, axs
+
+    def plotRefHeightStatsTable(self,
+                                fig=None,figsize=[0,5],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}', 
+                                fontSz=None, normalize=True, colColors=None, colTxtColors=None, 
+                                showBorder=False, 
+                                kwargs_table={'loc':'center',
+                                              'cellLoc': 'center',
+                                              'bbox': [0.0, 0.0, 1.0, 1.0],}):
+        if fig is None:
+            fntFctr = 1.0 if fontSz is None else fontSz/10.0
+            if autoFigSize:
+                figsize[0] = 2*(self.N+1)*fntFctr*figWidthFctr
+            fig = plt.figure(figsize=figsize)
+        if ax is None:
+            ax = plt.subplot()
+        ax.axis('off')
+        ax.axis('tight')
+
+        # each profile will have its own column and each field will have its own row. If there is missing value or non-existent field, it will be filled with ' '
+        cell_text = []
+        for key in self.profiles[0].stats_core.keys():
+            if normalize:
+                # val = [np.round(prof.stat_norm(key)[prof.H_idx], precision) if key in prof.stats.keys() else ' ' for prof in self.profiles]
+                val = []
+                for prof in self.profiles:
+                    if key in prof.stats_core.keys():
+                        val_norm, key_name = prof.stat_norm(key)
+                        if val_norm is None:
+                            val.append(' ')
+                        else:
+                            val.append(strFmt.format(val_norm[prof.H_idx]))
+                    else:
+                        val.append(' ')
+            else:
+                key_name = key
+                # val = [np.round(prof.stats[key][prof.H_idx], decimals) if key in prof.stats.keys() else ' ' for prof in self.profiles]
+                val = [strFmt.format(prof.stats_core[key][prof.H_idx]) if key in prof.stats_core.keys() else ' ' for prof in self.profiles]
+            val.insert(0,key_name)
+            cell_text.append(val)
+
+        table = ax.table(cellText=cell_text,
+                    colLabels=['Field',*[prof.name for prof in self.profiles]],
+                    **kwargs_table)
+        if fontSz is not None:
+            table.auto_set_font_size(False)
+            table.set_fontsize(fontSz)
+
+        # decorative edits
+        nRows = len(cell_text)+1
+        if colColors is not None:
+            for i in range(self.N):
+                for j in range(nRows):
+                    table[(j,i+1)].set_facecolor(colColors[i])
+        if colTxtColors is not None:
+            for i in range(self.N):
+                for j in range(nRows):
+                    table[(j,i+1)].set_text_props(color=colTxtColors[i])
+        for i in range(self.N+1):
+            table[(0,i)].set_text_props(weight='bold')
+        for i in range(nRows):
+            table[(i,0)].set_text_props(weight='bold')
+        if not showBorder:
+            for key, cell in table.get_celld().items():
+                cell.set_linewidth(0)
+
+        fig.tight_layout()
+        plt.show()
+        return fig, ax
+
+    def plotParamsTable(self,
+                        fig=None,figsize=[0,7],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}',
+                        fontSz=10, normalize=True, colColors=None, colTxtColors=None,
+                        showBorder=True,
+                        kwargs_table={'loc':'center',
+                                        'cellLoc': 'center',
+                                        'bbox': [0.0, 0.0, 1.0, 1.0],}):
+        if fig is None:
+            fntFctr = 1.0 if fontSz is None else fontSz/10.0
+            if autoFigSize:
+                figsize[0] = 2*(self.N+1)*fntFctr*figWidthFctr
+            fig = plt.figure(figsize=figsize)
+        if ax is None:
+            ax = plt.subplot()
+        ax.axis('off')
+        ax.axis('tight')
+
+        tableContent = self.paramsTable(normalized=normalize)
+        cell_text = []
+        for key in tableContent.keys():
+            if key == 'Name':
+                continue
+            val = [strFmt.format(tableContent[key][i]) for i in range(self.N)]
+            val.insert(0,key)
+            cell_text.append(val)
+
+        table = ax.table(cellText=cell_text,
+                    colLabels=['Field',*[prof.name for prof in self.profiles]],
+                    **kwargs_table)
+        if fontSz is not None:
+            table.auto_set_font_size(False)
+            table.set_fontsize(fontSz)
+
+        # decorative edits
+        nRows = len(cell_text)+1
+        if colColors is not None:
+            for i in range(self.N):
+                for j in range(nRows):
+                    table[(j,i+1)].set_facecolor(colColors[i])
+        if colTxtColors is not None:
+            for i in range(self.N):
+                for j in range(nRows):
+                    table[(j,i+1)].set_text_props(color=colTxtColors[i])
+        for i in range(self.N+1):
+            table[(0,i)].set_text_props(weight='bold')
+        # for i in range(nRows):
+        #     table[(i,0)].set_text_props(weight='bold')
+        if not showBorder:
+            for key, cell in table.get_celld().items():
+                cell.set_linewidth(0)
+
+        fig.tight_layout()
+        plt.show()
+        return fig, ax
+
 class BldgCps():
     def __init__(self,
                 memberBldgs:List[bldgCp]=[],
@@ -4660,21 +4735,119 @@ class BldgCps():
         fig.tight_layout()
         plt.show()
         return fig, ax
-    
 
-#---------------------------------- GENERAL ------------------------------------
 class validator():
     def __init__(self, 
                 target:Union[None, bldgCp, BldgCps]=None,
                 model:Union[None, bldgCp, BldgCps]=None,
-                refProfiles:Union[None, Profiles]=None,
+                errorTypes_velStats = ['MAE', 'NRMSE', 'RMSE', 'R2', 'SMAPE'],
+                errorTypes_CpStats = ['MAE', 'NRMSE', 'RMSE', 'R2', 'SMAPE'],
                 ) -> None:
         self.target: bldgCp = target
         self.model: bldgCp = model
+        self.errorTypes_velStats = errorTypes_velStats
+        self.errorTypes_CpStats = errorTypes_CpStats
 
-        self.profiles = Profiles([self.target.profile, self.model.profile, refProfiles.profiles])
-        self.difference = None
+        self.error_params = None
+        self.error_velStats = None
+        self.error_CpStats = None
+        self.error_CpAavg = None
+        
+        self.Refresh()
+
+    def __computeErrors_params(self, 
+                                  errorMeasures_params:Literal['diff','diff_norm','ratio','orderOfMagnitude']=['diff','diff_norm','ratio','orderOfMagnitude']):
+        tmp1 = {}
+        if 'diff' in errorMeasures_params:
+            tmp1['diff'] = {}
+        if 'diff_norm' in errorMeasures_params:
+            tmp1['diff_norm'] = {}
+        if 'ratio' in errorMeasures_params:
+            tmp1['ratio'] = {}
+        if 'orderOfMagnitude' in errorMeasures_params:
+            tmp1['orderOfMagnitude'] = {}
+        
+        tp = self.target.paramsTable()
+        mp = self.model.paramsTable()
+        for key in tp.keys():
+            tp_i, mp_i = tp[key], mp[key]
+            if not np.isscalar(tp_i) or not np.isscalar(mp_i) or isinstance(tp_i, str) or isinstance(mp_i, str):
+                tp_i, mp_i = np.nan, np.nan
+            if 'diff' in errorMeasures_params:
+                tmp1['diff'][key] = mp_i - tp_i
+            if 'diff_norm' in errorMeasures_params:
+                tmp1['diff_norm'][key] = (mp_i - tp_i)/tp_i
+            if 'ratio' in errorMeasures_params:
+                tmp1['ratio'][key] = mp_i/tp_i
+            if 'orderOfMagnitude' in errorMeasures_params:
+                tmp1['orderOfMagnitude'][key] = np.log10(mp_i/tp_i)
+
+        self.error_params = tmp1
+
+    def __computeErrors_velStats(self):
+        Zt = np.array(self.target.profile.Z_eff)
+        Zm = np.array(self.model.profile.Z_eff)
+        zMin, zMax = np.max([np.min(Zt), np.min(Zm)]), np.min([np.max(Zt), np.max(Zm)])
+        mask_t = np.logical_and(Zt >= zMin, Zt <= zMax)
+        mask_m = np.logical_and(Zm >= zMin, Zm <= zMax)
+        Z = np.sort(np.concatenate((Zt[mask_t], Zm[mask_m])))
+        if len(Z) == 0:
+            raise Exception(f"The target and model profiles do not overlap. Cannot compute error")
+
+        stats_t = self.target.profile.stats_norm_interp_to_Z(Z)
+        stats_m = self.model.profile.stats_norm_interp_to_Z(Z)
+        tmp2 = {}
+        for key in stats_t.keys():
+            stats_t_i, stats_m_i = stats_t[key], stats_m[key]
+            tmp2[key] = measureError(stats_m_i, stats_t_i, errorTypes=self.errorTypes_velStats)
+
+        self.error_velStats = tmp2
+
+    def __computeErrors_CpStats(self,):
+        if self.target.CpStats is None or self.model.CpStats is None:
+            raise Exception(f"Cannot compute CpStats error. The following are required: CpStats")
+        if self.target.CpStats.keys() != self.model.CpStats.keys():
+            raise Exception(f"Cannot compute CpStats error. The following are required: CpStats")
+        
+        aoa_t = np.array(self.target.AoA)
+        tapNo_t = np.array(self.target.tapNo)
+        tapIdx_t = np.array(self.target.tapIdx)
+
+        aoa_m = np.array(self.model.AoA)
+        tapNo_m = np.array(self.model.tapNo)
+        tapIdx_m = np.array(self.model.tapIdx)
+
+        commonAoA = np.sort(np.intersect1d(aoa_t, aoa_m))
+        commonTapNo = np.sort(np.intersect1d(tapNo_t, tapNo_m))
+        if len(commonAoA) == 0 or len(commonTapNo) == 0:
+            raise Exception(f"The target and model CpStats do not overlap (no common AoA or tapNo). Cannot compute error")
+
+        tapIdx_t = np.array([np.where(tapNo_t == i)[0][0] for i in commonTapNo])
+        tapIdx_m = np.array([np.where(tapNo_m == i)[0][0] for i in commonTapNo])
+
+        aoaIdx_t = np.array([np.where(aoa_t == i)[0][0] for i in commonAoA])
+        aoaIdx_m = np.array([np.where(aoa_m == i)[0][0] for i in commonAoA])
+
+        tmp = {}
+        tmp['AoA'] = commonAoA
+        tmp['tapNo'] = commonTapNo
+        for key in self.target.CpStats.keys():
+            stat_t = self.target.CpStats[key][aoaIdx_t[:, np.newaxis], tapIdx_t]
+            stat_m = self.model.CpStats[key][aoaIdx_m[:, np.newaxis], tapIdx_m]
+            tmp[key] = measureError(stat_t, stat_m, errorTypes=self.errorTypes_CpStats)
+
+        self.error_CpStats = tmp
+
+    def __computeErrors_CpAavg(self):
+        if self.target.CpStatsAreaAvg is None or self.model.CpStatsAreaAvg is None:
+            return
         pass
+
+    def Refresh(self):
+        self.__computeErrors_params()
+        self.__computeErrors_velStats()
+        self.__computeErrors_CpStats()
+        self.__computeErrors_CpAavg()
 
     def compareProfiles(self):
         pass

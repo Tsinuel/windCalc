@@ -258,7 +258,7 @@ class BLWTL_HFPI:
         if np.any(voltage < 0.0):
             warnings.warn("Negative voltage detected in main pitot. Assuming that the pitot ID is not correct.")
             return None
-        return np.sqrt(voltage)  * self.barocelRangeFactors['main_pitot'] * wd.fps2mps
+        return np.sqrt(voltage)  * self.barocelRangeFactors['main_pitot'] * wd.UNIT_CONV['fps2mps']
 
     @property
     def Uref_Xchk(self):
@@ -282,7 +282,7 @@ class BLWTL_HFPI:
         if np.any(voltage < 0):
             warnings.warn("Negative voltage detected in cross-check pitot. Assuming that the pitot ID is not correct.")
             return None
-        return np.sqrt(voltage)  * self.barocelRangeFactors['xcheck_pitot'] * wd.fps2mps
+        return np.sqrt(voltage)  * self.barocelRangeFactors['xcheck_pitot'] * wd.UNIT_CONV['fps2mps']
 
     @property
     def description(self):
