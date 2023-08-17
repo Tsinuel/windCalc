@@ -75,6 +75,24 @@ with open(PATH_SRC+r'/refData/bluecoeff.json', 'r') as f:
 #===============================================================================
 
 #---------------------------------- GENERAL ------------------------------------
+def isValidNumericScalar(value):
+    try:
+        if value is not None and (isinstance(value, (int, float, complex)) or
+                                  np.isinf(value) or np.isnan(value)):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
+def isValidNumericVector(value):
+    try:
+        if value is not None and isinstance(value, (list, tuple, np.ndarray)) and \
+            all(isValidNumericScalar(x) for x in value):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return False
+
 def smooth(x, window_len=11, window:Literal['flat', 'hanning', 'hamming', 'bartlett', 'blackman']='hanning', 
            mode:Literal['same', 'valid', 'full', 'wrap', 'constant']='valid',
            usePadding=True, paddingFactor=0.5, paddingMode='edge'):
@@ -662,7 +680,7 @@ def coherence(pts1: np.ndarray, pts2: np.ndarray,
 def fitESDUgivenIuRef(
                     Zref,
                     IuRef,
-                    z0i=[1e-7,1.0],
+                    z0i=[1e-10,10.0],
                     Uref=10.0,
                     phi=30,
                     ESDUversion:Literal['ESDU74', 'ESDU85']='ESDU85',
@@ -1754,7 +1772,10 @@ class profile:
                 data[getMathName('T')] = self.T
         if 'n_smpl' in fields:
             if normalized:
-                data[getMathName('f_smpl')] = self.samplingFreq * self.H/self.Uh
+                if self.samplingFreq is None or self.H is None or self.Uh is None:
+                    data[getMathName('f_smpl')] = None
+                else:
+                    data[getMathName('f_smpl')] = self.samplingFreq * self.H / self.Uh 
             else:
                 data[getMathName('n_smpl')] = self.samplingFreq
 
@@ -1850,6 +1871,8 @@ class profile:
             Z, U = self.Z_eff, self.U[self.idx_eff]
             z0, _, _ = fitVelDataToLogProfile(Z, U, Zref=self.H, Uref=self.Uh, d=0.0, debugMode=debugMode, uStar_init=uStar_init, z0_init=z0_init, **kwargs_z0Fit)
         elif fitTo == 'Iu':
+            if self.SpectH is None or self.SpectH.Iu is None or self.H is None or self.lScl is None:
+                return None
             z0,_ = fitESDUgivenIuRef(self.H/self.lScl, self.SpectH.Iu, **kwargs_z0Fit)
             z0 *= self.lScl
         else:
@@ -1952,7 +1975,7 @@ class profile:
             plt.show()
         return fig, ax_U, ax_Iu
 
-    def plotProfile_basic2(self, fig=None, axs=None, figsize=[12,10], label=None, normalize=True,
+    def plotProfile_basic2(self, fig=None, axs=None, figsize=[12,12], label=None, normalize=True,
                             xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
                             xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
                             overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
@@ -2772,7 +2795,7 @@ class bldgCp(windCAD.building):
                 Uref_FS=None,     # Full-scale reference velocity for scaling purposes
                 vScl=None,        # Scaling factor for velocity
                 samplingFreq=None,
-                fluidDensity=1.204,
+                fluidDensity=1.0,
                 fluidKinematicViscosity=1.48e-5,
                 AoA=None,
                 CpOfT=None,  # Cp TH referenced to Uref at Zref
@@ -2839,8 +2862,7 @@ class bldgCp(windCAD.building):
                         Sampling frequency of the Cp time history. The units are in Hz. 
                         Defaults to None.
             fluidDensity (float, optional): 
-                        Fluid density in kg/m3. Defaults to that of air at sea level, 
-                        i.e., 1.204 kg/m3. https://en.wikipedia.org/wiki/Density_of_air
+                        Fluid density in kg/m3. Defaults to 1.0 assuming normalized pressure.
             AoA (float, optional): 
                         Angle of attack in degrees. Defaults to None.
             CpOfT (np.ndarray, optional): 
@@ -3952,14 +3974,20 @@ class Profiles:
         for i, prof in enumerate(self.profiles):
             if i == 0:
                 params = prof.paramsTable(normalized=normalized, fields=fields)
-                # change each entry to a list
                 for key in params.keys():
                     params[key] = [params[key],]
             else:
                 temp = prof.paramsTable(normalized=normalized, fields=fields)
                 # append each entry to the list
                 for key in temp.keys():
-                    params[key].append(temp[key])
+                    if key in params.keys():
+                        params[key].append(temp[key])
+                    else:
+                        params[key] = [None,]*i + [temp[key],]
+                # loop through the params keys looking for those that are not in temp
+                for key in params.keys():
+                    if key not in temp.keys():
+                        params[key].append(None)
 
         return params
 
@@ -4109,7 +4137,7 @@ class Profiles:
                         nCols=4
                         )
     
-    def plotProfile_basic2(self, figsize=[12,10], label=None, normalize=True,
+    def plotProfile_basic2(self, figsize=[12,12], label=None, normalize=True,
                             xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
                             xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
                             overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
@@ -4443,9 +4471,14 @@ class Profiles:
         tableContent = self.paramsTable(normalized=normalize)
         cell_text = []
         for key in tableContent.keys():
-            if key == 'Name':
+            if key == 'name':
                 continue
-            val = [strFmt.format(tableContent[key][i]) for i in range(self.N)]
+            val = []
+            for i in range(self.N):
+                v = tableContent[key][i]
+                if not isValidNumericScalar(v):
+                    v = np.nan                
+                val.append(strFmt.format(v))
             val.insert(0,key)
             cell_text.append(val)
 
@@ -4701,7 +4734,12 @@ class BldgCps():
         for key in tableContent.keys():
             if key == 'Name':
                 continue
-            val = [strFmt.format(tableContent[key][i]) for i in range(self.N_bldgs)]
+            val = []
+            for i in range(self.N_bldgs):
+                v = tableContent[key][i]
+                if not isValidNumericScalar(v):
+                    v = np.nan     
+                val.append(strFmt.format(v))
             val.insert(0,key)
             cell_text.append(val)
 
@@ -4771,8 +4809,10 @@ class validator():
         mp = self.model.paramsTable()
         for key in tp.keys():
             tp_i, mp_i = tp[key], mp[key]
-            if not np.isscalar(tp_i) or not np.isscalar(mp_i) or isinstance(tp_i, str) or isinstance(mp_i, str):
-                tp_i, mp_i = np.nan, np.nan
+            if not isValidNumericScalar(tp_i):
+                tp_i = np.nan
+            if not isValidNumericScalar(mp_i):
+                mp_i = np.nan
             if 'diff' in errorMeasures_params:
                 tmp1['diff'][key] = mp_i - tp_i
             if 'diff_norm' in errorMeasures_params:
