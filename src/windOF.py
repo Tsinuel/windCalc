@@ -517,7 +517,7 @@ def processVelProfile(caseDir, probeName, targetProfile=None,
     
     if writeToDataFile:
         print("  >> Writing data to file.")
-        vel_LES.writeToFile(outDir=outDir,writeTH=True,writeProfiles=True)
+        vel_LES.writeToFile__to_be_depricated(outDir=outDir,writeTH=True,writeProfiles=True)
         print("             << Done!")
     
     if targetProfile is None:
@@ -1715,14 +1715,14 @@ def scaleInflowData(caseDir,tMin,tMax,H,writeInflow=True,smplName=''):
                     UofT=np.transpose(Vsmpl_in[:,:,0]),
                     VofT=np.transpose(Vsmpl_in[:,:,1]),
                     WofT=np.transpose(Vsmpl_in[:,:,2]))
-    velUnscaled.writeToFile(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
+    velUnscaled.writeToFile__to_be_depricated(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
 
     dt = round(times[1][1] * inflDict["tScl"], __precision)  - round(times[0][1] * inflDict["tScl"], __precision)
     velScaled = wind.profile(name="Scaled",Z=Z_smpl,dt=dt,H=H,
                     UofT=np.transpose(Vsmpl_out[:,:,0]),
                     VofT=np.transpose(Vsmpl_out[:,:,1]),
                     WofT=np.transpose(Vsmpl_out[:,:,2]))
-    velScaled.writeToFile(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
+    velScaled.writeToFile__to_be_depricated(inflDict["outputDir"],nameSuffix=sfix,writeTH=True)
  
     if writeInflow:
         inflowDictFile = open(inflDict["outputDir"]+'/inflowDict', 'w')

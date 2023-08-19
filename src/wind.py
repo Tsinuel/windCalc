@@ -65,7 +65,7 @@ DEFAULT_VELOCITY_STAT_FIELDS = ['U','Iu','Iv','Iw','xLu','xLv','xLw','uw']
 PATH_SRC = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_RF = np.logspace(-5,3,400)
 VON_KARMAN_CONST = 0.4
-VALID_ERROR_TYPES = ['RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R2']
+VALID_ERROR_TYPES = ['RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R^2']
 with open(PATH_SRC+r'/refData/bluecoeff.json', 'r') as f:
     BLUE_COEFFS = json.load(f)
 
@@ -125,7 +125,8 @@ def lowpass(x, fs, fc, axis=-1, order = 4, resample=False):
         y = signal.resample(y, int(np.shape(y)[axis] * fc / fs), axis=axis)
     return y
 
-def getMathName(rawname):
+def mathName(rawname):
+    # wind field
     if rawname == 'U':
         return '$U$ [$m/s$]'
     elif rawname == 'U/Uh':
@@ -170,12 +171,13 @@ def getMathName(rawname):
         return '$\\overline{v\'w\'}$ [$m^2/s^2$]'
     elif rawname == 'vw/Uh^2':
         return '$\\overline{v\'w\'}/U_h^2$'
-    elif rawname == 'H':
-        return '$H$ [$m$]'
     elif rawname == 'z0':
         return '$z_0$ [$m$]'
     elif rawname == 'Je':
         return '$Je$'
+    # Geometry and scaling
+    elif rawname == 'H':
+        return '$H$ [$m$]'
     elif rawname == 'T':
         return '$T$ [$s$]'
     elif rawname == 'T_star':
@@ -192,11 +194,25 @@ def getMathName(rawname):
         return '$\lambda_T$ = 1:'
     elif rawname == 'Re':
         return '$Re$'
+    # Cp
+    elif rawname == 'mean':
+        return '$\\overline{C_p}$'
+    elif rawname == 'std':
+        return '$\\sigma_{C_p}$'
+    elif rawname == 'peak' or rawname == 'peakMax':
+        return '$\hat{C_p}$'
+    elif rawname == 'peakMin':
+        return '$\check{C}_p$'
+    elif rawname == 'skewness':
+        return '$\\gamma_{C_p}$'
+    elif rawname == 'kurtosis':
+        return '$\\kappa_{C_p}$'
     else:
         warnings.warn("Unknown rawname: "+rawname)
         return rawname
 
-def measureError(model, data, errorTypes:Literal['all','RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R2',]=['RMSE','NRMSE','MAE','PCC','R2']):
+def measureError(cfd, exp, errorTypes:Literal['all','RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R^2',]=['RMSE','NRMSE','MAE','PCC','R^2'],
+                 returnEqn=False):
     '''
     Parameters
     ----------
@@ -245,33 +261,49 @@ def measureError(model, data, errorTypes:Literal['all','RMSE', 'MAE', 'NMAE', 'S
     if not all(x in VALID_ERROR_TYPES for x in errorTypes):
         raise Exception("Unknown error type(s): "+str(errorTypes))
     
+    eqn = {
+        'RMSE': r'$RMSE = \sqrt{\frac{1}{N}\sum_{i=1}^{N}(model_i - data_i)^2}$',
+        'MAE': r'$MAE = \frac{1}{N}\sum_{i=1}^{N}|model_i - data_i|$',
+        'NMAE': r'$NMAE = \frac{1}{N}\sum_{i=1}^{N}\frac{|model_i - data_i|}{\bar{data}}$',
+        'SMAPE': r'$SMAPE = \frac{1}{N}\sum_{i=1}^{N}\frac{|model_i - data_i|}{(|model_i| + |data_i|)/2}$',
+        'MSLE': r'$MSLE = \frac{1}{N}\sum_{i=1}^{N}(\log(model_i + 1) - \log(data_i + 1))^2$',
+        'NRMSE': r'$NRMSE = \frac{\sqrt{\frac{1}{N}\sum_{i=1}^{N}(model_i - data_i)^2}}{\bar{data}}$',
+        'RAE': r'$RAE = \frac{\sum_{i=1}^{N}|model_i - data_i|}{\sum_{i=1}^{N}|data_i - \bar{data}|}$',
+        'MBD': r'$MBD = \frac{\sum_{i=1}^{N}(model_i - data_i)}{\sum_{i=1}^{N}data_i}$',
+        'PCC': r'$PCC = \frac{\sum_{i=1}^{N}(model_i - \bar{model})(data_i - \bar{data})}{\sqrt{\sum_{i=1}^{N}(model_i - \bar{model})^2}\sqrt{\sum_{i=1}^{N}(data_i - \bar{data})^2}}$',
+        'R^2': r'$R^2 = 1 - \frac{\sum_{i=1}^{N}(model_i - data_i)^2}{\sum_{i=1}^{N}(data_i - \bar{data})^2}$',
+    }
+
     error = {}
     for errorType in errorTypes:
         if errorType == 'RMSE':
-            error['RMSE'] = np.sqrt(np.mean((model - data)**2))
+            error['RMSE'] = np.sqrt(np.mean((cfd - exp)**2))
         elif errorType == 'MAE':
-            error['MAE'] = np.mean(np.abs(model - data))
+            error['MAE'] = np.mean(np.abs(cfd - exp))
         elif errorType == 'NMAE':
-            error['NMAE'] = np.mean(np.abs(model - data)) / np.mean(data)
+            error['NMAE'] = np.mean(np.abs(cfd - exp)) / np.mean(exp)
         elif errorType == 'SMAPE':
-            error['SMAPE'] = np.mean(np.abs(model - data)) / (np.mean(np.abs(model)) + np.mean(np.abs(data)))
+            error['SMAPE'] = np.mean(np.abs(cfd - exp)) / (np.mean(np.abs(cfd)) + np.mean(np.abs(exp)))
         elif errorType == 'MSLE':
-            error['MSLE'] = np.mean((np.log(model + 1) - np.log(data + 1))**2)
+            error['MSLE'] = np.mean((np.log(cfd + 1) - np.log(exp + 1))**2)
         elif errorType == 'NRMSE':
-            error['NRMSE'] = np.sqrt(np.mean((model - data)**2)) / np.mean(data)
+            error['NRMSE'] = np.sqrt(np.mean((cfd - exp)**2)) / np.mean(exp)
         elif errorType == 'RAE':
-            error['RAE'] = np.sum(np.abs(model - data)) / np.sum(np.abs(data - np.mean(data)))
+            error['RAE'] = np.sum(np.abs(cfd - exp)) / np.sum(np.abs(exp - np.mean(exp)))
         elif errorType == 'MBD':
-            error['MBD'] = np.sum(model - data) / np.sum(data)
+            error['MBD'] = np.sum(cfd - exp) / np.sum(exp)
         elif errorType == 'PCC':
-            error['PCC'] = pearsonr(model, data)[0]
+            error['PCC'] = pearsonr(cfd.flatten(), exp.flatten())[0]
         elif errorType == 'RAE':
-            error['RAE'] = np.sum(np.abs(model - data)) / np.sum(np.abs(data - np.mean(data)))
-        elif errorType == 'R2':
-            error['R2'] = r2_score(data, model)
+            error['RAE'] = np.sum(np.abs(cfd - exp)) / np.sum(np.abs(exp - np.mean(exp)))
+        elif errorType == 'R^2':
+            error['R^2'] = r2_score(exp, cfd)
         else:
             raise Exception("Unknown error type: "+errorType)
-    return error
+    if returnEqn:
+        return error, eqn
+    else:
+        return error
 
 #------------------------------- WIND FIELD ------------------------------------
 def integTimeScale(x,dt,rho_tol=0.0001,showPlots=False,removeNaNs=True):
@@ -1364,6 +1396,10 @@ class profile:
                 keepTH=True,
                 interpolateToH=False, 
                 units=DEFAULT_SI_UNITS,
+                kwargs_z0_fit={'fitTo':'Iu', # 'Iu' or 'U'
+                               'uStar_init':1.0, 
+                               'z0_init':0.001, 
+                               'kwargs_z0Fit':{}},
                 ):
         '''
         Parameters
@@ -1443,6 +1479,9 @@ class profile:
         self.units = units
 
         self.keepTH = keepTH
+
+        self.z0 = None
+        self.kwargs_z0_fit = kwargs_z0_fit
 
         self.Refresh()
         if not keepTH:
@@ -1612,6 +1651,15 @@ class profile:
             return None
         return self.stats_core['uw']
 
+    @property
+    def Je(self) -> Union[float, None]:
+        ''' Computes the Jensen number, Je = H/z0, where z0 is the roughness length and H is the reference height.'''
+        z0 = self.z0
+        if self.stats_core is None or self.H is None or z0 is None:
+            return None
+        else:
+            return self.H/z0
+        
     """---------------------------------- Normalizers ---------------------------------"""
     @property
     def ZbyH(self) -> Union[np.ndarray, None]:
@@ -1716,17 +1764,17 @@ class profile:
             if field in ['U','V','W']:
                 if self.Uh is None:
                     return None, ''
-                return self.stats_core[field]/self.Uh, getMathName(field+'/Uh')
+                return self.stats_core[field]/self.Uh, mathName(field+'/Uh')
             elif field in ['Iu','Iv','Iw']:
-                return self.stats_core[field], getMathName(field)
+                return self.stats_core[field], mathName(field)
             elif field in ['xLu','xLv','xLw']:
                 if self.H is None:
                     return None, ''
-                return self.stats_core[field]/self.H, getMathName(field+'/H')
+                return self.stats_core[field]/self.H, mathName(field+'/H')
             elif field in ['uv','uw','vw']:
                 if self.Uh is None:
                     return None, ''
-                return self.stats_core[field]/(self.Uh**2), getMathName(field+'/Uh^2')
+                return self.stats_core[field]/(self.Uh**2), mathName(field+'/Uh^2')
             else:
                 raise NotImplementedError("Normalization for field '{}' not implemented".format(field))
 
@@ -1749,9 +1797,9 @@ class profile:
         if 'Name' in fields:
             data['Name'] = self.name
         if 'H' in fields:
-            data[getMathName('H')] = self.H
+            data[mathName('H')+' @MS'] = self.H
         if 'Uh' in fields:
-            data[getMathName('Uh')] = self.Uh
+            data[mathName('Uh')+' @MS'] = self.Uh
 
         for st in self.stats_core.keys():
             if st in fields:                
@@ -1759,25 +1807,25 @@ class profile:
                     temp,name = self.stat_norm(st)
                     data[name] = temp[self.H_idx]
                 else:
-                    data[getMathName(st)] = self.stat_at_H(st)
+                    data[mathName(st)] = self.stat_at_H(st)
         if 'z0' in fields:
-            data[getMathName('z0')] = self.fitted_z0()
+            data[mathName('z0')+' @FS'] = self.z0/self.lScl if self.z0 is not None else None
         if 'Je' in fields:
-            data[getMathName('Je')] = self.Je()
+            data[mathName('Je')] = self.Je
 
         if 'T' in fields:
             if normalized:
-                data[getMathName('T_star')] = self.T_star
+                data[mathName('T_star')] = self.T_star
             else:
-                data[getMathName('T')] = self.T
+                data[mathName('T')] = self.T
         if 'n_smpl' in fields:
             if normalized:
                 if self.samplingFreq is None or self.H is None or self.Uh is None:
-                    data[getMathName('f_smpl')] = None
+                    data[mathName('f_smpl')] = None
                 else:
-                    data[getMathName('f_smpl')] = self.samplingFreq * self.H / self.Uh 
+                    data[mathName('f_smpl')] = self.samplingFreq * self.H / self.Uh 
             else:
-                data[getMathName('n_smpl')] = self.samplingFreq
+                data[mathName('n_smpl')] = self.samplingFreq
 
         return data
 
@@ -1785,10 +1833,9 @@ class profile:
     def Refresh(self):
         self.__verifyData()
         self.__computeVelStats()
-        if self.origFileName is not None:
-            self.readFromFile(self.origFileName)
+        _ = self.fit_z0()
 
-    def writeToFile(self,outDir,
+    def writeToFile__to_be_depricated(self,outDir,
                     nameSuffix='',
                     writeTH=False, writeTimeWithTH=False, writeZwithTH=False,
                     writeProfiles=True,writeSpectra=False):
@@ -1815,13 +1862,6 @@ class profile:
             
         if writeSpectra:
             pass
-    
-    def write(self,outDir):
-
-        pass
-
-    def readFromFile(self):
-        pass
 
     def copy(self):
         return copy.deepcopy(self)
@@ -1860,44 +1900,40 @@ class profile:
         Z10 = 10*lScl
         return np.interp(Z10, self.Z, self.U)
 
-    def fitted_z0(self, fitTo:Literal['U','Iu']='Iu', uStar_init=1.0, z0_init=0.001, debugMode=False,
+    def fit_z0(self, fitTo:Literal['U','Iu']='Iu', uStar_init=1.0, z0_init=None, debugMode=False,
                   kwargs_z0Fit={}) -> Union[float, None]:
+        
+        kwargs_z0Fit = self.kwargs_z0_fit['kwargs_z0Fit'] if kwargs_z0Fit == {} else kwargs_z0Fit
+        z0_init = self.kwargs_z0_fit['z0_init'] if z0_init is None else z0_init
+        uStar_init = self.kwargs_z0_fit['uStar_init'] if uStar_init is None else uStar_init
+        if self.stats_core is None:
+            print("No statistics found. Cannot fit z0.")
+            return None
+        
         if fitTo == 'U':
-            # [zMin, zMax] = self.workSect_zLim
-            # idxMin = np.argmin(np.abs(self.Z-zMin))
-            # idxMax = np.argmin(np.abs(self.Z-zMax))
-            # Z = self.Z[idxMin:idxMax+1]
-            # U = self.U[idxMin:idxMax+1]
             Z, U = self.Z_eff, self.U[self.idx_eff]
             z0, _, _ = fitVelDataToLogProfile(Z, U, Zref=self.H, Uref=self.Uh, d=0.0, debugMode=debugMode, uStar_init=uStar_init, z0_init=z0_init, **kwargs_z0Fit)
         elif fitTo == 'Iu':
             if self.SpectH is None or self.SpectH.Iu is None or self.H is None or self.lScl is None:
                 return None
-            z0,_ = fitESDUgivenIuRef(self.H/self.lScl, self.SpectH.Iu, **kwargs_z0Fit)
+            z0, es = fitESDUgivenIuRef(self.H/self.lScl, self.SpectH.Iu, **kwargs_z0Fit)
             z0 *= self.lScl
+            if debugMode:
+                profs = Profiles([self, es.toProfileObj()])
+                _ = profs.plot__(fig=plt.figure(figsize=[16,6]),zLim=self.workSect_zLim/self.H, IuLim=[0,100], #Ulim=[0,1.5],
+                                    col=['k','r',],
+                                    marker_Iu=   ['o','None',], linestyle_Iu=['-','-.', ],
+                                    marker_U=    ['o','None',], linestyle_U= ['-','--',],
+                                    marker_Spect=   ['None','None',],
+                                    linestyle_Spect=['-','-.',],
+                                    alpha_Spect=[0.5, 1.0, 0.5, 1.0],
+                                    IuLgndLoc='upper center', UlgndLoc='center',
+                                    fontSz_axLbl=14, fontSz_axNum=12, fontSz_lgnd=12,
+                                    freqLim=[1e-4, 5], rSuuLim=[1e-3,0.5])
         else:
             raise NotImplementedError("Fitting to '{}' not implemented".format(fitTo))
+        self.z0 = z0
         return z0
-
-    def Je(self, kwargs_z0Fit={},
-           ) -> Union[float, None]:
-        ''' Computes the Jensen number, Je = H/z0, where z0 is the roughness length and H is the reference height.
-
-        Parameters
-        ----------
-        kwargs_z0Fit : dict, optional
-            Keyword arguments for the z0 fitting function. The default is {}.
-
-        Returns
-        -------
-        Je : float
-            Jensen number.
-        '''
-        z0 = self.fitted_z0(**kwargs_z0Fit)
-        if self.stats_core is None or self.H is None or z0 is None:
-            return None
-        else:
-            return self.H/z0
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotProfile_any(self, fld, ax=None, label=None, normalize=True, overlay_H=True, xLabel=None, yLabel=None, xLimits=None, yLimits=None, 
@@ -2804,6 +2840,7 @@ class bldgCp(windCAD.building):
                 pOfT=None,
                 p0ofT=None,
                 CpStats=None,
+                CpStats_fields: Literal['mean','std','peak','peakMin','peakMax','skewness','kurtosis'] = ['mean','std','peak'],
                 peakSpecs=DEFAULT_PEAK_SPECS,
                 keepTH=True,
                 reScaleProfileToMatchUref=True,
@@ -2937,6 +2974,7 @@ class bldgCp(windCAD.building):
         self.p0ofT = p0ofT      # [N_AoA,Ntime]
         self.CpStats = CpStats          # dict{nFlds:[N_AoA,Ntaps]}
         self.peakSpecs = peakSpecs
+        self.CpStats_fields = CpStats_fields
 
         self.CpStatsAreaAvg = None      # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
         self.velRatio = None
@@ -3317,7 +3355,7 @@ class bldgCp(windCAD.building):
         self.__computeCpTHfrom_p_TH()
         if self.CpOfT is not None:
             print(f"Computing Cp statistics ...")
-            self.CpStats = get_CpTH_stats(self.CpOfT,axis=len(np.shape(self.CpOfT))-1,peakSpecs=self.peakSpecs)
+            self.CpStats = get_CpTH_stats(self.CpOfT,axis=len(np.shape(self.CpOfT))-1,peakSpecs=self.peakSpecs, fields=self.CpStats_fields)
         self.__computeAreaAveragedCp()
         print(f"Done refreshing {self.name}.\n")
     
@@ -3332,15 +3370,14 @@ class bldgCp(windCAD.building):
         else:
             raise Exception(f"The field {fld} is not a part of the available stat fields. Available stat fields: {list(self.CpStats.keys())}")
     
-    def CandCLoad_factor(self, format:Literal['NBCC','ASCE']='ASCE', debugMode=False,
-                         kwargs_fit_z0={'fitTo':'Iu'}):
+    def CandCLoad_factor(self, format:Literal['NBCC','ASCE']='ASCE', debugMode=False,):
         if self.T is None or self.tScl is None or self.H is None or self.profile is None:
             print(f"Cannot compute C&C Load factor. The following are required: T, tScl, H, profile")
             return None
         
         T = self.T
         full_scale_duration = T/self.tScl if np.isscalar(T) else np.mean(T)/self.tScl
-        z0_MS = self.profile.fitted_z0(lScl=self.lScl, **kwargs_fit_z0)
+        z0_MS = self.profile.z0
         z0 = z0_MS / self.lScl
         if debugMode:
             print(f"Computing C&C Load factor ...")
@@ -3355,7 +3392,7 @@ class bldgCp(windCAD.building):
     def writeCandCloadToXLSX(self, filePath, 
                             extremesPerNominalArea=True, areaFactor=1.0, 
                             format:Literal['default','NBCC','ASCE']='default', debugMode=False,
-                            kwargs_fit_z0={'fitTo':'Iu'}):
+                            ):
         if self.T is None or self.tScl is None or self.H is None or self.profile is None:
             print(f"Cannot compute C&C Load factor. The following are required: T, tScl, H, profile")
             return None
@@ -3396,11 +3433,11 @@ class bldgCp(windCAD.building):
         if Re is not None and not np.isscalar(Re):
             Re = [r for r in Re if r is not None]
             Re = np.mean(Re) if len(Re) > 0 else None
-        data[getMathName('Re')] = np.nan if Re is None else Re
-        data[getMathName('U')+' (@ FS)'] = np.nan if self.Uref_FS is None else self.Uref_FS
-        data[getMathName('lScl')] = np.nan if self.lScl is None else 1/self.lScl
-        data[getMathName('vScl')] = np.nan if self.vScl is None else 1/self.vScl
-        data[getMathName('tScl')] = np.nan if self.tScl is None else 1/self.tScl
+        data[mathName('Re')] = np.nan if Re is None else Re
+        data['design '+mathName('Uh')+' @FS'] = np.nan if self.Uref_FS is None else self.Uref_FS
+        data[mathName('lScl')] = np.nan if self.lScl is None else 1/self.lScl
+        data[mathName('vScl')] = np.nan if self.vScl is None else 1/self.vScl
+        data[mathName('tScl')] = np.nan if self.tScl is None else 1/self.tScl
 
         return data
 
@@ -3566,7 +3603,7 @@ class bldgCp(windCAD.building):
             ax.axis('off')
         return
 
-    def plotAreaAveragedStat___to_be_depricated(self, fig=None, axs=None, figSize=[15,10], 
+    def plotAreaAveragedStat___depricated(self, fig=None, axs=None, figSize=[15,10], 
                             plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, invertYAxis=True,
                             label_min='Min', label_max='Max',
                             overlayThis_min=None, overlayLabel_min='', kwargs_overlay_min={'color':'k', 'linewidth':2, 'linestyle':'-'},
@@ -3728,14 +3765,7 @@ class bldgCp(windCAD.building):
         if plotZoneGeom:
             zoneCol = {z: 'w' for z in zoneDictKeys}
 
-        if CandCLoadFormat == 'default':
-            valueScaleFactor = 1.0
-        elif CandCLoadFormat == 'NBCC':
-            valueScaleFactor = self.CandCLoad_factor(debugMode=debugMode, format='NBCC')
-        elif CandCLoadFormat == 'ASCE':
-            valueScaleFactor = self.CandCLoad_factor(debugMode=debugMode, format='ASCE')
-        else:
-            raise Exception(f"Unknown CandCLoadFormat: {CandCLoadFormat}")
+        valueScaleFactor = 1.0 if CandCLoadFormat == 'default' else self.CandCLoad_factor(debugMode=debugMode, format=CandCLoadFormat)
         
         bxPltObj = None
         bxPltName = None
@@ -3928,7 +3958,7 @@ class bldgCp(windCAD.building):
             plt.show()
             return fig, ax
 
-#-------------------------------- COLLECTIONS ----------------------------------
+#------------------------------- COLLECTIONS -----------------------------------
 class Profiles:
     def __init__(self, profiles=[]):
         self._currentIndex = 0
@@ -4568,7 +4598,7 @@ class BldgCps():
     def writeCandCloadToXLSX(self, filePath, 
                             extremesPerNominalArea=True, areaFactor=1.0, 
                             format:Literal['default','NBCC','ASCE']='default', debugMode=False,
-                            kwargs_fit_z0={'fitTo':'Iu'}):
+                            ):
         if self.master.T is None or self.master.tScl is None or self.master.H is None or self.master.profile is None:
             print(f"Cannot compute C&C Load factor. The following are required: T, tScl, H, profile")
             return None
@@ -4778,20 +4808,49 @@ class validator():
     def __init__(self, 
                 target:Union[None, bldgCp, BldgCps]=None,
                 model:Union[None, bldgCp, BldgCps]=None,
-                errorTypes_velStats = ['MAE', 'NRMSE', 'RMSE', 'R2', 'SMAPE'],
-                errorTypes_CpStats = ['MAE', 'NRMSE', 'RMSE', 'R2', 'SMAPE'],
+                errorTypes_velStats = ['MAE', 'NRMSE', 'RMSE', 'R^2', 'SMAPE', 'PCC'],
+                errorTypes_CpStats = ['MAE', 'NRMSE', 'RMSE', 'R^2', 'SMAPE', 'PCC'],
+                errorTypes_CpAavg = ['MAE', 'NRMSE', 'RMSE', 'R^2', 'SMAPE', 'PCC'],
+                extremesPerNominalArea=True,
+                CandCLoadFormat:Literal['default','NBCC','ASCE']='default',
+                combineMinAndMax = True,
+                correctForIuDifference = False,
                 ) -> None:
         self.target: bldgCp = target
         self.model: bldgCp = model
         self.errorTypes_velStats = errorTypes_velStats
         self.errorTypes_CpStats = errorTypes_CpStats
+        self.errorTypes_CpAavg = errorTypes_CpAavg
+        self.extremesPerNominalArea=extremesPerNominalArea
+        self.CandCLoadFormat:Literal['default','NBCC','ASCE']=CandCLoadFormat
+        self.combineMinAndMax = combineMinAndMax
+        self.correctForIu = correctForIuDifference
 
         self.error_params = None
         self.error_velStats = None
         self.error_CpStats = None
         self.error_CpAavg = None
+        self.commonAoA = None
+        self.commonTapNo = None
+        self.tapIdx_target = None
+        self.tapIdx_model = None
+        self.aoaIdx_target = None
+        self.aoaIdx_model = None
+        self.IuFctr = 1.0
         
         self.Refresh()
+
+    def __computeIuCorrection(self,):
+        if not self.correctForIu:
+            self.IuFctr = 1.0
+            return
+        if self.target is None or self.model is None:
+            self.IuFctr = 1.0
+            return
+
+        # compute the Iu correction factor
+        self.Iu_correction = self.target.Uref_FS/self.model.Uref_FS
+
 
     def __computeErrors_params(self, 
                                   errorMeasures_params:Literal['diff','diff_norm','ratio','orderOfMagnitude']=['diff','diff_norm','ratio','orderOfMagnitude']):
@@ -4848,46 +4907,236 @@ class validator():
             raise Exception(f"Cannot compute CpStats error. The following are required: CpStats")
         if self.target.CpStats.keys() != self.model.CpStats.keys():
             raise Exception(f"Cannot compute CpStats error. The following are required: CpStats")
+        if self.target.faces != self.model.faces:
+            warnings.warn(f"The target and model faces seem to be referring to different 'faces' objects. This may result in failure to calculate CpStats error or incorrect values. Please check and make sure that all the face geometries, tap layouts, and other details are the same (except for the Cp data) between the target and model. The computation will continue but the results may be incorrect.")
         
         aoa_t = np.array(self.target.AoA)
         tapNo_t = np.array(self.target.tapNo)
-        tapIdx_t = np.array(self.target.tapIdx)
+        # tapIdx_t = np.array(self.target.tapIdx)
 
         aoa_m = np.array(self.model.AoA)
         tapNo_m = np.array(self.model.tapNo)
-        tapIdx_m = np.array(self.model.tapIdx)
+        # tapIdx_m = np.array(self.model.tapIdx)
 
-        commonAoA = np.sort(np.intersect1d(aoa_t, aoa_m))
-        commonTapNo = np.sort(np.intersect1d(tapNo_t, tapNo_m))
-        if len(commonAoA) == 0 or len(commonTapNo) == 0:
+        self.commonAoA = np.sort(np.intersect1d(aoa_t, aoa_m))
+        self.commonTapNo = np.sort(np.intersect1d(tapNo_t, tapNo_m))
+        if len(self.commonAoA) == 0 or len(self.commonTapNo) == 0:
             raise Exception(f"The target and model CpStats do not overlap (no common AoA or tapNo). Cannot compute error")
 
-        tapIdx_t = np.array([np.where(tapNo_t == i)[0][0] for i in commonTapNo])
-        tapIdx_m = np.array([np.where(tapNo_m == i)[0][0] for i in commonTapNo])
+        self.tapIdx_target = np.array([np.where(tapNo_t == i)[0][0] for i in self.commonTapNo])
+        self.tapIdx_model = np.array([np.where(tapNo_m == i)[0][0] for i in self.commonTapNo])
 
-        aoaIdx_t = np.array([np.where(aoa_t == i)[0][0] for i in commonAoA])
-        aoaIdx_m = np.array([np.where(aoa_m == i)[0][0] for i in commonAoA])
+        self.aoaIdx_target = np.array([np.where(aoa_t == i)[0][0] for i in self.commonAoA])
+        self.aoaIdx_model = np.array([np.where(aoa_m == i)[0][0] for i in self.commonAoA])
 
         tmp = {}
-        tmp['AoA'] = commonAoA
-        tmp['tapNo'] = commonTapNo
+        tmp['AoA'] = self.commonAoA
+        tmp['tapNo'] = self.commonTapNo
         for key in self.target.CpStats.keys():
-            stat_t = self.target.CpStats[key][aoaIdx_t[:, np.newaxis], tapIdx_t]
-            stat_m = self.model.CpStats[key][aoaIdx_m[:, np.newaxis], tapIdx_m]
+            stat_t = self.target.CpStats[key][self.aoaIdx_target[:, np.newaxis], self.tapIdx_target]
+            stat_m = self.model.CpStats[key][self.aoaIdx_model[:, np.newaxis], self.tapIdx_model]
             tmp[key] = measureError(stat_t, stat_m, errorTypes=self.errorTypes_CpStats)
+            tmp[key]['perAoA'] = {}
+            for i, aoa in enumerate(self.commonAoA):
+                stat_t_i = stat_t[i,:]
+                stat_m_i = stat_m[i,:]
+                tmp[key]['perAoA'][aoa] = measureError(stat_t_i, stat_m_i, errorTypes=self.errorTypes_CpStats)
 
         self.error_CpStats = tmp
 
     def __computeErrors_CpAavg(self):
         if self.target.CpStatsAreaAvg is None or self.model.CpStatsAreaAvg is None:
             return
-        pass
+        if self.target.faces != self.model.faces:
+            warnings.warn(f"The target and model faces seem to be referring to different 'faces' objects. This may result in failure to calculate CpAvg error or incorrect values. Please check and make sure that all the tap layouts, averaging panel definitions, and other details are the same (except for the Cp data) between the target and model. The computation will continue but the results may be incorrect.")
+        
+        bldg_t = self.target
+        bldg_m = self.model
+
+        zoneDictKeys = bldg_t.zoneDictKeys
+        if zoneDictKeys != bldg_m.zoneDictKeys:
+            raise Exception(f"Cannot compute CpAavg error. The zoneDictKeys of the target and model are not the same. Please check and make sure that all the tap layouts, averaging panel definitions, and other details are the same (except for the Cp data) between the target and model.")
+        area = {z: np.array(bldg_t.NominalPanelArea) for z in zoneDictKeys} if self.extremesPerNominalArea else bldg_t.allAreasForCpAavg
+        if self.extremesPerNominalArea:
+            peakMax_t = bldg_t.CpAavg_envMax_peakMax_maxPerA
+            peakMin_t = bldg_t.CpAavg_envMin_peakMin_minPerA
+            peakMax_m = bldg_m.CpAavg_envMax_peakMax_maxPerA
+            peakMin_m = bldg_m.CpAavg_envMin_peakMin_minPerA
+        else:
+            peakMax_t = bldg_t.CpAavg_envMax_peakMax_allA
+            peakMin_t = bldg_t.CpAavg_envMin_peakMin_allA
+            peakMax_m = bldg_m.CpAavg_envMax_peakMax_allA
+            peakMin_m = bldg_m.CpAavg_envMin_peakMin_allA
+
+        valueScaleFactor_t = 1.0 if self.CandCLoadFormat == 'default' else bldg_t.CandCLoad_factor(debugMode=True, format=self.CandCLoadFormat)
+        valueScaleFactor_m = 1.0 if self.CandCLoadFormat == 'default' else bldg_m.CandCLoad_factor(debugMode=True, format=self.CandCLoadFormat)
+        
+        tmp = {}
+        tmp['Area'] = area
+        for I, zKey in enumerate(zoneDictKeys):
+            pMax_t = np.array(peakMax_t[zKey])*valueScaleFactor_t
+            pMin_t = np.array(peakMin_t[zKey])*valueScaleFactor_t
+            pMax_m = np.array(peakMax_m[zKey])*valueScaleFactor_m
+            pMin_m = np.array(peakMin_m[zKey])*valueScaleFactor_m
+            if self.combineMinAndMax:
+                p_t = np.concatenate((pMax_t, pMin_t))
+                p_m = np.concatenate((pMax_m, pMin_m))
+                tmp[zKey] = measureError(p_t, p_m, errorTypes=self.errorTypes_CpAavg)
+            else:
+                tmp[zKey] = {}
+                tmp[zKey]['peakMax'] = measureError(pMax_t, pMax_m, errorTypes=self.errorTypes_CpAavg)
+                tmp[zKey]['peakMin'] = measureError(pMin_t, pMin_m, errorTypes=self.errorTypes_CpAavg)
+
+        self.error_CpAavg = tmp
 
     def Refresh(self):
+        self.__computeIuCorrection()
         self.__computeErrors_params()
         self.__computeErrors_velStats()
         self.__computeErrors_CpStats()
         self.__computeErrors_CpAavg()
 
     def compareProfiles(self):
+        pass
+
+    def plotError_velStats(self):
+        pass
+
+    def plotError_CpStats(self, fig=None, axs=None, figsize=[10,10], nPltCols=2, 
+                          errorTypePerField:dict=None, 
+                          targetLabel='Target', modelLabel='Model',
+                          percentLinesAt=[10,30], percentLinesAt_kwargs=None, 
+                          kwargs_mainPlot={'color':'k', 'marker':'.', 'linestyle':''},
+                          kwargs_annotation={'xy':(0.95, 0.05), 'xycoords':'axes fraction', 'ha':'right', 'va':'bottom'},
+                          ):
+        nFlds = len(errorTypePerField.keys())
+        nPltRows = int(np.ceil(nFlds/nPltCols))
+
+        newFig = False
+        if fig is None:
+            fig, axs = plt.subplots(nPltRows, nPltCols, figsize=figsize)
+            newFig = True
+
+        axs = np.array(axs).flatten()
+
+        cols = ['k','r','b','g','m','r','k','b','g','m']
+        if percentLinesAt_kwargs is None:
+            percentLinesAt_kwargs = [{'color':cols[i], 'linestyle':'--', 'linewidth':0.5} for i in range(len(percentLinesAt))]
+
+        if errorTypePerField is None:
+            errorTypePerField = {}
+            for fld in self.error_CpStats.keys():
+                errorTypePerField[fld] = [et for et in self.errorTypes_CpStats]
+        flds = list(errorTypePerField.keys())
+        for i, fld in enumerate(flds):
+            ax = axs[np.unravel_index(i, axs.shape)]
+            ax.set_title(mathName(fld))
+            ax.set_xlabel(targetLabel)
+            ax.set_ylabel(modelLabel)
+            ax.set_aspect('equal')
+
+            ax.plot(self.target.CpStats[fld][self.aoaIdx_target[:, np.newaxis],self.tapIdx_target], 
+                    self.model.CpStats[fld][self.aoaIdx_model[:, np.newaxis],self.tapIdx_model], 
+                    **kwargs_mainPlot)
+
+            errTxt = ''
+            for j, errType in enumerate(errorTypePerField[fld]):
+                errTxt += f"${errType} = {self.error_CpStats[fld][errType]:.3g}$"
+                if j < len(errorTypePerField[fld])-1:
+                    errTxt += '\n'
+            ax.annotate(errTxt, **kwargs_annotation)
+
+            xlim, ylim = ax.get_xlim(), ax.get_ylim()
+            xlim, ylim = ax.get_xlim(), ax.get_ylim()
+            minmax = np.array([np.min([xlim[0], ylim[0]]), np.max([xlim[1], ylim[1]])])
+            ax.plot(minmax, minmax, 'k-')
+            for j, n in enumerate(percentLinesAt):
+                ax.plot(minmax, minmax*(1+n/100), label=r'$\pm$'+f'{n}%', **percentLinesAt_kwargs[j])
+                ax.plot(minmax, minmax*(1-n/100), **percentLinesAt_kwargs[j])
+            ax.set_xlim(minmax)
+            ax.set_ylim(minmax)
+            formatAxis(ax=ax)
+            if i == 0:
+                ax.legend()
+
+        if newFig:
+            fig.tight_layout()
+            plt.show()
+        return fig, axs
+
+    def plotError_CpStats_perAoA(self, fig=None, axs=None, figsize_per_ax=[4,4], 
+                          errorTypePerField:dict={'mean':'RMSE', 'std':'RMSE', 'peakMax':'RMSE', 'peakMin':'RMSE'}, 
+                          targetLabel='Target', modelLabel='Model',
+                          percentLinesAt=[10,30], percentLinesAt_kwargs=None, 
+                          kwargs_mainPlot={'color':'k', 'marker':'.', 'linestyle':''},
+                          kwargs_annotation={'xy':(0.95, 0.05), 'xycoords':'axes fraction', 'ha':'right', 'va':'bottom'},
+                          ):
+        nFlds = len(errorTypePerField.keys())
+        nPltCols = len(self.commonAoA)#+1
+        nPltRows = nFlds
+
+        newFig = False
+        if fig is None:
+            figsize = [nPltCols*figsize_per_ax[0], nPltRows*figsize_per_ax[1]]
+            fig, axs = plt.subplots(nPltRows, nPltCols, figsize=figsize)
+            newFig = True
+
+        axs = np.array(axs).flatten()
+
+        cols = ['k','r','b','g','m','r','k','b','g','m']
+        if percentLinesAt_kwargs is None:
+            percentLinesAt_kwargs = [{'color':cols[i], 'linestyle':'--', 'linewidth':0.5} for i in range(len(percentLinesAt))]
+
+        flds = list(errorTypePerField.keys())
+        for f, fld in enumerate(flds):
+            for d, aoa in enumerate(self.commonAoA):
+                ax = axs[np.unravel_index(f*nPltCols+d, axs.shape)]
+                if f == 0:
+                    ax.set_title(r'$\theta = $'+f'${aoa:.1f}^\circ$')
+                if d == 0: # write the field name on the left column rotated by 90 degrees
+                    ax.text(-0.25, 0.5, mathName(fld), 
+                            horizontalalignment='center', verticalalignment='center', 
+                            transform=ax.transAxes, rotation=90)
+                ax.set_xlabel(targetLabel)
+                ax.set_ylabel(modelLabel)
+                ax.set_aspect('equal')
+
+                ax.plot(self.target.CpStats[fld][self.aoaIdx_target[d],self.tapIdx_target], 
+                        self.model.CpStats[fld][self.aoaIdx_model[d],self.tapIdx_model], 
+                        **kwargs_mainPlot)
+
+                errTxt = ''
+                for j, errType in enumerate(self.error_CpStats[fld]['perAoA'][aoa]):
+                    errTxt += f"${errType} = {self.error_CpStats[fld]['perAoA'][aoa][errType]:.3g}$"
+                    if j < len(self.error_CpStats[fld]['perAoA'][aoa])-1:
+                        errTxt += '\n'
+                ax.annotate(errTxt, **kwargs_annotation)
+
+                xlim, ylim = ax.get_xlim(), ax.get_ylim()
+                xlim, ylim = ax.get_xlim(), ax.get_ylim()
+                minmax = np.array([np.min([xlim[0], ylim[0]]), np.max([xlim[1], ylim[1]])])
+                ax.plot(minmax, minmax, 'k-')
+                for j, n in enumerate(percentLinesAt):
+                    ax.plot(minmax, minmax*(1+n/100), label=r'$\pm$'+f'{n}%', **percentLinesAt_kwargs[j])
+                    ax.plot(minmax, minmax*(1-n/100), **percentLinesAt_kwargs[j])
+                ax.set_xlim(minmax)
+                ax.set_ylim(minmax)
+                formatAxis(ax=ax)
+                if d == 0 and f == 0:
+                    ax.legend()
+            
+            # ax = axs[np.unravel_index(f*nPltCols+nPltCols-1, axs.shape)]
+            # ax.set_title(errorTypePerField[fld])
+            # ax.set_xlabel('AoA')
+            # ax.set_ylabel(errorTypePerField[fld])
+            # ax.plot(self.commonAoA, [self.error_CpStats[fld]['perAoA'][aoa][errorTypePerField[fld]] for aoa in self.commonAoA], '.k-')
+            # formatAxis(ax=ax)
+            
+        if newFig:
+            fig.tight_layout()
+            plt.show()
+        return fig, axs
+        pass
+
+    def plotError_CpAavg(self):
         pass
