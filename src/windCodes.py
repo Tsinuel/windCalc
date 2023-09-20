@@ -300,7 +300,7 @@ def NBCC2020_CpCg(Figure:Literal['4.1.7.6.-A', '4.1.7.6.-B', '4.1.7.6.-C', '4.1.
             CpCg['Max']['value']["NBCC 2020, Zone w"] = [1.75, 1.75, 1.3, 1.3]
     return CpCg
 
-def ASCE7_22_GCp(Figure:Literal['30.3-2A', '30.3-2B', '30.3-2C', '30.3-2D', '30.3-2E', '30.3-2F', '30.3-2G', '30.3-4'], subfig='a'):
+def ASCE7_22_GCp(Figure:Literal['30.3-2A', '30.3-2B', '30.3-2C', '30.3-2D', '30.3-2E', '30.3-2F', '30.3-2G', '30.3-4'], subfig='a', outAs='ASCE'):
     if Figure == '30.3-2C':
         if subfig == 'a':
             GCp = {}
@@ -308,67 +308,67 @@ def ASCE7_22_GCp(Figure:Literal['30.3-2A', '30.3-2B', '30.3-2C', '30.3-2D', '30.
             '''
             ft^2:      __,    10,         100,        200,        500,        __
             m^2:      0.1,    0.9290304,  9.290304,   18.580608,  46.45152,   100
-
-            GCp['Min'] = {}
-            GCp['Min']['area'] = {}
-            GCp['Min']['area']['ASCE 7-22, Zone 1'] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Min']['area']['ASCE 7-22, Zone 2'] = [0.1, 0.9290304, 9.290304, 100]
-            GCp['Min']['area']['ASCE 7-22, Zone 3'] = [0.1, 0.9290304, 9.290304, 100]
-            GCp['Min']['area']['ASCE 7-22, Zone 4'] = [0.1, 0.9290304, 46.45152, 100]
-            GCp['Min']['area']['ASCE 7-22, Zone 5'] = [0.1, 0.9290304, 46.45152, 100]
-
-            GCp['Min']['value'] = {}
-            GCp['Min']['value']['ASCE 7-22, Zone 1'] = [-1.5, -1.5, -0.8, -0.8]
-            GCp['Min']['value']['ASCE 7-22, Zone 2'] = [-2.5, -2.5, -1.2, -1.2]
-            GCp['Min']['value']['ASCE 7-22, Zone 3'] = [-3.0, -3.0, -1.4, -1.4]
-            GCp['Min']['value']['ASCE 7-22, Zone 4'] = [-1.1, -1.1, -0.8, -0.8]
-            GCp['Min']['value']['ASCE 7-22, Zone 5'] = [-1.4, -1.4, -0.8, -0.8]
-
-            GCp['Max'] = {}
-            GCp['Max']['area'] = {}
-            GCp['Max']['area']['ASCE 7-22, Zone 1'] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Max']['area']['ASCE 7-22, Zone 2'] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Max']['area']['ASCE 7-22, Zone 3'] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Max']['area']['ASCE 7-22, Zone 4'] = [0.1, 0.9290304, 46.45152, 100]
-            GCp['Max']['area']['ASCE 7-22, Zone 5'] = [0.1, 0.9290304, 46.45152, 100]
-
-            GCp['Max']['value'] = {}
-            GCp['Max']['value']['ASCE 7-22, Zone 1'] = [0.6, 0.6, 0.3, 0.3]
-            GCp['Max']['value']['ASCE 7-22, Zone 2'] = [0.6, 0.6, 0.3, 0.3]
-            GCp['Max']['value']['ASCE 7-22, Zone 3'] = [0.6, 0.6, 0.3, 0.3]
-            GCp['Max']['value']['ASCE 7-22, Zone 4'] = [1.0, 1.0, 0.7, 0.7]
-            GCp['Max']['value']['ASCE 7-22, Zone 5'] = [1.0, 1.0, 0.7, 0.7]
             '''
+            if outAs == 'ASCE':
+                GCp['Min'] = {}
+                GCp['Min']['area'] = {}
+                GCp['Min']['area']['ASCE 7-22, Zone 1'] = [0.1, 0.9290304, 18.580608, 100]
+                GCp['Min']['area']['ASCE 7-22, Zone 2'] = [0.1, 0.9290304, 9.290304, 100]
+                GCp['Min']['area']['ASCE 7-22, Zone 3'] = [0.1, 0.9290304, 9.290304, 100]
+                GCp['Min']['area']['ASCE 7-22, Zone 4'] = [0.1, 0.9290304, 46.45152, 100]
+                GCp['Min']['area']['ASCE 7-22, Zone 5'] = [0.1, 0.9290304, 46.45152, 100]
 
-            GCp['Min'] = {}
-            GCp['Min']['area'] = {}
-            GCp['Min']['area']["NBCC 2020, Zone r"] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Min']['area']["NBCC 2020, Zone s"] = [0.1, 0.9290304, 9.290304, 100]
-            GCp['Min']['area']["NBCC 2020, Zone c"] = [0.1, 0.9290304, 9.290304, 100]
-            GCp['Min']['area']["NBCC 2020, Zone w"] = [0.1, 0.9290304, 46.45152, 100]
-            GCp['Min']['area']["NBCC 2020, Zone e"] = [0.1, 0.9290304, 46.45152, 100]
+                GCp['Min']['value'] = {}
+                GCp['Min']['value']['ASCE 7-22, Zone 1'] = [-1.5, -1.5, -0.8, -0.8]
+                GCp['Min']['value']['ASCE 7-22, Zone 2'] = [-2.5, -2.5, -1.2, -1.2]
+                GCp['Min']['value']['ASCE 7-22, Zone 3'] = [-3.0, -3.0, -1.4, -1.4]
+                GCp['Min']['value']['ASCE 7-22, Zone 4'] = [-1.1, -1.1, -0.8, -0.8]
+                GCp['Min']['value']['ASCE 7-22, Zone 5'] = [-1.4, -1.4, -0.8, -0.8]
 
-            GCp['Min']['value'] = {}
-            GCp['Min']['value']["NBCC 2020, Zone r"] = [-1.5, -1.5, -0.8, -0.8]
-            GCp['Min']['value']["NBCC 2020, Zone s"] = [-2.5, -2.5, -1.2, -1.2]
-            GCp['Min']['value']["NBCC 2020, Zone c"] = [-3.0, -3.0, -1.4, -1.4]
-            GCp['Min']['value']["NBCC 2020, Zone w"] = [-1.1, -1.1, -0.8, -0.8]
-            GCp['Min']['value']["NBCC 2020, Zone e"] = [-1.4, -1.4, -0.8, -0.8]
+                GCp['Max'] = {}
+                GCp['Max']['area'] = {}
+                GCp['Max']['area']['ASCE 7-22, Zone 1'] = [0.1, 0.9290304, 18.580608, 100]
+                GCp['Max']['area']['ASCE 7-22, Zone 2'] = [0.1, 0.9290304, 18.580608, 100]
+                GCp['Max']['area']['ASCE 7-22, Zone 3'] = [0.1, 0.9290304, 18.580608, 100]
+                GCp['Max']['area']['ASCE 7-22, Zone 4'] = [0.1, 0.9290304, 46.45152, 100]
+                GCp['Max']['area']['ASCE 7-22, Zone 5'] = [0.1, 0.9290304, 46.45152, 100]
 
-            GCp['Max'] = {}
-            GCp['Max']['area'] = {}
-            GCp['Max']['area']["NBCC 2020, Zone r"] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Max']['area']["NBCC 2020, Zone s"] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Max']['area']["NBCC 2020, Zone c"] = [0.1, 0.9290304, 18.580608, 100]
-            GCp['Max']['area']["NBCC 2020, Zone w"] = [0.1, 0.9290304, 46.45152, 100]
-            GCp['Max']['area']["NBCC 2020, Zone e"] = [0.1, 0.9290304, 46.45152, 100]
+                GCp['Max']['value'] = {}
+                GCp['Max']['value']['ASCE 7-22, Zone 1'] = [0.6, 0.6, 0.3, 0.3]
+                GCp['Max']['value']['ASCE 7-22, Zone 2'] = [0.6, 0.6, 0.3, 0.3]
+                GCp['Max']['value']['ASCE 7-22, Zone 3'] = [0.6, 0.6, 0.3, 0.3]
+                GCp['Max']['value']['ASCE 7-22, Zone 4'] = [1.0, 1.0, 0.7, 0.7]
+                GCp['Max']['value']['ASCE 7-22, Zone 5'] = [1.0, 1.0, 0.7, 0.7]
+            elif outAs == 'NBCC':
+                GCp['Min'] = {}
+                GCp['Min']['area'] = {}
+                GCp['Min']['area']["NBCC 2020, Zone r"] = [0.1, 0.9290304, 18.580608, 100]
+                GCp['Min']['area']["NBCC 2020, Zone s"] = [0.1, 0.9290304, 9.290304, 100]
+                GCp['Min']['area']["NBCC 2020, Zone c"] = [0.1, 0.9290304, 9.290304, 100]
+                GCp['Min']['area']["NBCC 2020, Zone w"] = [0.1, 0.9290304, 46.45152, 100]
+                GCp['Min']['area']["NBCC 2020, Zone e"] = [0.1, 0.9290304, 46.45152, 100]
 
-            GCp['Max']['value'] = {}
-            GCp['Max']['value']["NBCC 2020, Zone r"] = [0.6, 0.6, 0.3, 0.3]
-            GCp['Max']['value']["NBCC 2020, Zone s"] = [0.6, 0.6, 0.3, 0.3]
-            GCp['Max']['value']["NBCC 2020, Zone c"] = [0.6, 0.6, 0.3, 0.3]
-            GCp['Max']['value']["NBCC 2020, Zone w"] = [1.0, 1.0, 0.7, 0.7]
-            GCp['Max']['value']["NBCC 2020, Zone e"] = [1.0, 1.0, 0.7, 0.7]
+                GCp['Min']['value'] = {}
+                GCp['Min']['value']["NBCC 2020, Zone r"] = [-1.5, -1.5, -0.8, -0.8]
+                GCp['Min']['value']["NBCC 2020, Zone s"] = [-2.5, -2.5, -1.2, -1.2]
+                GCp['Min']['value']["NBCC 2020, Zone c"] = [-3.0, -3.0, -1.4, -1.4]
+                GCp['Min']['value']["NBCC 2020, Zone w"] = [-1.1, -1.1, -0.8, -0.8]
+                GCp['Min']['value']["NBCC 2020, Zone e"] = [-1.4, -1.4, -0.8, -0.8]
+
+                GCp['Max'] = {}
+                GCp['Max']['area'] = {}
+                GCp['Max']['area']["NBCC 2020, Zone r"] = [0.1, 0.9290304, 18.580608, 100]
+                GCp['Max']['area']["NBCC 2020, Zone s"] = [0.1, 0.9290304, 18.580608, 100]
+                GCp['Max']['area']["NBCC 2020, Zone c"] = [0.1, 0.9290304, 18.580608, 100]
+                GCp['Max']['area']["NBCC 2020, Zone w"] = [0.1, 0.9290304, 46.45152, 100]
+                GCp['Max']['area']["NBCC 2020, Zone e"] = [0.1, 0.9290304, 46.45152, 100]
+
+                GCp['Max']['value'] = {}
+                GCp['Max']['value']["NBCC 2020, Zone r"] = [0.6, 0.6, 0.3, 0.3]
+                GCp['Max']['value']["NBCC 2020, Zone s"] = [0.6, 0.6, 0.3, 0.3]
+                GCp['Max']['value']["NBCC 2020, Zone c"] = [0.6, 0.6, 0.3, 0.3]
+                GCp['Max']['value']["NBCC 2020, Zone w"] = [1.0, 1.0, 0.7, 0.7]
+                GCp['Max']['value']["NBCC 2020, Zone e"] = [1.0, 1.0, 0.7, 0.7]
 
     elif Figure == '30.3-4':
         if subfig == 'a':

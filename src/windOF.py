@@ -1205,7 +1205,7 @@ class inflowTuner:
                 txt += f"    Fixed ratio scaling \t\t\t: {scaleByFixedRefHeightRatio[r]}\n"
                 txt += f"    Scale xLi \t\t\t\t\t\t: {scale_xLi[r]}\n"
                 txt += f"    Apply smoothing to the ratio \t: {smoothRatios[r]}\n"
-                txt += f"    Ratio \t\t\t\t\t\t\t= {profs_in_names[0]} / {profs_in_names[-1]}\n"
+                txt += f"    Ratio \t\t\t\t\t\t\t= {profs_in_names[0]} / {profs_in_names[r+1]}\n"
                 txt += f"    Roof height ratio (current) \t: U = {ratio_i[r+1]['U'][i]:.3f}, Iu = {ratio_i[r+1]['Iu'][i]:.3f}, Iv = {ratio_i[r+1]['Iv'][i]:.3f}, "+\
                         f"Iw = {ratio_i[r+1]['Iw'][i]:.3f}, xLu = {ratio_i[r+1]['xLu'][i]:.3f}, xLv = {ratio_i[r+1]['xLv'][i]:.3f}, xLw = {ratio_i[r+1]['xLw'][i]:.3f}\n"
                 txt += f"    Roof height ratio (cumulative) \t: U = {ratio_cum[r+1]['U'][i]:.3f}, Iu = {ratio_cum[r+1]['Iu'][i]:.3f}, Iv = {ratio_cum[r+1]['Iv'][i]:.3f}, "+\

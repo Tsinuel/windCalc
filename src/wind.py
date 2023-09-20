@@ -1655,9 +1655,9 @@ class profile:
         self.kwargs_z0_fit = kwargs_z0_fit
 
         if workSect_zLim is None and self.Z is not None:
-            self.workSect_zLim = [self.Z[0], self.Z[-1]]
+            self.workSect_zLim = np.array([self.Z[0], self.Z[-1]], float)
         else:
-            self.workSect_zLim = workSect_zLim
+            self.workSect_zLim = np.array(workSect_zLim, float)
 
         self.Refresh()
         if not keepTH:
@@ -3624,6 +3624,9 @@ class bldgCp(windCAD.building):
 
         return data
 
+    def stat_on_a_line(self):
+        raise NotImplementedError
+
     """--------------------------------- Plotters -------------------------------------"""
     def plotTapCpStatsPerAoA(self, figs=None, all_axes=None, addMarginDetails=False,
                             fields=['peakMin','mean','peakMax',],fldRange=[-15,10], tapsToPlot=None, includeTapName=True,
@@ -3881,10 +3884,10 @@ class bldgCp(windCAD.building):
                     figSize=[15,10], sharex=False, sharey=False,
                     plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, CandCLoadFormat:Literal['default','NBCC','ASCE']='default', 
                     invertYAxis=False,
-                    label_min='Min', label_max='Max',
+                    label_min=None, label_max=None,
                     overlayThese=None, overlayFactors=None, kwargs_overlay={'color':'k', 'linewidth':2, 'linestyle':'-'},
                     subplotLabels=None, subplotLabels_xy=[0.05,0.95], kwargs_subplotLabels={'fontsize':14},
-                    legend_ax_idx=0,
+                    legend_ax_idx=0, showLegend=True,
                     debugMode=False,
                     plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], zoneShadeColor='k', kwargs_zonePlots={},
                     xLimits=None, yLimits=None, xLabel=None, yLabel=None,
@@ -4018,14 +4021,15 @@ class bldgCp(windCAD.building):
 
                 formatAxis(ax, **kwargs_ax)
 
-        if bxPltObj is None:
-            handles, labels = axs[0,0].get_legend_handles_labels()
-            axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles, labels, **kwargs_legend)
-        else:
-            hndls, lbls = axs[0,0].get_legend_handles_labels()
-            hndls.append(bxPltObj["boxes"][0])
-            lbls.append(bxPltName)
-            axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles=hndls, labels=lbls, **kwargs_legend)
+        if showLegend:
+            if bxPltObj is None:
+                handles, labels = axs[0,0].get_legend_handles_labels()
+                axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles, labels, **kwargs_legend)
+            else:
+                hndls, lbls = axs[0,0].get_legend_handles_labels()
+                hndls.append(bxPltObj["boxes"][0])
+                lbls.append(bxPltName)
+                axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles=hndls, labels=lbls, **kwargs_legend)
         
         # if there are remaining axes, remove them
         for I in range(len(zoneDictKeys), axs.size):
@@ -4037,8 +4041,12 @@ class bldgCp(windCAD.building):
         return fig, axs
         
     def plotAoA_symbol(self, AoA, ax=None, figSize=[6,6], location: Literal['upper left','upper right','lower left','lower right']='lower left',
-                       explicitLocation=None, marginFactor=1.0,
-                       size=1.0, inwardArrow=True, drawDicorations=True):
+                       explicitLocation=None, marginFactor=1.0, textOffsetFactor=2.2,
+                       size=1.0, inwardArrow=True, drawDicorations=True, 
+                       kwargs_origLine={'color':'k', 'linewidth':0.3},
+                       kwargs_arrow={'fc':'k', 'ec':'k'},
+                       kwargs_txt={'ha':'center', 'va':'center'},
+                       ):
         if self.AoA_zero_deg_basisVector is None or self.AoA_rotation_direction is None:
             raise Exception("AoA_zero_deg_basisVector and AoA_rotation_direction must be defined to plot the AoA symbol.")
         newFig = False
@@ -4083,7 +4091,7 @@ class bldgCp(windCAD.building):
         xZero = [xOrig, xOrig + aoaZero[0]*basicSize*size]
         yZero = [yOrig, yOrig + aoaZero[1]*basicSize*size]
         if drawDicorations:
-            ax.plot(xZero, yZero, color='k', linewidth=0.5)
+            ax.plot(xZero, yZero, **kwargs_origLine)
 
         zeroAngle = np.rad2deg(np.arctan2(aoaZero[1], aoaZero[0]))
         original_aoa = AoA
@@ -4102,9 +4110,9 @@ class bldgCp(windCAD.building):
             arr_orig_x, arr_orig_y = xOrig, yOrig
 
         ax.arrow(arr_orig_x, arr_orig_y, r_x, r_y,
-                    head_width=0.3*basicSize*size, head_length=0.6*basicSize*size, fc='k', ec='k')
-        ax.text(xOrig+r_x_txt*2.2, yOrig+r_y_txt*2.2,
-                f"{original_aoa}\u00b0", fontsize=12*size, ha='center', va='center')
+                    head_width=0.3*basicSize*size, head_length=0.6*basicSize*size, **kwargs_arrow)
+        ax.text(xOrig+r_x_txt*textOffsetFactor, yOrig+r_y_txt*textOffsetFactor,
+                f"{original_aoa}\u00b0", fontsize=12*size, **kwargs_txt)
 
         if drawDicorations:
             arc_orig_x, arc_orig_y = xOrig, yOrig
@@ -4121,7 +4129,7 @@ class bldgCp(windCAD.building):
             return fig, ax
 
     def plotAoA_definition(self, AoAs=[0,90,180,270], ax=None, figSize=[6,6], location: Literal['upper left','upper right','lower left','lower right']='lower left',
-                       explicitLocation=None, marginFactor=1.0, size=1.0, inwardArrow=True):
+                           textOffsetFactor=2.2, explicitLocation=None, marginFactor=1.0, size=1.0, inwardArrow=True):
         if self.AoA_zero_deg_basisVector is None or self.AoA_rotation_direction is None:
             raise Exception("AoA_zero_deg_basisVector and AoA_rotation_direction must be defined to plot the AoA symbol.")
         newFig = False
@@ -4132,9 +4140,11 @@ class bldgCp(windCAD.building):
 
         for i, aoa in enumerate(AoAs):
             if i == 0:
-                self.plotAoA_symbol(aoa, ax=ax, figSize=figSize, location=location, explicitLocation=explicitLocation, marginFactor=marginFactor, size=size, inwardArrow=inwardArrow)
+                self.plotAoA_symbol(aoa, ax=ax, figSize=figSize, location=location, explicitLocation=explicitLocation, marginFactor=marginFactor, size=size, 
+                                    textOffsetFactor=textOffsetFactor, inwardArrow=inwardArrow)
             else:
-                self.plotAoA_symbol(aoa, ax=ax, figSize=figSize, location=location, explicitLocation=explicitLocation, marginFactor=marginFactor, size=size, inwardArrow=inwardArrow, drawDicorations=False)
+                self.plotAoA_symbol(aoa, ax=ax, figSize=figSize, location=location, explicitLocation=explicitLocation, marginFactor=marginFactor, size=size, 
+                                    textOffsetFactor=textOffsetFactor, inwardArrow=inwardArrow, drawDicorations=False)
 
         if newFig:
             ax.axis('equal')
@@ -4554,7 +4564,7 @@ class Profiles:
         return fig
 
     def plotSpect(self, 
-                fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], label=None, 
+                fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], wspace=0.3,
                 xLabel=None, yLabel_Suu=None, yLabel_Svv=None, yLabel_Sww=None,
                 xLimits=None, yLimits=None, 
                 normalize=True, normZ:Literal['Z','xLi']='Z', normU:Literal['U','sigUi']='U',         
@@ -4564,6 +4574,7 @@ class Profiles:
                 kwargs_plt=None, kwargs_ax={}):
         fig, axs = plt.subplots(1,3)
         fig.set_size_inches(figsize)
+        fig.subplots_adjust(wspace=wspace)
 
         ax_Suu = axs[0] if ax_Suu is None else ax_Suu
         ax_Svv = axs[1] if ax_Svv is None else ax_Svv
@@ -4668,25 +4679,46 @@ class Profiles:
         return fig, ax
 
     def plotParamsTable(self,
-                        fig=None,figsize=[0,7],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}',
+                        fig=None,figsize_perCell=[2,0.3],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}',
                         fontSz=10, normalize=True, colColors=None, colTxtColors=None,
+                        params:Union[List[str],Literal['basic','all']]='all',
                         showBorder=True,
                         kwargs_table={'loc':'center',
                                         'cellLoc': 'center',
                                         'bbox': [0.0, 0.0, 1.0, 1.0],}):
+        tableContent = self.paramsTable(normalized=normalize)
+        if params == 'basic':
+            if not normalize:
+                params = mathName(['H','Uh','Iu','Iv','Iw','xLu','xLv','xLw','uw','z0','Je','T'])
+            else:
+                params = mathName(['H','Uh','Iu','Iv','Iw','xLu/H','xLv/H','xLw/H','uw/Uh^2','z0','Je','T_star'])
+        elif params == 'all':
+            params = list(tableContent.keys())
+        else:
+            params = params if isinstance(params,list) else [params, ]
+        if mathName('H') in params: 
+            params[params.index(mathName('H'))] += ' @MS'
+        if mathName('Uh') in params:
+            params[params.index(mathName('Uh'))] += ' @MS'
+        if mathName('z0') in params:
+            params[params.index(mathName('z0'))] += ' @FS'
+            
         if fig is None:
             fntFctr = 1.0 if fontSz is None else fontSz/10.0
             if autoFigSize:
-                figsize[0] = 2*(self.N+1)*fntFctr*figWidthFctr
+                # figsize[0] = 2*(self.N+1)*fntFctr*figWidthFctr
+                figsize = [figsize_perCell[0]*(self.N+1)*fntFctr, figsize_perCell[1]*len(params)*fntFctr]
             fig = plt.figure(figsize=figsize)
         if ax is None:
             ax = plt.subplot()
         ax.axis('off')
         ax.axis('tight')
 
-        tableContent = self.paramsTable(normalized=normalize)
+
         cell_text = []
         for key in tableContent.keys():
+            if key not in params:
+                continue
             if key == 'name':
                 continue
             val = []
@@ -4929,25 +4961,47 @@ class BldgCps():
         return figs, all_axes
 
     def plotParamsTable(self,
-                        fig=None,figsize=[0,8],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}',
+                        fig=None,figsize_perCell=[2,0.3],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}',
                         fontSz=10, normalize=True, colColors=None, colTxtColors=None,
+                        params:Union[List[str],Literal['basic','all']]='all',
                         showBorder=True,
                         kwargs_table={'loc':'center',
                                         'cellLoc': 'center',
                                         'bbox': [0.0, 0.0, 1.0, 1.0],}):
+        tableContent = self.paramsTable(normalized=normalize)
+        if params == 'basic':
+            if not normalize:
+                params = mathName(['H','Uh','Iu','Iv','Iw','xLu','xLv','xLw','uw','z0','T','Re','lScl','vScl','tScl'])
+            else:
+                params = mathName(['H','Uh','Iu','Iv','Iw','xLu/H','xLv/H','xLw/H','uw/Uh^2','Je','T_star','Re','lScl','vScl','tScl'])
+        elif params == 'all':
+            params = list(tableContent.keys())
+        else:
+            params = params if isinstance(params,list) else [params, ]
+        if mathName('H') in params: 
+            params[params.index(mathName('H'))] += ' @MS'
+        if mathName('Uh') in params:
+            params[params.index(mathName('Uh'))] += ' @MS'
+        if mathName('z0') in params:
+            params[params.index(mathName('z0'))] += ' @FS'
+
+
         if fig is None:
             fntFctr = 1.0 if fontSz is None else fontSz/10.0
             if autoFigSize:
-                figsize[0] = 2*(self.N_bldgs+1)*fntFctr*figWidthFctr
+                # figsize[0] = 2*(self.N_bldgs+1)*fntFctr*figWidthFctr
+                figsize = [figsize_perCell[0]*(self.N_bldgs+1)*fntFctr, figsize_perCell[1]*len(params)*fntFctr]
             fig = plt.figure(figsize=figsize)
         if ax is None:
             ax = plt.subplot()
         ax.axis('off')
         ax.axis('tight')
 
-        tableContent = self.paramsTable(normalized=normalize)
+        # tableContent = self.paramsTable(normalized=normalize)
         cell_text = []
         for key in tableContent.keys():
+            if key not in params:
+                continue
             if key == 'Name':
                 continue
             val = []
@@ -5223,7 +5277,7 @@ class validator():
                           errTypes:list=None, showErrTxt:bool=True,
                           lumpAllAoAs:bool=False, 
                           targetLabel='Target', modelLabel='Model',
-                          percentLinesAt=[10,30], percentLinesAt_kwargs=None, 
+                          percentLinesAt=[10,30], percentLinesAt_kwargs=None, showLegend:bool=True,
                           xyLims=None,
                           kwargs_mainPlot={'color':'k', 'marker':'.', 'linestyle':''},
                           cols = def_cols,
@@ -5291,7 +5345,7 @@ class validator():
             ax.set_xlim(minmax)
             ax.set_ylim(minmax)
             formatAxis(ax=ax, gridMajor=False, gridMinor=False)
-            if i == 0:
+            if i == 0 and showLegend:
                 ax.legend(**kwargs_legend)
 
         # turn off the remaining axes
@@ -5546,3 +5600,8 @@ class validator():
             plt.show()
         return fig, axs
 
+    def plotStats_on_a_line(self):
+        raise NotImplementedError
+    
+    def plotStats_on_lines(self):
+        raise NotImplementedError
