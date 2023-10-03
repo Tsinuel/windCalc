@@ -115,16 +115,6 @@ def readBDformattedFile(file):
     
     return entries.astype('float64')
 
-def writeBDformattedFile(file,vect):
-    f = open(file,"w")
-    f.write(str(len(vect))+"\n")
-    f.close()
-    f = open(file,"a")
-    f.write("(\n")
-    np.savetxt(f,vect,fmt='(%1.8g %1.8g %1.8g)',delimiter=' ')
-    f.write(")")
-    f.close()    
-
 def readVTKfile(vtkFile, fieldName, showLog=True):
     import vtk
     from vtk.util.numpy_support import vtk_to_numpy
@@ -171,6 +161,84 @@ def readRAWfile(file, numHeader=2, showLog=True):
     if showLog:
         print("    Shape of the data: "+str(np.shape(data)))
     return data
+
+def writeBDformattedFile(file,vect):
+    f = open(file,"w")
+    f.write(str(len(vect))+"\n")
+    f.close()
+    f = open(file,"a")
+    f.write("(\n")
+    np.savetxt(f,vect,fmt='(%1.8g %1.8g %1.8g)',delimiter=' ')
+    f.write(")\n")
+    f.close()
+
+def appendBDformattedFile(outDir, timeName, points, vel, checkMatchingPoints=True, pointDistanceTolerance=1e-6, overwrite=False, showLog=True):
+    os.makedirs(outDir, exist_ok=True)
+    timeDir = outDir+"/"+timeName+"/"
+    if os.path.exists(timeDir) and not overwrite and os.path.exists(timeDir+"/U"):
+        print("    Skipping existing time step: "+timeName+"/U")
+        return
+    os.makedirs(timeDir, exist_ok=True)
+    if checkMatchingPoints:
+        pointsFile = outDir+"/points"
+        if os.path.exists(pointsFile) and checkMatchingPoints:
+            points_old = readBDformattedFile(pointsFile)
+        pointsFileHandled = False
+        if not pointsFileHandled:
+            if overwrite or (not os.path.exists(pointsFile) and checkMatchingPoints):
+                writeBDformattedFile(pointsFile, points)
+                points_old = points
+            pointsFileHandled = True
+        else:
+            if not np.array_equal(points, points_old) and checkMatchingPoints:
+                if showLog:
+                    print("      Reordering velocity to match the points in existing 'points' file.")
+                # throw error if the number of points does not match
+                if not len(points) == len(points_old):
+                    raise Exception("The number of points in the 'points' variable does not match with the number of points in the file '"+pointsFile+"'.")
+                from scipy.spatial import KDTree
+                tree = KDTree(points)
+                distance,idx = tree.query(points_old)
+                # check the maximum distance between the points
+                if max(distance) > pointDistanceTolerance:
+                    raise Exception("The points in the file 'points' do not match with the points in the file '"+pointsFile+"'.")
+                points = points[idx,:]
+                vel = vel[idx,:]
+    if overwrite or (not os.path.exists(timeDir) and not os.path.exists(timeDir+"/U")):
+        if showLog:
+            print("    Writing velocity to: <output_dir> = "+outDir)
+        os.makedirs(timeDir, exist_ok=True)
+        writeBDformattedFile(timeDir+"/U", vel)
+        # test if the new file is written 
+        if not os.path.exists(timeDir+"/U"):
+            raise Exception("The file '"+timeDir+"/U' could not be written.")
+        if showLog:
+            print("    "+timeName+"/U")
+    else:
+        if showLog:
+            print("    Skipping existing time step: "+timeName+"/U")
+    
+def plot2DvelField(x_orig,y_orig,u,v, fig=None, ax=None, Nx=100):
+    # create a uniform grid based on the given Nx and calculated Ny so that the aspect ratio is close to 1
+    xMin, xMax = np.min(x_orig), np.max(x_orig)
+    yMin, yMax = np.min(y_orig), np.max(y_orig)
+    dx = (xMax-xMin)/Nx
+    Ny = int((yMax-yMin)/dx)
+    x = np.linspace(xMin, xMax, Nx)
+    y = np.linspace(yMin, yMax, Ny)
+    x,y = np.meshgrid(x,y)
+    u = scintrp.griddata((x_orig,y_orig), u, (x,y), method='linear')
+    v = scintrp.griddata((x_orig,y_orig), v, (x,y), method='linear')
+    
+
+    if fig is None:
+        fig = plt.figure()
+    if ax is None:
+        ax = fig.add_subplot(111)
+    # mag = np.sqrt(u**2+v**2)
+    # ax.contourf(x,y,mag)
+    ax.quiver(x_orig,y_orig,u,v)
+    return fig, ax
 
 #-----------------------  Inflow data handlers  --------------------------------
 def convertSectionSampleToBoundaryDataInflow(caseDir, sectionName, fileName, 
@@ -277,6 +345,104 @@ def convertSectionSampleToBoundaryDataInflow(caseDir, sectionName, fileName,
                 print("    Skipping existing time step: "+t_out+"/U")
     if showLog:
         print("    << Finished converting section sample to boundaryData inflow.")
+
+def scaleInflowFromSectionSample(caseDir, sectionName, profFile, ratioFile, sectFileFormat:Literal['.raw','.vtk','.csv']='.raw', outputDir=None, timeRange=None, shiftTimeBy=None, 
+                                 showLog=True, checkMatchingPoints=True, pointDistanceTolerance=1e-6, timeOutputPrecision=6, overwrite=False, plot=False,
+                                 ) -> None:
+    if not os.path.exists(caseDir):
+        raise Exception("The case directory '"+caseDir+"' does not exist.")
+    sectDir = caseDir+"/postProcessing/"+sectionName+"/"
+    if not os.path.exists(sectDir):
+        raise Exception("The section directory '"+sectDir+"' does not exist.")
+    if outputDir is None:
+        outputDir = caseDir+"/constant/boundaryData/inlet/"
+    os.makedirs(outputDir, exist_ok=True)
+    print("Scaling inflow from section sample.")
+    print("    Reading section sample from: "+sectDir)
+    print("    Reading scaling ratios from: "+ratioFile)
+    print("    Reading profile from: "+profFile)
+    print("    Writing scaled inflow to: "+outputDir)
+
+    times = [ name for name in os.listdir(sectDir) if os.path.isdir(os.path.join(sectDir, name)) ]
+    times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
+    times = [x[0] for x in times]
+    if len(times) == 0:
+        print("    No time directories found in: "+sectDir)
+        return
+    profFile = os.path.abspath(profFile)
+    prof = pd.read_csv(profFile, sep=' ', header=1, names=['Z','U','Iu','Iv', 'Iw', 'xLu', 'xLv', 'xLw'])
+    prof = prof.to_numpy()
+    ratios = pd.read_csv(ratioFile, sep=' ', header=1, names=['Z','U','Iu','Iv', 'Iw', 'xLu', 'xLv', 'xLw'])
+    ratios = ratios.to_numpy()
+
+    # create an interpolator once along the vertical direction that can be used for all time steps
+    Z_prof = ratios[:,0]
+    U_prof = prof[:,1]
+    Iu = ratios[:,2]
+    Iv = ratios[:,3]
+    Iw = ratios[:,4]
+
+    if timeRange is not None:
+        times = [t for t in times if float(t) >= timeRange[0] and float(t) <= timeRange[1]]
+    if shiftTimeBy is not None:
+        times = [str(round(float(t)+shiftTimeBy,timeOutputPrecision)) for t in times]
+    if showLog:
+        print("Time range: "+str(timeRange))
+        print("No. of time steps: "+str(len(times)))
+    if len(times) == 0:
+        print("No time directories found in: "+sectDir+" for the time range: "+str(timeRange))
+        return
+
+    for t in times:
+        timeName = str(round(float(t),timeOutputPrecision))
+        if not overwrite and os.path.exists(outputDir+"/"+timeName+"/U"):
+            print("    Skipping existing time step: "+timeName)
+            continue
+
+        file = glob.glob(os.path.join(sectDir, t, "U*"+sectFileFormat))
+        if len(file) == 0:
+            print("    The file '"+sectDir+t+"/*"+sectFileFormat+"' does not exist.")
+            continue
+        if len(file) > 1:
+            print("    Multiple files found for '"+sectDir+t+"/*"+sectFileFormat+"'.")
+            print("    The first file will be used.")
+        file = file[0]
+        if showLog:
+            print("    Working on time step: "+t)
+        if plot:
+            # # create two axes for the old and new velocity side by side
+            # fig, ax = plt.subplots(1,2,figsize=(10,5))
+            # ax[0].set_title("Old velocity")
+            # ax[1].set_title("New velocity")
+            pass
+
+        ext = os.path.splitext(file)[1]
+        if ext == '.raw':
+            data = readRAWfile(file, showLog=False)
+            points = data[['x','y','z']].to_numpy()
+            vel = data[['U_x','U_y','U_z']].to_numpy()
+        else:
+            raise NotImplementedError("The file extension '"+ext+"' is not supported.")
+        if plot:
+            # plot2DvelField(points[:,0],points[:,1],vel[:,0],vel[:,1], fig=fig, ax=ax[0])
+            pass
+
+        Z = points[:,2]
+        U = np.interp(Z, Z_prof, U_prof)
+        vel[:,0] = (vel[:,0]-U)*np.interp(Z, Z_prof, Iu) + U
+        vel[:,1] = vel[:,1]*np.interp(Z, Z_prof, Iv)
+        vel[:,2] = vel[:,2]*np.interp(Z, Z_prof, Iw)
+        if plot:
+            # plot2DvelField(points[:,0],points[:,1],vel[:,0],vel[:,1], fig=fig, ax=ax[1])
+            # fig.suptitle("Time: "+t)
+            # plt.show()
+            plot_velocity_contours(vel[:,0], vel[:,1], points[:,0], points[:,1], title="Time: "+t)
+        
+        appendBDformattedFile(outputDir, timeName, points, vel, checkMatchingPoints=checkMatchingPoints, pointDistanceTolerance=pointDistanceTolerance, overwrite=True, showLog=False)
+
+            
+    print(" << Finished scaling inflow from section sample.")
+                                 
 
 #-----------------  Probe readers and related functions  -----------------------
 def read_OF_probe_single(file,field):
@@ -1278,8 +1444,14 @@ class inflowTuner:
                 os.makedirs(dir)
             prof.to_csv(dir+'/'+name, index=False, sep=' ', float_format='%.6e', header=False)
             print('Profile written to: '+dir+'/'+name)
+            # write the last LES profile to file with header
+            profs_cum[-1].to_csv(dir+'/'+caseName+'_prof_'+profs_in_names[-1], index=False, sep=' ', float_format='%.6e')
+            # write the last ratio set to file with header
+            ratio_cum[-1].to_csv(dir+'/'+caseName+'_ratio', index=False, sep=' ', float_format='%.6e')
+            # write info file
             with open(dir+'/'+caseName+'_info.txt', 'w') as f:
                 f.write(getPrintTxt(ratio_i, ratio_cum))
+            
                         
         if debugMode:
             toPlot = [profileObj_to_df(self.target), target_0]
