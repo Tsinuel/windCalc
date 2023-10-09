@@ -20,15 +20,15 @@ def main(args):
     shiftTimeBy = float(args[7])
     timeRange = [float(args[8]), float(args[9])]
 
-    print("caseDir: ", caseDir)
-    print("sectionName: ", sectionName)
-    print("ratioFile: ", ratioFile)
-    print("profFile: ", profFile)
-    print("overwrite: ", overwrite)
-    print("checkMatchingPoints: ", checkMatchingPoints)
-    print("outDir: ", outDir)
-    print("shiftTimeBy: ", shiftTimeBy)
-    print("timeRange: ", timeRange)
+    print("caseDir: \t\t", caseDir)
+    print("sectionName: \t\t", sectionName)
+    print("ratioFile: \t\t", ratioFile)
+    print("profFile: \t\t", profFile)
+    print("overwrite: \t\t", overwrite)
+    print("checkMatchingPoints: \t", checkMatchingPoints)
+    print("outDir: \t\t", outDir)
+    print("shiftTimeBy: \t\t", shiftTimeBy)
+    print("timeRange: \t\t", timeRange)
 
     windOF.scaleInflowFromSectionSample(caseDir=caseDir, 
                                         sectionName=sectionName,
@@ -39,6 +39,7 @@ def main(args):
                                         outputDir=outDir,
                                         timeRange=timeRange,
                                         shiftTimeBy=shiftTimeBy,
+                                        timeOutputPrecision=10,
                                         )
 
 if __name__ == "__main__":

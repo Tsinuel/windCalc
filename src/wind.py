@@ -2194,7 +2194,7 @@ class profile:
             plt.show()
         return fig, ax_U, ax_Iu
 
-    def plotProfile_basic2(self, fig=None, axs=None, figsize=[12,12], label=None, normalize=True,
+    def plotProfile_basic2(self, fig=None, axs=None, figsize=[12,12], label=None, normalize=True, subPlotLabels=None, showSubPlotLabels=True,
                             xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
                             xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
                             overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
@@ -2289,33 +2289,56 @@ class profile:
         label = self.name if label is None else label
         if zLabel is None:
             zLabel = '$Z/H$' if normalize else '$Z$'
+        if showSubPlotLabels and subPlotLabels is None:
+            subPlotLabels = {'U': '(a)', 'uw': '(b)', 'Iu': '(c)', 'Iv': '(d)', 'Iw': '(e)', 'xLu': '(f)', 'xLv': '(g)', 'xLw': '(h)'}
+            kwargs_spLbl = {'x': 0.04, 'y': 0.96,
+                            'fontsize': 14, 'fontweight': 'normal',
+                            'verticalalignment': 'top', 'horizontalalignment': 'left', 
+                            'bbox': dict(facecolor='white', alpha=0.5, edgecolor='none'),
+                            }
         
         bxPltObj = None
         if 'U' in self.stats_core.keys():
             self.plotProfile_any('U', ax=axs[0,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_U, yLimits=yLimits, kwargs=kwargs_plt)
             name = overlayThese['name'] if overlayThese is not None and 'name' in overlayThese else '_'
             bxPltObj = addOverlay(axs[0,0], 'U', name, kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'U' in subPlotLabels:
+                axs[0,0].text(s=subPlotLabels['U'], transform=axs[0,0].transAxes, **kwargs_spLbl)
         if 'uw' in self.stats_core.keys():
             self.plotProfile_any('uw', ax=axs[0,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_uw, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[0,1], 'uw', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'uw' in subPlotLabels:
+                axs[0,1].text(s=subPlotLabels['uw'], transform=axs[0,1].transAxes, **kwargs_spLbl)
         if 'Iu' in self.stats_core.keys():
             self.plotProfile_any('Iu', ax=axs[1,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iu, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[1,0], 'Iu', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'Iu' in subPlotLabels:
+                axs[1,0].text(s=subPlotLabels['Iu'], transform=axs[1,0].transAxes, **kwargs_spLbl)
         if 'Iv' in self.stats_core.keys():
             self.plotProfile_any('Iv', ax=axs[1,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iv, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[1,1], 'Iv', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'Iv' in subPlotLabels:
+                axs[1,1].text(s=subPlotLabels['Iv'], transform=axs[1,1].transAxes, **kwargs_spLbl)
         if 'Iw' in self.stats_core.keys():
             self.plotProfile_any('Iw', ax=axs[1,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iw, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[1,2], 'Iw', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'Iw' in subPlotLabels:
+                axs[1,2].text(s=subPlotLabels['Iw'], transform=axs[1,2].transAxes, **kwargs_spLbl)
         if 'xLu' in self.stats_core.keys():
             self.plotProfile_any('xLu', ax=axs[2,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLu, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[2,0], 'xLu', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'xLu' in subPlotLabels:
+                axs[2,0].text(s=subPlotLabels['xLu'], transform=axs[2,0].transAxes, **kwargs_spLbl)
         if 'xLv' in self.stats_core.keys():
             self.plotProfile_any('xLv', ax=axs[2,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLv, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[2,1], 'xLv', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'xLv' in subPlotLabels:
+                axs[2,1].text(s=subPlotLabels['xLv'], transform=axs[2,1].transAxes, **kwargs_spLbl)
         if 'xLw' in self.stats_core.keys():
             self.plotProfile_any('xLw', ax=axs[2,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLw, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[2,2], 'xLw', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'xLw' in subPlotLabels:
+                axs[2,2].text(s=subPlotLabels['xLw'], transform=axs[2,2].transAxes, **kwargs_spLbl)
         
         if newFig:
             axs[0,2].axis('off')
@@ -3628,7 +3651,7 @@ class bldgCp(windCAD.building):
         raise NotImplementedError
 
     """--------------------------------- Plotters -------------------------------------"""
-    def plotTapCpStatsPerAoA(self, figs=None, all_axes=None, addMarginDetails=False,
+    def plotTapCpStatsPerAoA(self, figs=None, all_axes=None, addMarginDetails=False, scaleFactor=1.0,
                             fields=['peakMin','mean','peakMax',],fldRange=[-15,10], tapsToPlot=None, includeTapName=True,
                             nCols=7, nRows=10, 
                             cols = ['r','k','b','g','m','r','k','b','g','m'],
@@ -3680,7 +3703,8 @@ class bldgCp(windCAD.building):
                 ax = axs[i//nCols,i%nCols]
                 for f,fld in enumerate(fields):
                     label = fld if simpleLabel else self.name+' ('+fld+')'
-                    ax.plot(self.AoA, self.CpStats[fld][:,tapIdx], label=label, **kwargs_perFld[f])
+                    factor = scaleFactor if fld in SCALABLE_CP_STATS else 1.0
+                    ax.plot(self.AoA, self.CpStats[fld][:,tapIdx]*factor, label=label, **kwargs_perFld[f])
                     if overlayThis is not None:
                         ax.plot(overlay_AoA, overlayThis[fld][:,tapPltCount], label=overlayLabel+' ('+fld+')', **kwargs_overlay[f])
                 ax.hlines([-1,0,1],0,360,colors=['k','k','k'],linestyles=['--','-','--'],lw=0.7)
@@ -4361,12 +4385,12 @@ class Profiles:
                         )
     
     def plotProfile_basic2(self, figsize=[12,12], label=None, hspace=0.3, wspace=0.3,
-                           normalize=True,
-                            xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
-                            xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
-                            overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
-                            yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
-                            kwargs_plt=None, kwargs_ax={}):
+                        normalize=True, subPlotLabels=None, showSubPlotLabels=True,
+                        xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
+                        xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
+                        overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
+                        yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
+                        kwargs_plt=None, kwargs_ax={}):
         
         fig, axs = plt.subplots(3,3)
         fig.set_size_inches(figsize)
@@ -4392,16 +4416,18 @@ class Profiles:
 
         for i, prof in enumerate(self.profiles):
             if i == 0 and overlayThese is not None:
-                _,_,bxPltObj = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, 
-                                                    xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, 
-                                                    xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, xLimits_uw=xLimits_uw, 
-                                                    overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay,
-                                                    yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+                _,_,bxPltObj = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, subPlotLabels=subPlotLabels, showSubPlotLabels=showSubPlotLabels,
+                                                xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, 
+                                                xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, 
+                                                xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, xLimits_uw=xLimits_uw, 
+                                                overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay,
+                                                yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
             else:
-                _,_,_ = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, 
-                                        xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
-                                        xLimits_uw=xLimits_uw, 
-                                        yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
+                _,_,_ = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, showSubPlotLabels=False,
+                                                xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, 
+                                                xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
+                                                xLimits_uw=xLimits_uw, 
+                                                yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
                 bxPltObj = None if i == 0 else bxPltObj
         
         axs[0,2].axis('off')
@@ -4884,7 +4910,7 @@ class BldgCps():
                             cols = ['r','k','b','g','m','r','k','b','g','m'],
                             mrkrs = ['^','o','v','s','p','d','.','*','<','>','h'], 
                             ls=['-','-','-','-','-','-','-','-','-','-',],
-                            mrkrSize=2, lw=0.5,
+                            mrkrSize=2, lw=0.5, scaleFactors=1.0,
                             kwargs_perFld=None, 
                             xticks=None, nAoA_ticks=5, xlim=None, 
                             legend_bbox_to_anchor=(0.5, 0.905), nLgndCols=None, simpleLabel=False,
@@ -4900,9 +4926,10 @@ class BldgCps():
                                 'linewidth':lw,
                                 } for i in range(len(fields))]
                                 for c in range(self.N_bldgs)] 
-            
-
+        
         tapIdxs = self.master.tapIdx if tapsToPlot is None else self.master.tapIdxOf(tapsToPlot)
+
+        scaleFactors = scaleFactors*np.ones(self.N_bldgs) if np.isscalar(scaleFactors) else scaleFactors
         
         for fld in fields:
             self.master.checkStatField(fld)
@@ -4928,7 +4955,7 @@ class BldgCps():
             if i > 0:
                 overlayThis = None
                 addMarginDetails = False
-            bldg.plotTapCpStatsPerAoA(figs=figs, all_axes=all_axes, addMarginDetails=addMarginDetails,
+            bldg.plotTapCpStatsPerAoA(figs=figs, all_axes=all_axes, addMarginDetails=addMarginDetails, scaleFactor=scaleFactors[i],
                                     fields=fields, fldRange=fldRange, tapsToPlot=tapsToPlot, includeTapName=includeTapName,
                                     kwargs_perFld=kwargs_perFld[i], 
                                     simpleLabel=simpleLabel,

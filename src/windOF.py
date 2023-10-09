@@ -162,6 +162,32 @@ def readRAWfile(file, numHeader=2, showLog=True):
         print("    Shape of the data: "+str(np.shape(data)))
     return data
 
+def writeOpenFOAMdict(file, content:dict, version=2.0, format='ascii', class_='dictionary', object_='general'):
+    f = open(file,"w")
+    f.write("/*--------------------------------*- C++ -*----------------------------------*\\\n")
+    f.write("| =========                 |                                                 |\n")
+    f.write("| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |\n")
+    f.write("|  \\\\    /   O peration     | Version:  2.3.0                                 |\n")
+    f.write("|   \\\\  /    A nd           | Web:      www.OpenFOAM.org                      |\n")
+    f.write("|    \\\\/     M anipulation  |                                                 |\n")
+    f.write("\\*---------------------------------------------------------------------------*/\n")
+    f.write("FoamFile\n")
+    f.write("{\n")
+    f.write("    version     "+str(version)+";\n")
+    f.write("    format      "+format+";\n")
+    f.write("    class       "+class_+";\n")
+    f.write("    object      "+object_+";\n")
+    f.write("}\n")
+    f.write(" * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //\n")
+    f.write("\n")
+    for key in content:
+        if isinstance(content[key], str):
+            content[key] = '\"'+content[key]+'\"'
+        f.write(key+"\t\t"+str(content[key])+";\n")
+    f.write("\n")
+    f.write("// ************************************************************************* //\n")
+    f.close()
+
 def writeBDformattedFile(file,vect):
     f = open(file,"w")
     f.write(str(len(vect))+"\n")
@@ -172,38 +198,43 @@ def writeBDformattedFile(file,vect):
     f.write(")\n")
     f.close()
 
-def appendBDformattedFile(outDir, timeName, points, vel, checkMatchingPoints=True, pointDistanceTolerance=1e-6, overwrite=False, showLog=True):
+def appendBDformattedFile(outDir, timeName, points, vel, writePointsFile=True, checkMatchingPoints=True, pointDistanceTolerance=1e-6, overwrite=False, showLog=True):
     os.makedirs(outDir, exist_ok=True)
     timeDir = outDir+"/"+timeName+"/"
     if os.path.exists(timeDir) and not overwrite and os.path.exists(timeDir+"/U"):
         print("    Skipping existing time step: "+timeName+"/U")
         return
     os.makedirs(timeDir, exist_ok=True)
-    if checkMatchingPoints:
+    if writePointsFile:
         pointsFile = outDir+"/points"
-        if os.path.exists(pointsFile) and checkMatchingPoints:
-            points_old = readBDformattedFile(pointsFile)
-        pointsFileHandled = False
-        if not pointsFileHandled:
-            if overwrite or (not os.path.exists(pointsFile) and checkMatchingPoints):
-                writeBDformattedFile(pointsFile, points)
-                points_old = points
-            pointsFileHandled = True
+        if checkMatchingPoints:
+            if os.path.exists(pointsFile) and checkMatchingPoints:
+                points_old = readBDformattedFile(pointsFile)
+            pointsFileHandled = False
+            if not pointsFileHandled:
+                if overwrite or (not os.path.exists(pointsFile) and checkMatchingPoints):
+                    writeBDformattedFile(pointsFile, points)
+                    points_old = points
+                pointsFileHandled = True
+            else:
+                if not np.array_equal(points, points_old) and checkMatchingPoints:
+                    if showLog:
+                        print("      Reordering velocity to match the points in existing 'points' file.")
+                    # throw error if the number of points does not match
+                    if not len(points) == len(points_old):
+                        raise Exception("The number of points in the 'points' variable does not match with the number of points in the file '"+pointsFile+"'.")
+                    from scipy.spatial import KDTree
+                    tree = KDTree(points)
+                    distance,idx = tree.query(points_old)
+                    # check the maximum distance between the points
+                    if max(distance) > pointDistanceTolerance:
+                        raise Exception("The points in the file 'points' do not match with the points in the file '"+pointsFile+"'.")
+                    points = points[idx,:]
+                    vel = vel[idx,:]
         else:
-            if not np.array_equal(points, points_old) and checkMatchingPoints:
-                if showLog:
-                    print("      Reordering velocity to match the points in existing 'points' file.")
-                # throw error if the number of points does not match
-                if not len(points) == len(points_old):
-                    raise Exception("The number of points in the 'points' variable does not match with the number of points in the file '"+pointsFile+"'.")
-                from scipy.spatial import KDTree
-                tree = KDTree(points)
-                distance,idx = tree.query(points_old)
-                # check the maximum distance between the points
-                if max(distance) > pointDistanceTolerance:
-                    raise Exception("The points in the file 'points' do not match with the points in the file '"+pointsFile+"'.")
-                points = points[idx,:]
-                vel = vel[idx,:]
+            if overwrite or not os.path.exists(pointsFile):
+                writeBDformattedFile(pointsFile, points)
+    
     if overwrite or (not os.path.exists(timeDir) and not os.path.exists(timeDir+"/U")):
         if showLog:
             print("    Writing velocity to: <output_dir> = "+outDir)
@@ -346,28 +377,42 @@ def convertSectionSampleToBoundaryDataInflow(caseDir, sectionName, fileName,
     if showLog:
         print("    << Finished converting section sample to boundaryData inflow.")
 
-def scaleInflowFromSectionSample(caseDir, sectionName, profFile, ratioFile, sectFileFormat:Literal['.raw','.vtk','.csv']='.raw', outputDir=None, timeRange=None, shiftTimeBy=None, 
-                                 showLog=True, checkMatchingPoints=True, pointDistanceTolerance=1e-6, timeOutputPrecision=6, overwrite=False, plot=False,
+def scaleInflowFromSectionSample(caseDir,  profFile, ratioFile, sectionName=None, inputFileFormat:Literal['.raw','.vtk','.csv','boundaryData']='.raw', 
+                                 outputDir=None, timeRange=None, shiftTimeBy=None, showLog=True, checkMatchingPoints=True, pointDistanceTolerance=1e-6, 
+                                 timeOutputPrecision=10, overwrite=False, plot=False,
                                  ) -> None:
     if not os.path.exists(caseDir):
         raise Exception("The case directory '"+caseDir+"' does not exist.")
-    sectDir = caseDir+"/postProcessing/"+sectionName+"/"
-    if not os.path.exists(sectDir):
-        raise Exception("The section directory '"+sectDir+"' does not exist.")
+    if inputFileFormat == 'boundaryData':
+        inputDir = caseDir+"/constant/boundaryData/inlet/"
+    else:
+        if sectionName is None:
+            raise Exception("The section name must be provided for the file format '"+inputFileFormat+"'.")
+        inputDir = caseDir+"/postProcessing/"+sectionName+"/"
+    if not os.path.exists(inputDir):
+        raise Exception("The section directory '"+inputDir+"' does not exist.")
     if outputDir is None:
-        outputDir = caseDir+"/constant/boundaryData/inlet/"
+        outputDir = caseDir+"/constant/boundaryData/inlet_scaled/"
     os.makedirs(outputDir, exist_ok=True)
     print("Scaling inflow from section sample.")
-    print("    Reading section sample from: "+sectDir)
+    print("    Reading section sample from: "+inputDir)
     print("    Reading scaling ratios from: "+ratioFile)
     print("    Reading profile from: "+profFile)
     print("    Writing scaled inflow to: "+outputDir)
 
-    times = [ name for name in os.listdir(sectDir) if os.path.isdir(os.path.join(sectDir, name)) ]
+    # times = [ name for name in os.listdir(inputDir) if os.path.isdir(os.path.join(inputDir, name)) ]
+    # if inputFileFormat == 'boundaryData': 
+    #     times = [t for t in times if not t == 'points']
+    # times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
+    # times = [x[0] for x in times]
+    
+    # list and sort the time directories and create two lists for the original and scaled time steps
+    times = [ name for name in os.listdir(inputDir) if os.path.isdir(os.path.join(inputDir, name)) ]
     times = sorted(list(zip(times, np.asarray(times).astype(float))), key=lambda x: x[1])
     times = [x[0] for x in times]
+
     if len(times) == 0:
-        print("    No time directories found in: "+sectDir)
+        print("    No time directories found in: "+inputDir)
         return
     profFile = os.path.abspath(profFile)
     prof = pd.read_csv(profFile, sep=' ', header=1, names=['Z','U','Iu','Iv', 'Iw', 'xLu', 'xLv', 'xLw'])
@@ -375,7 +420,6 @@ def scaleInflowFromSectionSample(caseDir, sectionName, profFile, ratioFile, sect
     ratios = pd.read_csv(ratioFile, sep=' ', header=1, names=['Z','U','Iu','Iv', 'Iw', 'xLu', 'xLv', 'xLw'])
     ratios = ratios.to_numpy()
 
-    # create an interpolator once along the vertical direction that can be used for all time steps
     Z_prof = ratios[:,0]
     U_prof = prof[:,1]
     Iu = ratios[:,2]
@@ -385,30 +429,56 @@ def scaleInflowFromSectionSample(caseDir, sectionName, profFile, ratioFile, sect
     if timeRange is not None:
         times = [t for t in times if float(t) >= timeRange[0] and float(t) <= timeRange[1]]
     if shiftTimeBy is not None:
-        times = [str(round(float(t)+shiftTimeBy,timeOutputPrecision)) for t in times]
+        times_out = [str(round(float(t)+shiftTimeBy,timeOutputPrecision)) for t in times]
+    else:
+        times_out = times
     if showLog:
         print("Time range: "+str(timeRange))
         print("No. of time steps: "+str(len(times)))
     if len(times) == 0:
-        print("No time directories found in: "+sectDir+" for the time range: "+str(timeRange))
+        print("No time directories found in: "+inputDir+" for the time range: "+str(timeRange))
         return
+    if inputFileFormat == 'boundaryData':
+        pointsFile = inputDir+"points"
+        if os.path.exists(pointsFile):
+            points = readBDformattedFile(pointsFile)
+            points = points.to_numpy()
+        else:
+            raise Exception("The file '"+pointsFile+"' does not exist.")
 
-    for t in times:
-        timeName = str(round(float(t),timeOutputPrecision))
-        if not overwrite and os.path.exists(outputDir+"/"+timeName+"/U"):
-            print("    Skipping existing time step: "+timeName)
+    pointsFile = os.path.join(outputDir, "points")
+    writePointsFile = not os.path.exists(pointsFile)
+
+    for t_in, t_out in zip(times, times_out):
+        outFile = os.path.join(outputDir, t_out, "U")
+        if float(t_out) < 0:
+            if showLog:
+                print("    Skipping negative time step: "+t_in+'\t--> '+t_out)
+            continue
+        # t_out = str(t_out)
+        if inputFileFormat == 'boundaryData':
+            inFile = glob.glob(os.path.join(inputDir, t_in, "/U"))
+        else:
+            inFile = glob.glob(os.path.join(inputDir, t_in, "U*"+inputFileFormat))
+            # inFile = inFile[0] if len(inFile) > 0 else inFile
+
+        if len(inFile) == 0:
+            print("    The file '"+str(inFile)+"' does not exist.")
+            continue
+        if not overwrite and os.path.exists(outFile):
+            print("    Skipping existing time step: "+t_in+'\t--> '+t_out)
+            print("        The file is: '"+str(outFile)+"'")
             continue
 
-        file = glob.glob(os.path.join(sectDir, t, "U*"+sectFileFormat))
-        if len(file) == 0:
-            print("    The file '"+sectDir+t+"/*"+sectFileFormat+"' does not exist.")
+        if len(inFile) == 0:
+            print("    The file '"+inFile+"' does not exist.")
             continue
-        if len(file) > 1:
-            print("    Multiple files found for '"+sectDir+t+"/*"+sectFileFormat+"'.")
+        if len(inFile) > 1:
+            print("    Multiple files found for '"+inFile+"'.")
             print("    The first file will be used.")
-        file = file[0]
+        inFile = inFile[0]
         if showLog:
-            print("    Working on time step: "+t)
+            print("    Scaling time step: "+t_in+'\t--> '+t_out)
         if plot:
             # # create two axes for the old and new velocity side by side
             # fig, ax = plt.subplots(1,2,figsize=(10,5))
@@ -416,13 +486,17 @@ def scaleInflowFromSectionSample(caseDir, sectionName, profFile, ratioFile, sect
             # ax[1].set_title("New velocity")
             pass
 
-        ext = os.path.splitext(file)[1]
-        if ext == '.raw':
-            data = readRAWfile(file, showLog=False)
-            points = data[['x','y','z']].to_numpy()
-            vel = data[['U_x','U_y','U_z']].to_numpy()
+        if inputFileFormat == 'boundaryData':
+            vel = readBDformattedFile(inFile)
+            vel = vel.to_numpy()
         else:
-            raise NotImplementedError("The file extension '"+ext+"' is not supported.")
+            ext = os.path.splitext(inFile)[1]
+            if ext == '.raw':
+                data = readRAWfile(inFile, showLog=False)
+                points = data[['x','y','z']].to_numpy()
+                vel = data[['U_x','U_y','U_z']].to_numpy()
+            else:
+                raise NotImplementedError("The file extension '"+ext+"' is not supported.")
         if plot:
             # plot2DvelField(points[:,0],points[:,1],vel[:,0],vel[:,1], fig=fig, ax=ax[0])
             pass
@@ -436,10 +510,28 @@ def scaleInflowFromSectionSample(caseDir, sectionName, profFile, ratioFile, sect
             # plot2DvelField(points[:,0],points[:,1],vel[:,0],vel[:,1], fig=fig, ax=ax[1])
             # fig.suptitle("Time: "+t)
             # plt.show()
-            plot_velocity_contours(vel[:,0], vel[:,1], points[:,0], points[:,1], title="Time: "+t)
+            # plot_velocity_contours(vel[:,0], vel[:,1], points[:,0], points[:,1], title="Time: "+t)
+            pass
         
-        appendBDformattedFile(outputDir, timeName, points, vel, checkMatchingPoints=checkMatchingPoints, pointDistanceTolerance=pointDistanceTolerance, overwrite=True, showLog=False)
+        appendBDformattedFile(outputDir, t_out, points, vel, writePointsFile=writePointsFile, checkMatchingPoints=checkMatchingPoints, pointDistanceTolerance=pointDistanceTolerance, overwrite=True, showLog=False)
 
+        if writePointsFile and os.path.exists(pointsFile):
+            if showLog:
+                print(" ** Points written to: "+pointsFile)
+            writePointsFile = False
+
+    dtAvg = np.mean(np.diff(np.asarray(times,dtype=float)))
+
+    maxTime = float(times_out[-1])
+    one_up_dir = os.path.abspath(os.path.join(outputDir, os.pardir))
+    inflowParamsFile = os.path.join(one_up_dir, "inflowParams")
+    writeOpenFOAMdict(inflowParamsFile, {
+                                            'scaledFrom':caseDir,
+                                            'ratioFile':ratioFile,
+                                            'profFile':profFile,
+                                            'maxInflowTime':maxTime,
+                                            'dtAvg':dtAvg,
+                                         }, object_='inflowParams')
             
     print(" << Finished scaling inflow from section sample.")
                                  
@@ -1163,7 +1255,7 @@ class inflowTuner:
                      smoothWindow_target=[50, 50, 50, 50, 200, 150, 200], 
                      kwargs_smooth={'window':'hamming', 'mode':'valid', 'usePadding':True, 'paddingFactor':2, 'paddingMode':'edge'},
                      ):
-        def plotThese(profs:List[pd.DataFrame]=[], names=[], ratio:pd.DataFrame=None, mainTitle=caseName, markers=None, color=None, lwgts=None, lss=None,
+        def plotThese(profs:List[pd.DataFrame]=[], names=[], ratios:dict=None, mainTitle=caseName, markers=None, color=None, lwgts=None, lss=None,
                       saveToFile=True):
             if not debugMode:
                 return
@@ -1185,14 +1277,17 @@ class inflowTuner:
             cols = longListOfColors if color is None else color
             lwgts = [1,]*len(profs) if lwgts is None else lwgts
             lss = ['-',]*len(profs) if lss is None else lss
+            ls = ['-', '--', '-.', ':',]
             
             for ii in range(len(flds)):
                 ax = axs[axIdxs[ii]]
                 for jj, prof in enumerate(profs):
                     ax.plot(prof[flds[ii]], prof['Z']/self.target.H, label=names[jj], lw=lwgts[jj], ls=lss[jj], marker=markers[jj], ms=2, c=cols[jj%len(cols)])
-                if ratio is not None:
+                if ratios is not None:
                     ax2 = ax.twiny()
-                    ax2.plot(ratio[flds[ii]], ratio['Z']/self.target.H, label='ratio', lw=2, ls='--', c='c',marker='None', ms=2)
+                    for kk, rKey in enumerate(ratios): # the dict key will serve as the label
+                        
+                        ax2.plot(ratios[rKey][flds[ii]], ratios[rKey]['Z']/self.target.H, label=rKey, lw=2, ls=ls[kk], c='c',marker='None', ms=2)
                     ax2.set_xlabel('ratio')
                     ax2.axvline(1.0, c='k', ls='--', lw=1)
                     ax2.xaxis.label.set_color('c')
@@ -1205,7 +1300,7 @@ class inflowTuner:
                 wind.formatAxis(ax)
             # show all legends from ax and ax2 in one legend
             handles, labels = ax.get_legend_handles_labels()
-            if ratio is not None:
+            if ratios is not None:
                 handles2, labels2 = ax2.get_legend_handles_labels()
                 handles.extend(handles2)
                 labels.extend(labels2)
@@ -1447,7 +1542,9 @@ class inflowTuner:
             # write the last LES profile to file with header
             profs_cum[-1].to_csv(dir+'/'+caseName+'_prof_'+profs_in_names[-1], index=False, sep=' ', float_format='%.6e')
             # write the last ratio set to file with header
-            ratio_cum[-1].to_csv(dir+'/'+caseName+'_ratio', index=False, sep=' ', float_format='%.6e')
+            ratio_cum[-1].to_csv(dir+'/'+caseName+'_ratio_cum', index=False, sep=' ', float_format='%.6e')
+            # write the last ratio set to file with header
+            ratio_i[-1].to_csv(dir+'/'+caseName+'_ratio_last', index=False, sep=' ', float_format='%.6e')
             # write info file
             with open(dir+'/'+caseName+'_info.txt', 'w') as f:
                 f.write(getPrintTxt(ratio_i, ratio_cum))
@@ -1461,7 +1558,9 @@ class inflowTuner:
             #     names.append('latest EDS ('+self.incidents.profiles[r-1].name+')')
             toPlot.append(prof)
             names.append('next_prof')
-            plotThese(profs=toPlot, names=names, ratio=ratio, mainTitle=caseName, color=['k', 'k', 'r', 'g'], lwgts=[1, 2, 2, 3], lss=['None', '-', '-', '-'], 
+            # create a dict of ratios with the last and the cumulative ratio. Use the dict key as the label
+            ratios = {'last':ratio_i[-1], 'cum':ratio_cum[-1]}
+            plotThese(profs=toPlot, names=names, ratios=ratios, mainTitle=caseName, color=['k', 'k', 'r', 'g'], lwgts=[1, 2, 2, 3], lss=['None', '-', '-', '-'], 
                       markers=['.', 'None', 'None', 'None'])
             
             toPlot = [profileObj_to_df(self.target), target_0]
@@ -1469,7 +1568,7 @@ class inflowTuner:
             for r in range(rounds+1):
                 toPlot.append(profs_cum[r])
                 names.append(profs_in_names[r])
-            plotThese(profs=toPlot, names=names, ratio=None, mainTitle=caseName, 
+            plotThese(profs=toPlot, names=names, ratios=None, mainTitle=caseName, 
                       color=['k', 'k', 'r', 'g', 'b', 'c', 'm', 'y', 'tab:gray', 'tab:olive', 'tab:orange', 'tab:purple', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red', 'tab:purple', 'tab:olive', 'tab:orange', 'tab:brown', 'tab:pink', 'tab:cyan', 'tab:blue', 'tab:green', 'tab:red',], 
                       lwgts=[1, 2, 2, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, ], 
                       lss=['None', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', '-', ],
