@@ -17,7 +17,7 @@ import matplotlib.patches as mpatches
 
 from shapely.ops import voronoi_diagram
 from shapely.validation import make_valid
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Literal
 from scipy.interpolate import griddata
 
 #===============================================================================
@@ -427,6 +427,7 @@ class face:
     def __init__(self,
                 ID=None,
                 name=None,
+                faceType:Literal['roof','wall','other']=None,
                 note=None,
                 origin=None,
                 basisVectors=None,
@@ -502,6 +503,7 @@ class face:
         # basics
         self.ID = ID
         self.name = name
+        self.faceType:Literal['roof','wall','other'] = faceType
         self.note = note
         self.origin = origin                # origin of the face-local coordinate system
         self.basisVectors = basisVectors    # [[3,], [3,], [3,]] basis vectors of the local coord sys in the main 3D coord sys.
@@ -896,6 +898,10 @@ class face:
         tapIdxs = [x for _,x in sorted(zip(dist_from_start,tapIdxs))]
         return tapNos, tapIdxs, dist_from_start
     
+    def indexOfTap(self, tapNo):
+        if self.tapNo is None:
+            return None
+        return np.where(np.isin(self.tapNo, tapNo))[0]
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotEdges(self, ax=None, showName=True, drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0,
@@ -926,7 +932,7 @@ class face:
         if newFig:
             ax.axis('equal')
 
-    def plotTaps(self, ax=None, showTapNo=False, 
+    def plotTaps(self, ax=None, tapsToPlot=None, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
                  kwargs_dots={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
                  kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
                 ):
@@ -935,11 +941,27 @@ class face:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        xy = np.array(self.tapCoordPlt)
-        ax.plot(xy[:,0], xy[:,1], **kwargs_dots)
+        if tapsToPlot is None:
+            tapsToPlot = self.tapNo
+        
+        tapIdx = np.where(np.isin(self.tapNo, tapsToPlot))[0]
+        if len(tapIdx) == 0:
+            # print(f"No taps to plot for face {self.name}. Skipping ...")
+            return
+        foundTapNos = self.tapNo[tapIdx]
+        foundTapCoord = self.tapCoordPlt[tapIdx]
+        foundTapName = []
+        if showTapName and self.tapName is not None and len(self.tapName) > 0:
+            foundTapName = np.array(self.tapName)[tapIdx]
+            
+        xy = np.array(foundTapCoord)
         if showTapNo:
-            for t,tpNo in enumerate(self.tapNo):
-                ax.text(xy[t,0], xy[t,1], str(tpNo), **kwargs_text)
+            for t,tpNo in enumerate(foundTapNos):
+                ax.text(xy[t,0]+textOffset_tapNo[0], xy[t,1]+textOffset_tapNo[1], str(tpNo), **kwargs_text)
+        if showTapName and len(foundTapName) > 0:
+            for t,tpName in enumerate(foundTapName):
+                ax.text(xy[t,0]+textOffset_tapName[0], xy[t,1]+textOffset_tapName[1], str(tpName), **kwargs_text)
+        ax.plot(xy[:,0], xy[:,1], **kwargs_dots)
         if newFig:
             ax.axis('equal')
     
@@ -1303,6 +1325,22 @@ class Faces:
         return allZones
 
     @property
+    def wallTaps(self):
+        tapNos = []
+        for fc in self.memberFaces:
+            if fc.faceType == 'wall':
+                tapNos.extend(fc.tapNo)
+        return tapNos
+    
+    @property
+    def roofTaps(self):
+        tapNos = []
+        for fc in self.memberFaces:
+            if fc.faceType == 'roof':
+                tapNos.extend(fc.tapNo)
+        return tapNos
+
+    @property
     def zoneDictKeys(self):
         zoneDict = self.zoneDict
         return [val[0]+', '+val[1] for val in zoneDict.values()]
@@ -1515,7 +1553,7 @@ class Faces:
         if newFig:
             ax.axis('equal')
 
-    def plotTaps(self, ax=None, showTapNo=False, 
+    def plotTaps(self, ax=None, tapsToPlot=None, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
                  kwargs_dots={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
                  kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},):
         newFig = False
@@ -1523,8 +1561,11 @@ class Faces:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
+        if tapsToPlot is None:
+            tapsToPlot = self.tapNo
         for fc in self._memberFaces:
-            fc.plotTaps(ax=ax, showTapNo=showTapNo, kwargs_dots=kwargs_dots, kwargs_text=kwargs_text)
+            fc.plotTaps(ax=ax, tapsToPlot=tapsToPlot, showTapNo=showTapNo, showTapName=showTapName, textOffset_tapNo=textOffset_tapNo, textOffset_tapName=textOffset_tapName,
+                        kwargs_dots=kwargs_dots, kwargs_text=kwargs_text)
         if newFig:
             ax.axis('equal')
 
@@ -1588,11 +1629,17 @@ class Faces:
                     figsize=(15,5), fig=None, axs=None, nCols=3,
                     areaUnit='', areaFactor=1.0, areaFmt="{:.4f}",
                     plotEdges=True, plotTaps=False, plotZones=True,
+                    areaLabel_xy=(0.5, 0), 
+                    addSubPlotLabels=True,
+                    subPlotLabels=None,
+                    subPlotLabel_xy=(0.05, 0.95),
                     kwargs_faceEdge={'color':'k', 'lw':1.0, 'ls':'-'},
                     kwargs_taps={},
                     kwargs_zoneEdge={'color':'k', 'lw':0.5, 'ls':'-'},
                     kwargs_zoneFill={'alpha':0.5,},
                     kwargs_pnlEdge={'color':'k', 'lw':0.3, 'ls':'-'},
+                    kwargs_areaLabel={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'medium', },
+                    kwargs_subPlotLabel={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'medium', },
                     ):
         newFig = False
         areas = self.NominalPanelArea
@@ -1601,6 +1648,14 @@ class Faces:
             nRows = int(np.ceil(len(areas)/nCols))
             fig, axs = plt.subplots(nRows, nCols, figsize=figsize)
             axs = axs.flatten()
+
+        if subPlotLabels is None and addSubPlotLabels:
+            # create a list of subplot labels from a, b, c, ... If it exceeds 26, raise an error and prompt the user to provide a list of labels
+            subPlotLabels = []
+            for i in range(26):
+                subPlotLabels.append('('+chr(i+97)+')')
+            if len(areas) > 26:
+                raise Exception("The number of subplots exceeds 26. Please provide a list of subplot labels.")
 
         for a,area in enumerate(areas):
             if plotZones:
@@ -1611,13 +1666,16 @@ class Faces:
             if plotEdges:
                 self.plotEdges(ax=axs[a], showName=False, kwargs_Edge=kwargs_faceEdge)
             area_string = areaFmt.format(areaFactor*area)
-            axs[a].set_title(f"Area: {area_string} {areaUnit}")
+            area_string = r"$A_j="+area_string+"}$ "+areaUnit
+            axs[a].annotate(area_string, xy=areaLabel_xy, xycoords='axes fraction', **kwargs_areaLabel)
+            if addSubPlotLabels:
+                axs[a].annotate(subPlotLabels[a], xy=subPlotLabel_xy, xycoords='axes fraction', **kwargs_subPlotLabel)
             
         if newFig:
             for a in range(len(axs)):
                 axs[a].axis('equal')
                 axs[a].axis('off')
-            plt.tight_layout()
+            plt.subplots_adjust(wspace=0, hspace=0)
             plt.show()
         return fig, axs
 

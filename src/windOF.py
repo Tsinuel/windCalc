@@ -422,9 +422,10 @@ def scaleInflowFromSectionSample(caseDir,  profFile, ratioFile, sectionName=None
 
     Z_prof = ratios[:,0]
     U_prof = prof[:,1]
-    Iu = ratios[:,2]
-    Iv = ratios[:,3]
-    Iw = ratios[:,4]
+    U_ratio = ratios[:,1]
+    Iu_ratio = ratios[:,2]
+    Iv_ratio = ratios[:,3]
+    Iw_ratio = ratios[:,4]
 
     if timeRange is not None:
         times = [t for t in times if float(t) >= timeRange[0] and float(t) <= timeRange[1]]
@@ -503,9 +504,9 @@ def scaleInflowFromSectionSample(caseDir,  profFile, ratioFile, sectionName=None
 
         Z = points[:,2]
         U = np.interp(Z, Z_prof, U_prof)
-        vel[:,0] = (vel[:,0]-U)*np.interp(Z, Z_prof, Iu) + U
-        vel[:,1] = vel[:,1]*np.interp(Z, Z_prof, Iv)
-        vel[:,2] = vel[:,2]*np.interp(Z, Z_prof, Iw)
+        vel[:,0] = ((vel[:,0]-U)*np.interp(Z, Z_prof, Iu_ratio) + U) * np.interp(Z, Z_prof, U_ratio)
+        vel[:,1] = vel[:,1]*np.interp(Z, Z_prof, Iv_ratio)
+        vel[:,2] = vel[:,2]*np.interp(Z, Z_prof, Iw_ratio)
         if plot:
             # plot2DvelField(points[:,0],points[:,1],vel[:,0],vel[:,1], fig=fig, ax=ax[1])
             # fig.suptitle("Time: "+t)
@@ -1517,6 +1518,10 @@ class inflowTuner:
         profs_in_names = [self.target.name,]
 
         smoothRatios = [smoothRatios,]*(rounds+1) if np.isscalar(smoothRatios) else smoothRatios
+
+        if rounds > len(self.incidents.profiles):
+            rounds = len(self.incidents.profiles)
+            print('Warning: Number of scaling rounds is larger than the number of incidents. Setting rounds to '+str(rounds))
         
         for r in range(rounds):
             LES = profileObj_to_df(self.incidents.profiles[r])
@@ -1540,16 +1545,15 @@ class inflowTuner:
             prof.to_csv(dir+'/'+name, index=False, sep=' ', float_format='%.6e', header=False)
             print('Profile written to: '+dir+'/'+name)
             # write the last LES profile to file with header
-            profs_cum[-1].to_csv(dir+'/'+caseName+'_prof_'+profs_in_names[-1], index=False, sep=' ', float_format='%.6e')
+            profs_cum[1].to_csv(dir+'/'+caseName+'__'+profs_in_names[1]+'.profile', index=False, sep=' ', float_format='%.6e')
             # write the last ratio set to file with header
-            ratio_cum[-1].to_csv(dir+'/'+caseName+'_ratio_cum', index=False, sep=' ', float_format='%.6e')
+            ratio_cum[-1].to_csv(dir+'/'+caseName+'.ratio_cum', index=False, sep=' ', float_format='%.6e')
             # write the last ratio set to file with header
-            ratio_i[-1].to_csv(dir+'/'+caseName+'_ratio_last', index=False, sep=' ', float_format='%.6e')
+            ratio_i[-1].to_csv(dir+'/'+caseName+'.ratio_last', index=False, sep=' ', float_format='%.6e')
             # write info file
             with open(dir+'/'+caseName+'_info.txt', 'w') as f:
                 f.write(getPrintTxt(ratio_i, ratio_cum))
             
-                        
         if debugMode:
             toPlot = [profileObj_to_df(self.target), target_0]
             names = ['target'+' ('+self.target.name+')', 'target(smooth)']

@@ -454,6 +454,24 @@ def measureError(cfd=None, exp=None,
     else:
         return error
 
+def absolute_max_with_sign(matrix, axis):
+    # Find the indices of the maximum absolute values along the specified axis
+    max_abs_indices = np.nanargmax(np.abs(matrix), axis=axis)
+
+    # Create an empty array for the result
+    result = np.empty(max_abs_indices.shape, dtype=matrix.dtype)
+
+    if axis == 0:
+        # Along axis 0, set values to the maximum absolute values with original signs
+        for i in range(matrix.shape[1]):
+            result[i] = matrix[max_abs_indices[i], i]
+    elif axis == 1:
+        # Along axis 1, set values to the maximum absolute values with original signs
+        for i in range(matrix.shape[0]):
+            result[i] = matrix[i, max_abs_indices[i]]
+
+    return result
+
 #------------------------------- WIND FIELD ------------------------------------
 def integTimeScale(x,dt,rho_tol=0.0001,showPlots=False,removeNaNs=True):
     """
@@ -1085,6 +1103,22 @@ def get_CpTH_stats(TH,axis=0,
         stats['kurtosis'] = kurtosis(TH, axis=axis)
     return stats
 
+def fit_dist(x, dist, **kwargs):
+    from scipy.stats import norm, lognorm, gumbel_r, weibull_min
+    if dist == 'gumbel_r':
+        return gumbel_r.fit(x, **kwargs)
+    elif dist == 'weibull_min':
+        return weibull_min.fit(x, **kwargs)
+    elif dist == 'norm':
+        return norm.fit(x, **kwargs)
+    elif dist == 'lognorm':
+        return lognorm.fit(x, **kwargs)
+    else:
+        raise NotImplemented()
+    
+def get_pdf_data(dist, params, x=None, n=1000, **kwargs):
+    raise NotImplemented()
+
 #-------------------------------- PLOTTING -------------------------------------
 def formatAxis(ax, gridMajor=True, gridMinor=False, tickLabelSize=10, labelSize=12,
                tickTop=True, tickRight=True, gridColor_mjr=[0.8,0.8,0.8], gridColor_mnr=[0.85,0.85,0.85], numFormat: Literal['general','scientific','default']='general',
@@ -1129,6 +1163,21 @@ def sub_cmap(cmap, start=0.0, stop=1.0, n=100, reverse=False):
             f"{cmap.name}_sub_{start}_{stop}_{n}",
             cmap(np.linspace(start, stop, n))
         )
+    
+def skewed_bilinear_cmap(cmap, start=-1.0, stop=1.0, n=100, zero=0.0, reverse=False):
+    # bilinear cmap with a skew that moves the zero point (center of the color range) to the given value
+    cmap = plt.get_cmap(cmap) if type(cmap) == str else cmap
+    if reverse:
+        return mcolors.LinearSegmentedColormap.from_list(
+            f"{cmap.name}_skewed_{start}_{stop}_{n}_r",
+            cmap(np.linspace(start, stop, n))[::-1]
+        )
+    else:
+        return mcolors.LinearSegmentedColormap.from_list(
+            f"{cmap.name}_skewed_{start}_{stop}_{n}",
+            cmap(np.linspace(start, stop, n))
+        )
+    
 
 #===============================================================================
 #================================ CLASSES ======================================
@@ -2075,7 +2124,7 @@ class profile:
         Z10 = 10*lScl
         return np.interp(Z10, self.Z, self.U)
 
-    def fit_z0(self, fitTo:Literal['U','Iu']='Iu', uStar_init=None, z0_init=None, debugMode=True,
+    def fit_z0(self, fitTo:Literal['U','Iu']='Iu', uStar_init=None, z0_init=None, debugMode=True, ESDUversion:Literal['ESDU74', 'ESDU85']='ESDU85',
                   kwargs_z0Fit={}) -> Union[float, None]:
         
         kwargs_z0Fit = self.kwargs_z0_fit['kwargs_z0Fit'] if kwargs_z0Fit == {} else kwargs_z0Fit
@@ -2086,18 +2135,18 @@ class profile:
             return None
         
         Z, U = self.Z_eff, self.U[self.idx_eff]
-        self.z0_U, _, _ = fitVelDataToLogProfile(Z, U, Zref=self.H, Uref=self.Uh, d=0.0, debugMode=False, uStar_init=uStar_init, z0_init=z0_init,) # **kwargs_z0Fit)
-        es_U = ESDU85(z0=self.z0_U/self.lScl)
+        self.z0_U, _, _ = fitVelDataToLogProfile(Z, U, Zref=self.H, Uref=self.Uh, d=0.0, debugMode=False, uStar_init=uStar_init, z0_init=z0_init) # **kwargs_z0Fit)
+        es_U = ESDU85(z0=self.z0_U/self.lScl) if ESDUversion == 'ESDU85' else ESDU74(z0=self.z0_U/self.lScl)
 
         if self.SpectH is None or self.SpectH.Iu is None or self.H is None or self.lScl is None:
             return None
-        self.z0_Iu, es_Iu = fitESDUgivenIuRef(self.H/self.lScl, self.SpectH.Iu, **kwargs_z0Fit)
+        self.z0_Iu, es_Iu = fitESDUgivenIuRef(self.H/self.lScl, self.SpectH.Iu, ESDUversion=ESDUversion, **kwargs_z0Fit)
         self.z0_Iu *= self.lScl
 
         if debugMode:
             profs = Profiles([self, es_Iu.toProfileObj(), es_U.toProfileObj()])
-            profs.profiles[1].name = 'ESDU85_IuFit(z0={:.2g}m @FS)'.format(self.z0_Iu/self.lScl)
-            profs.profiles[2].name = 'ESDU85_Ufit(z0={:.2g}m @FS)'.format(self.z0_U/self.lScl)
+            profs.profiles[1].name = ESDUversion+'_IuFit(z0={:.2g}m @FS)'.format(self.z0_Iu/self.lScl)
+            profs.profiles[2].name = ESDUversion+'_Ufit(z0={:.2g}m @FS)'.format(self.z0_U/self.lScl)
             _ = profs.plot__(fig=plt.figure(figsize=[16,6]),zLim=self.workSect_zLim/self.H, IuLim=[0,100], Ulim=[0,1.5],
                                 col=['k','r','b'],
                                 marker_Iu=   ['o','None','None'], linestyle_Iu=['-','-.',':' ],
@@ -3397,8 +3446,8 @@ class bldgCp(windCAD.building):
         stats = self.CpStats.copy()
         for s in stats:
             arr = self.CpStats[s]
-            abs_max = np.amax(np.abs(arr), axis=0, keepdims=True)
-            stats[s] = np.squeeze(abs_max * np.sign(arr))
+            abs_max = absolute_max_with_sign(arr, axis=0)
+            stats[s] = abs_max
         return stats
     
     @property
@@ -3755,7 +3804,7 @@ class bldgCp(windCAD.building):
             return None, None
 
     def plotTapCpStatContour(self, fieldName:Literal['mean','std','peak','peakMin','peakMax','skewness','kurtosis'], 
-                             dxnIdx=None, envelopeType:Literal['high','low','both']='both', figSize=[15,10], ax=None, 
+                             dxnIdx=None, envelopeType:Literal['high','low','both','categorical']='both', figSize=[15,10], ax=None, 
                             fldRange=None, nLvl=100, cmap='RdBu', extend='both', title=None, colBarOrientation='horizontal',
                             showValuesOnContour=True, kwargs_contourTxt={'inline':True, 'fmt':'%.2g','fontsize':4, 'colors':'k',},
                             showContourEdge=True, kwargs_contourEdge={'colors':'k', 'linewidths':0.3, 'linestyles':'solid', 'alpha':0.5},
@@ -3768,6 +3817,15 @@ class bldgCp(windCAD.building):
                 data = self.CpStatEnvlp_high[fieldName]
             elif envelopeType == 'low':
                 data = self.CpStatEnvlp_low[fieldName]
+            elif envelopeType == 'categorical': # high for walls and low for roof
+                wallTapIdx = self.tapIdxOf(self.wallTaps)
+                roofTapIdx = self.tapIdxOf(self.roofTaps)
+                data_high = self.CpStatEnvlp_high[fieldName]
+                data_low = self.CpStatEnvlp_low[fieldName]
+                data = np.zeros_like(data_high)
+                data[wallTapIdx] = data_high[wallTapIdx]
+                data[roofTapIdx] = data_low[roofTapIdx]
+                del data_high, data_low
             else:
                 msg = f"Unknown envelope type {envelopeType}"
                 raise Exception(msg)
@@ -3964,11 +4022,13 @@ class bldgCp(windCAD.building):
             axs = fig.subplots(nRows, nCols, sharex=sharex, sharey=sharey)
 
         zoneDictKeys = self.zoneDictKeys
-        area = {z: np.array(self.NominalPanelArea) for z in zoneDictKeys} if plotExtremesPerNominalArea else self.allAreasForCpAavg
+        # area = {z: np.array(self.NominalPanelArea, dtype=float)*areaFactor for z in zoneDictKeys} if plotExtremesPerNominalArea else {k: np.array(self.allAreasForCpAavg[k]*areaFactor, dtype=float) for k in self.allAreasForCpAavg.keys()}
         if plotExtremesPerNominalArea:
+            area = {z: np.array(self.NominalPanelArea, dtype=float)*areaFactor for z in zoneDictKeys}
             peakMax = self.CpAavg_envMax_peakMax_maxPerA
             peakMin = self.CpAavg_envMin_peakMin_minPerA
         else:
+            area = {k: np.array(self.allAreasForCpAavg[k]*areaFactor, dtype=float) for k in self.allAreasForCpAavg.keys()}
             peakMax = self.CpAavg_envMax_peakMax_allA
             peakMin = self.CpAavg_envMin_peakMin_allA
 
@@ -3976,6 +4036,8 @@ class bldgCp(windCAD.building):
             zoneCol = {z: 'w' for z in zoneDictKeys}
 
         valueScaleFactor = 1.0 if CandCLoadFormat == 'default' else self.CandCLoad_factor(debugMode=debugMode, format=CandCLoadFormat)
+        peakMax = {z: np.array(peakMax[z])*valueScaleFactor for z in zoneDictKeys}
+        peakMin = {z: np.array(peakMin[z])*valueScaleFactor for z in zoneDictKeys}
         
         bxPltObj = None
         bxPltName = None
@@ -3984,8 +4046,8 @@ class bldgCp(windCAD.building):
             
             i, j = np.unravel_index(I, axs.shape)
             ax = axs[i,j]
-            ax.semilogx(area[zKey]*areaFactor, np.array(peakMax[zKey])*valueScaleFactor, '^b', label=label_max, **kwargs_max)
-            ax.semilogx(area[zKey]*areaFactor, np.array(peakMin[zKey])*valueScaleFactor, 'vk', label=label_min, **kwargs_min)
+            ax.semilogx(area[zKey], np.array(peakMax[zKey]), '^b', label=label_max, **kwargs_max)
+            ax.semilogx(area[zKey], np.array(peakMin[zKey]), 'vk', label=label_min, **kwargs_min)
             ax.axhline(0, color='k', linestyle='-', linewidth=0.7)
             if overlayThese is not None:
                 for ii, overlayThis in enumerate(overlayThese):
@@ -4062,7 +4124,7 @@ class bldgCp(windCAD.building):
 
         if newFig:
             plt.show()
-        return fig, axs
+        return fig, axs, area, peakMin, peakMax
         
     def plotAoA_symbol(self, AoA, ax=None, figSize=[6,6], location: Literal['upper left','upper right','lower left','lower right']='lower left',
                        explicitLocation=None, marginFactor=1.0, textOffsetFactor=2.2,
@@ -4592,12 +4654,15 @@ class Profiles:
     def plotSpect(self, 
                 fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], wspace=0.3,
                 xLabel=None, yLabel_Suu=None, yLabel_Svv=None, yLabel_Sww=None,
-                xLimits=None, yLimits=None, 
+                xLimits=None, yLimits=None, subPlotLabels=None, showSubPlotLabels=True, subPlotLabel_xy=(0.075,0.925),
                 normalize=True, normZ:Literal['Z','xLi']='Z', normU:Literal['U','sigUi']='U',         
                 plotType: Literal['loglog', 'semilogx', 'semilogy']='loglog', avoidZeroFreq=True, 
                 overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, kwargs_overlay_all={},
                 lgnd_kwargs={'loc': 'best', 'ncol': 1},
-                kwargs_plt=None, kwargs_ax={}):
+                kwargs_plt=None, kwargs_ax={},
+                kwargs_subplot_lbl={'fontsize': 12, 'bbox':{'facecolor': 'w', 'alpha': 0.5, 'edgecolor': 'none'}, 
+                                    'ha': 'center', 'va': 'center'},
+                ):
         fig, axs = plt.subplots(1,3)
         fig.set_size_inches(figsize)
         fig.subplots_adjust(wspace=wspace)
@@ -4605,6 +4670,11 @@ class Profiles:
         ax_Suu = axs[0] if ax_Suu is None else ax_Suu
         ax_Svv = axs[1] if ax_Svv is None else ax_Svv
         ax_Sww = axs[2] if ax_Sww is None else ax_Sww
+
+        if showSubPlotLabels:
+            subPlotLabels = ['(a)', '(b)', '(c)'] if subPlotLabels is None else subPlotLabels
+            for i, ax in enumerate(axs.flatten()):
+                ax.text(subPlotLabel_xy[0], subPlotLabel_xy[1], subPlotLabels[i], transform=ax.transAxes, **kwargs_subplot_lbl)
 
         kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
 
@@ -4705,9 +4775,9 @@ class Profiles:
         return fig, ax
 
     def plotParamsTable(self,
-                        fig=None,figsize_perCell=[2,0.3],autoFigSize=True,figWidthFctr=1.0,ax=None, strFmt='{:.4g}',
+                        fig=None,cell_size=[2,0.3],autoFigSize=True,ax=None, strFmt='{:.4g}',
                         fontSz=10, normalize=True, colColors=None, colTxtColors=None,
-                        params:Union[List[str],Literal['basic','all']]='all',
+                        params:Union[List[str],Literal['basic','all']]='basic',
                         showBorder=True,
                         kwargs_table={'loc':'center',
                                         'cellLoc': 'center',
@@ -4733,7 +4803,7 @@ class Profiles:
             fntFctr = 1.0 if fontSz is None else fontSz/10.0
             if autoFigSize:
                 # figsize[0] = 2*(self.N+1)*fntFctr*figWidthFctr
-                figsize = [figsize_perCell[0]*(self.N+1)*fntFctr, figsize_perCell[1]*len(params)*fntFctr]
+                figsize = [cell_size[0]*(self.N+1)*fntFctr, cell_size[1]*len(params)*fntFctr]
             fig = plt.figure(figsize=figsize)
         if ax is None:
             ax = plt.subplot()
@@ -5632,3 +5702,5 @@ class validator():
     
     def plotStats_on_lines(self):
         raise NotImplementedError
+    
+    
