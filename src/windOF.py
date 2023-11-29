@@ -921,6 +921,9 @@ def readVelProfile(caseDir, probeName,
     
     name = caseName+"__"+probeName if name is None else name
     if len(np.shape(vel)) == 3:
+        # if H is None, take the middle point of the domain as the reference height
+        middleIndex = int(np.floor(len(Z)/2))
+        H = Z[middleIndex] if H is None else H
         prof = wind.profile(name=name, X=X, Y=Y, Z=Z, UofT=np.transpose(vel[:,:,0]), VofT=np.transpose(vel[:,:,1]), 
                             WofT=np.transpose(vel[:,:,2]), H=H, dt=dt, units=wind.DEFAULT_SI_UNITS,
                             pOfT=pressure,

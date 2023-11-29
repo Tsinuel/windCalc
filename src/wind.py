@@ -143,17 +143,17 @@ def mathName(rawname):
     if rawname == 'U':
         return '$U$ [$m/s$]'
     elif rawname == 'U/Uh':
-        return '$U/U_h$'
+        return '$U/U_H$'
     elif rawname == 'Uh':
-        return '$U_h$ [$m/s$]'
+        return '$U_H$ [$m/s$]'
     elif rawname == 'V':
         return '$V$ [$m/s$]'
     elif rawname == 'V/Uh':
-        return '$V/U_h$'
+        return '$V/U_H$'
     elif rawname == 'W':
         return '$W$ [$m/s$]'
     elif rawname == 'W/Uh':
-        return '$W/U_h$'
+        return '$W/U_H$'
     elif rawname == 'Iu':
         return '$I_u$'
     elif rawname == 'Iv':
@@ -175,15 +175,15 @@ def mathName(rawname):
     elif rawname == 'uv': 
         return '$\\overline{u\'v\'}$ [$m^2/s^2$]'
     elif rawname == 'uv/Uh^2':
-        return '$\\overline{u\'v\'}/U_h^2$'
+        return '$\\overline{u\'v\'}/U_H^2$'
     elif rawname == 'uw':
         return '$\\overline{u\'w\'}$ [$m^2/s^2$]'
     elif rawname == 'uw/Uh^2':
-        return '$\\overline{u\'w\'}/U_h^2$'
+        return '$\\overline{u\'w\'}/U_H^2$'
     elif rawname == 'vw':
         return '$\\overline{v\'w\'}$ [$m^2/s^2$]'
     elif rawname == 'vw/Uh^2':
-        return '$\\overline{v\'w\'}/U_h^2$'
+        return '$\\overline{v\'w\'}/U_H^2$'
     elif rawname == 'z0':
         return '$z_0$ [$m$]'
     elif rawname == 'Je':
@@ -196,15 +196,15 @@ def mathName(rawname):
     elif rawname == 'Sww':
         return '$S_{ww}$ [$m^2/s$]'
     elif rawname == 'nSuu/Uh^2':
-        return '$nS_{uu}/U_h^2$'
+        return '$nS_{uu}/U_H^2$'
     elif rawname == 'nSuu/u^2':
         return '$nS_{uu}/\\sigma_u^2$'
     elif rawname == 'nSvv/Uh^2':
-        return '$nS_{vv}/U_h^2$'
+        return '$nS_{vv}/U_H^2$'
     elif rawname == 'nSvv/v^2':
         return '$nS_{vv}/\\sigma_v^2$'
     elif rawname == 'nSww/Uh^2':
-        return '$nS_{ww}/U_h^2$'
+        return '$nS_{ww}/U_H^2$'
     elif rawname == 'nSww/w^2':
         return '$nS_{ww}/\\sigma_w^2$'
     elif rawname == 'n':
@@ -212,20 +212,22 @@ def mathName(rawname):
     elif rawname == 'f':
         return '$f$'
     elif rawname == 'nH/Uh':
-        return '$nH/U_h$'
+        return '$nH/U_H$'
+    elif rawname == 'nxLi/Uh':
+        return '$n ^xL_i/U_H$'
     elif rawname == 'n/Uh':
-        return '$n/U_h$'
+        return '$n/U_H$'
     # Geometry and scaling
     elif rawname == 'H':
         return '$H$ [$m$]'
     elif rawname == 'T':
         return '$T$ [$s$]'
     elif rawname == 'T_star':
-        return '$TU_h/H$'
+        return '$TU_H/H$'
     elif rawname == 'n_smpl':
         return r'$n_{smpl}$ [$Hz$]'
     elif rawname == 'f_smpl':
-        return r'$n_{smpl}H/U_h$'
+        return r'$n_{smpl}H/U_H$'
     elif rawname == 'lScl':
         return '$\lambda_L$ = 1:'
     elif rawname == 'vScl':
@@ -1534,13 +1536,13 @@ class spectra:
             Sww = self.rSww(normU=normU)
             
             if xLabel is None:
-                xLabel = r'$nH/Uh$' if normZ == 'Z' else r'$^xLi/Uh$'
+                xLabel = mathName('nH/Uh') if normZ == 'Z' else mathName('nxLi/Uh')
             if yLabel_Suu is None:
-                yLabel_Suu = r'$nS_{uu}/\sigma_u^2$' if normU == 'sigUi' else r'$nS_{uu}/Uh^2$'
+                yLabel_Suu = mathName('nSuu/u^2') if normU == 'sigUi' else mathName('nSuu/Uh^2')
             if yLabel_Svv is None:
-                yLabel_Svv = r'$nS_{vv}/\sigma_v^2$' if normU == 'sigUi' else r'$nS_{vv}/Uh^2$'
+                yLabel_Svv = mathName('nSvv/v^2') if normU == 'sigUi' else mathName('nSvv/Uh^2')
             if yLabel_Sww is None:
-                yLabel_Sww = r'$nS_{ww}/\sigma_w^2$' if normU == 'sigUi' else r'$nS_{ww}/Uh^2$'
+                yLabel_Sww = mathName('nSww/w^2') if normU == 'sigUi' else mathName('nSww/Uh^2')
         else:
             n = self.n
             Suu = self.Suu
@@ -1548,13 +1550,13 @@ class spectra:
             Sww = self.Sww
 
             if xLabel is None:
-                xLabel = r'$n$'
+                xLabel = mathName('n')
             if yLabel_Suu is None:
-                yLabel_Suu = r'$S_{uu}$'
+                yLabel_Suu = mathName('Suu')
             if yLabel_Svv is None:
-                yLabel_Svv = r'$S_{vv}$'
+                yLabel_Svv = mathName('Svv')
             if yLabel_Sww is None:
-                yLabel_Sww = r'$S_{ww}$'
+                yLabel_Sww = mathName('Sww')
 
         yLimits = [yLimits]*3 if yLimits is None else yLimits
 
@@ -2402,6 +2404,166 @@ class profile:
                 formatAxis(ax, **kwargs_ax)
             plt.show()
         return fig, axs, bxPltObj
+
+    def plotProfile_basic3(self, fig=None, axs=None, figsize=[12,12], label=None, normalize=True, subPlotLabels=None, showSubPlotLabels=True,
+                            xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
+                            xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
+                            overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
+                            yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
+                            kwargs_plt={'color': 'k', 'linestyle': '-'}, kwargs_ax={}):
+        '''
+        Parameters
+        ----------
+        fig : matplotlib.figure.Figure, optional
+            Figure to plot on. The default is None.
+        axs : matplotlib.axes._subplots.AxesSubplot, optional
+            Axes to plot on. The default is None.
+        figsize : list, optional
+            Figure size. The default is [12,10].
+        label : str, optional
+            Label for the profile. The default is None.
+        normalize : bool, optional
+            Normalize the profile. The default is True.
+        xLabel : str, optional
+            Label for the x-axis. The default is None.
+        zLabel : str, optional
+            Label for the z-axis. The default is None.
+        xLimits_U : list, optional
+            Limits for the x-axis of the U profile. The default is None.
+        xLimits_Iu : list, optional
+            Limits for the x-axis of the Iu profile. The default is None.
+        xLimits_Iv : list, optional
+            Limits for the x-axis of the Iv profile. The default is None.
+        xLimits_Iw : list, optional
+            Limits for the x-axis of the Iw profile. The default is None.
+        xLimits_xLu : list, optional
+            Limits for the x-axis of the xLu profile. The default is None.
+        xLimits_xLv : list, optional
+            Limits for the x-axis of the xLv profile. The default is None.
+        xLimits_xLw : list, optional
+            Limits for the x-axis of the xLw profile. The default is None.
+        xLimits_uw : list, optional
+            Limits for the x-axis of the uw profile. The default is None.
+        overlayThese : dict, optional
+            A dictionary of fields to overlay on the profile. If it include a field called 
+            'name', it will be used in the legend. It must have a field called 'Z' which
+            is the profile height. The normalization, if any, is assumed to be pre-applied.
+            The default is None.
+        '''
+        def addOverlay(ax, fld, name='_', kwargs_overlay={}):
+            if overlayThese is None:
+                return
+            # print("Overlaying something ...")
+            if fld in overlayThese:
+                if overlayType == 'single':
+                    ax.plot(overlayThese[fld], overlayThese['Z'], 
+                            label=name, **kwargs_overlay)
+                elif overlayType == 'scatter':
+                    ax.scatter(overlayThese[fld], overlayThese['Z'], 
+                               label=name, **kwargs_overlay)
+                elif overlayType == 'errorBars':
+                    if kwargs_overlay == {}:
+                        kwargs_overlay = {
+                            'widths': 0.25,
+                            'notch': True,
+                            'vert': False,
+                            'showfliers': False,
+                            'patch_artist': True,
+                            'meanline': True,
+                            'boxprops': dict(facecolor='w', color='k', linewidth=1.25),
+                            'medianprops': dict(color='k', linewidth=1.25),
+                            'whiskerprops': dict(color='k', linewidth=1.25),
+                            'capprops': dict(color='k', linewidth=1.25)
+                            }
+                    # keep the existing y-axis ticks and labels as they will be overwritten by boxplot
+                    yTicks = ax.get_yticks()
+                    hadYLabel = ax.get_ylabel() != ''
+                    bx = ax.boxplot(overlayThese[fld], positions=overlayThese['Z'], 
+                            **kwargs_overlay)
+                    ax.set_yticks(yTicks)
+                    if hadYLabel:
+                        ax.set_yticklabels(['{:g}'.format(y) for y in yTicks])
+                    if name != '_':
+                        bx['boxes'][0].set_label(name)
+                        # return the legend handle for the boxplot
+                        return bx #['boxes'][0]
+                else:
+                    raise NotImplementedError("Overlay type '{}' not implemented".format(overlayType))
+                return None
+     
+        newFig = False
+        if fig is None:
+            newFig = True
+            fig, axs = plt.subplots(1,3)
+            fig.set_size_inches(figsize)
+        
+        label = self.name if label is None else label
+        if zLabel is None:
+            zLabel = '$Z/H$' if normalize else '$Z$'
+        if showSubPlotLabels and subPlotLabels is None:
+            subPlotLabels = {'U': '(a)', 'uw': '(b)', 'Iu': '(c)', 'Iv': '(d)', 'Iw': '(e)', 'xLu': '(f)', 'xLv': '(g)', 'xLw': '(h)'}
+            kwargs_spLbl = {'x': 0.04, 'y': 0.96,
+                            'fontsize': 14, 'fontweight': 'normal',
+                            'verticalalignment': 'top', 'horizontalalignment': 'left', 
+                            'bbox': dict(facecolor='white', alpha=0.5, edgecolor='none'),
+                            }
+        
+        bxPltObj = None
+        if 'U' in self.stats_core.keys():
+            self.plotProfile_any('U', ax=axs[0,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_U, yLimits=yLimits, kwargs=kwargs_plt)
+            name = overlayThese['name'] if overlayThese is not None and 'name' in overlayThese else '_'
+            bxPltObj = addOverlay(axs[0,0], 'U', name, kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'U' in subPlotLabels:
+                axs[0,0].text(s=subPlotLabels['U'], transform=axs[0,0].transAxes, **kwargs_spLbl)
+        if 'uw' in self.stats_core.keys():
+            self.plotProfile_any('uw', ax=axs[0,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_uw, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[0,1], 'uw', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'uw' in subPlotLabels:
+                axs[0,1].text(s=subPlotLabels['uw'], transform=axs[0,1].transAxes, **kwargs_spLbl)
+        if 'Iu' in self.stats_core.keys():
+            self.plotProfile_any('Iu', ax=axs[1,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iu, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[1,0], 'Iu', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'Iu' in subPlotLabels:
+                axs[1,0].text(s=subPlotLabels['Iu'], transform=axs[1,0].transAxes, **kwargs_spLbl)
+        if 'Iv' in self.stats_core.keys():
+            self.plotProfile_any('Iv', ax=axs[1,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iv, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[1,1], 'Iv', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'Iv' in subPlotLabels:
+                axs[1,1].text(s=subPlotLabels['Iv'], transform=axs[1,1].transAxes, **kwargs_spLbl)
+        if 'Iw' in self.stats_core.keys():
+            self.plotProfile_any('Iw', ax=axs[1,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iw, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[1,2], 'Iw', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'Iw' in subPlotLabels:
+                axs[1,2].text(s=subPlotLabels['Iw'], transform=axs[1,2].transAxes, **kwargs_spLbl)
+        if 'xLu' in self.stats_core.keys():
+            self.plotProfile_any('xLu', ax=axs[2,0], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLu, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[2,0], 'xLu', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'xLu' in subPlotLabels:
+                axs[2,0].text(s=subPlotLabels['xLu'], transform=axs[2,0].transAxes, **kwargs_spLbl)
+        if 'xLv' in self.stats_core.keys():
+            self.plotProfile_any('xLv', ax=axs[2,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLv, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[2,1], 'xLv', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'xLv' in subPlotLabels:
+                axs[2,1].text(s=subPlotLabels['xLv'], transform=axs[2,1].transAxes, **kwargs_spLbl)
+        if 'xLw' in self.stats_core.keys():
+            self.plotProfile_any('xLw', ax=axs[2,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLw, yLimits=yLimits, kwargs=kwargs_plt)
+            addOverlay(axs[2,2], 'xLw', kwargs_overlay=kwargs_overlay)
+            if showSubPlotLabels and 'xLw' in subPlotLabels:
+                axs[2,2].text(s=subPlotLabels['xLw'], transform=axs[2,2].transAxes, **kwargs_spLbl)
+        
+        if newFig:
+            axs[0,2].axis('off')
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning)
+                legend_handles = [axs[0,0].get_lines()]
+                if bxPltObj is not None:
+                    print(bxPltObj is not None)
+                    legend_handles.append(bxPltObj)
+                fig.legend(legend_handles, bbox_transform=axs[0,2].transAxes, **lgnd_kwargs)
+            for ax in axs.flatten():
+                formatAxis(ax, **kwargs_ax)
+            plt.show()
+        return fig, axs, bxPltObj
     
     def plot(self, fig=None, ax_U=None, ax_Iu=None, ax_Spect=None, figsize=None, landscape=True, 
              kwargs_profile={}, 
@@ -2762,11 +2924,15 @@ class ESDU74:
         stats['xLw'] = self.xLw()
         stats['uw'] = self.uw()
 
-        return profile(name=name, 
+        prof = profile(name=name, 
                         profType="continuous", 
                         Z=self.Z, H=self.Zref,
                         stats=stats,
                         SpectH=spect)
+        prof.z0_Iu = self.z0
+        prof.z0_U = self.z0
+        
+        return prof
 
 class ESDU85:
     __Omega = 72.9e-6            # Angular rate of rotation of the earth [rad/s] ESDU 82026 ssA1
@@ -3058,6 +3224,8 @@ class ESDU85:
                 Z=self.Z, H=self.Zref,
                 stats=stats,
                 SpectH=spect )
+        prof.z0_Iu = self.z0
+        prof.z0_U = self.z0
         return prof
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
@@ -4447,7 +4615,7 @@ class Profiles:
                         )
     
     def plotProfile_basic2(self, figsize=[12,12], label=None, hspace=0.3, wspace=0.3,
-                        normalize=True, subPlotLabels=None, showSubPlotLabels=True,
+                        normalize=True, subPlotLabels=None, showSubPlotLabels=True, includeNormalizers=True,
                         xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
                         xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
                         overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
@@ -4460,6 +4628,9 @@ class Profiles:
         fig.subplots_adjust(hspace=hspace, wspace=wspace)
 
         kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
+        
+        if normalize and includeNormalizers:
+            print("Future feature: include a table of normalizers like H, Uref, etc. next to the legend.")
 
         if yLimits is None:
             
