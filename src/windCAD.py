@@ -916,7 +916,9 @@ class face:
         xy = np.array(self.verticesPlt)
         ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
         if showName:
-            ax.text(np.mean([min(xy[:,0]), max(xy[:,0])]), np.mean([min(xy[:,1]), max(xy[:,1])]), self.name, **kwargs_Name)
+            txt = self.name
+            txt = txt.replace('_', '\_')
+            ax.text(np.mean([min(xy[:,0]), max(xy[:,0])]), np.mean([min(xy[:,1]), max(xy[:,1])]), txt, **kwargs_Name)
         if drawOrigin:
             # ax.plot(self.origin_plt[0], self.origin_plt[1], 'ko')
             pass
@@ -1666,7 +1668,7 @@ class Faces:
             if plotEdges:
                 self.plotEdges(ax=axs[a], showName=False, kwargs_Edge=kwargs_faceEdge)
             area_string = areaFmt.format(areaFactor*area)
-            area_string = r"$A_j="+area_string+"}$ "+areaUnit
+            area_string = r"$A_j="+area_string+r"$ "+areaUnit
             axs[a].annotate(area_string, xy=areaLabel_xy, xycoords='axes fraction', **kwargs_areaLabel)
             if addSubPlotLabels:
                 axs[a].annotate(subPlotLabels[a], xy=subPlotLabel_xy, xycoords='axes fraction', **kwargs_subPlotLabel)

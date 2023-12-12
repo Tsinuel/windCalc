@@ -14,8 +14,6 @@ from matplotlib.backends.backend_pdf import PdfPages
 # from PyPDF2 import PdfFileReader, PdfFileWriter  # to append pdfs
 # https://stackoverflow.com/questions/38118510/append-page-to-existing-pdf-file-using-python-and-matplotlib
 
-
-
 #===============================================================================
 #==================== CONSTANTS & GLOBAL VARIABLES  ============================
 #===============================================================================
@@ -115,6 +113,7 @@ def plotVelTimeHistories(
                     xLimits='auto', # [tMin,tMax]
                     yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
                     figSize=[15, 5],
+                    lineW=0.5,
                     alwaysShowFig=False
                     ):
 
@@ -132,7 +131,7 @@ def plotVelTimeHistories(
         m = 0
         if U is not None:
             plt.subplot(nRows,nCols,(i*nCols)+m+1)            
-            plt.plot(T[i], U[i], color=ctlProf['col'][i], label=dataLabels[i])
+            plt.plot(T[i], U[i], color=ctlProf['col'][i], label=dataLabels[i], linewidth=lineW)
             plt.xlabel(xLabel)
             plt.ylabel(yLabels[0])
             if xLimits is not None and not xLimits == 'auto':
@@ -146,7 +145,7 @@ def plotVelTimeHistories(
 
         if V is not None:
             plt.subplot(nRows,nCols,(i*nCols)+m+1)            
-            plt.plot(T[i], V[i], color=ctlProf['col'][i], label=dataLabels[i])
+            plt.plot(T[i], V[i], color=ctlProf['col'][i], label=dataLabels[i], linewidth=lineW)
             plt.xlabel(xLabel)
             plt.ylabel(yLabels[1])
             if xLimits is not None and not xLimits == 'auto':
@@ -161,7 +160,7 @@ def plotVelTimeHistories(
 
         if W is not None:
             plt.subplot(nRows,nCols,(i*nCols)+m+1)            
-            plt.plot(T[i], W[i], color=ctlProf['col'][i], label=dataLabels[i])
+            plt.plot(T[i], W[i], color=ctlProf['col'][i], label=dataLabels[i], linewidth=lineW)
             plt.xlabel(xLabel)
             plt.ylabel(yLabels[2])
             if xLimits is not None and not xLimits == 'auto':
@@ -181,7 +180,9 @@ def plotVelTimeHistories(
         plt.show()
 
     if isinstance(pltFile, str):
-        pdf.close()    
+        pdf.close()
+    
+    return fig
     
 def plotSpectra(
                 freq, # ([n1,], [n2,], ... [nN,])

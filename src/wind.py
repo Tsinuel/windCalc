@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import json
 import copy
+import inspect
 
 from typing import List,Literal,Dict,Tuple,Any,Union,Set
 from scipy import signal
@@ -1728,6 +1729,7 @@ class profile:
 
     def __computeVelStats(self):
         if all([self.UofT is None, self.VofT is None, self.WofT is None]):
+            print(f"No velocity time history found for {self.name}. Skipping velocity statistics calculation.")
             return
         N_T = np.shape(self.UofT)[1]
         
@@ -1741,8 +1743,6 @@ class profile:
         self.__computeSpectra()
         
     def __computeSpectra(self):
-        if self.SpectH is not None:
-            return
         uOfT = vOfT = wOfT = None
         if self.UofT is not None:
             uOfT = self.UofT[self.H_idx,:]
@@ -2147,8 +2147,8 @@ class profile:
 
         if debugMode:
             profs = Profiles([self, es_Iu.toProfileObj(), es_U.toProfileObj()])
-            profs.profiles[1].name = ESDUversion+'_IuFit(z0={:.2g}m @FS)'.format(self.z0_Iu/self.lScl)
-            profs.profiles[2].name = ESDUversion+'_Ufit(z0={:.2g}m @FS)'.format(self.z0_U/self.lScl)
+            profs.profiles[1].name = ESDUversion+'-IuFit(z0={:.2g}m @FS)'.format(self.z0_Iu/self.lScl)
+            profs.profiles[2].name = ESDUversion+'-Ufit(z0={:.2g}m @FS)'.format(self.z0_U/self.lScl)
             _ = profs.plot__(fig=plt.figure(figsize=[16,6]),zLim=self.workSect_zLim/self.H, IuLim=[0,100], Ulim=[0,1.5],
                                 col=['k','r','b'],
                                 marker_Iu=   ['o','None','None'], linestyle_Iu=['-','-.',':' ],
@@ -2167,6 +2167,8 @@ class profile:
             z0 = self.z0_Iu
         else:
             raise NotImplementedError("Fitting to '{}' not implemented".format(fitTo))
+        print(f"Fitted z0 = {z0/self.lScl:.2g}m @FS")
+        
         return z0
 
     """--------------------------------- Plotters -------------------------------------"""
@@ -2245,7 +2247,7 @@ class profile:
             plt.show()
         return fig, ax_U, ax_Iu
 
-    def plotProfile_basic2(self, fig=None, axs=None, figsize=[12,12], label=None, normalize=True, subPlotLabels=None, showSubPlotLabels=True,
+    def plotProfile_basic2(self, fig=None, axs=None, figsize=[12,12], label=None, normalize=True, subPlotLabels=None, showSubPlotLabels=True, sharey=False,
                             xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
                             xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
                             overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, 
@@ -2334,7 +2336,7 @@ class profile:
         newFig = False
         if fig is None:
             newFig = True
-            fig, axs = plt.subplots(3,3)
+            fig, axs = plt.subplots(3,3,sharey=sharey)
             fig.set_size_inches(figsize)
         
         label = self.name if label is None else label
@@ -2356,7 +2358,8 @@ class profile:
             if showSubPlotLabels and 'U' in subPlotLabels:
                 axs[0,0].text(s=subPlotLabels['U'], transform=axs[0,0].transAxes, **kwargs_spLbl)
         if 'uw' in self.stats_core.keys():
-            self.plotProfile_any('uw', ax=axs[0,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_uw, yLimits=yLimits, kwargs=kwargs_plt)
+            self.plotProfile_any('uw', ax=axs[0,1], label=label, normalize=normalize, xLabel=xLabel, yLabel='' if sharey else zLabel, 
+                                 xLimits=xLimits_uw, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[0,1], 'uw', kwargs_overlay=kwargs_overlay)
             if showSubPlotLabels and 'uw' in subPlotLabels:
                 axs[0,1].text(s=subPlotLabels['uw'], transform=axs[0,1].transAxes, **kwargs_spLbl)
@@ -2366,12 +2369,14 @@ class profile:
             if showSubPlotLabels and 'Iu' in subPlotLabels:
                 axs[1,0].text(s=subPlotLabels['Iu'], transform=axs[1,0].transAxes, **kwargs_spLbl)
         if 'Iv' in self.stats_core.keys():
-            self.plotProfile_any('Iv', ax=axs[1,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iv, yLimits=yLimits, kwargs=kwargs_plt)
+            self.plotProfile_any('Iv', ax=axs[1,1], label=label, normalize=normalize, xLabel=xLabel, yLabel='' if sharey else zLabel, 
+                                 xLimits=xLimits_Iv, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[1,1], 'Iv', kwargs_overlay=kwargs_overlay)
             if showSubPlotLabels and 'Iv' in subPlotLabels:
                 axs[1,1].text(s=subPlotLabels['Iv'], transform=axs[1,1].transAxes, **kwargs_spLbl)
         if 'Iw' in self.stats_core.keys():
-            self.plotProfile_any('Iw', ax=axs[1,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_Iw, yLimits=yLimits, kwargs=kwargs_plt)
+            self.plotProfile_any('Iw', ax=axs[1,2], label=label, normalize=normalize, xLabel=xLabel, yLabel='' if sharey else zLabel, 
+                                 xLimits=xLimits_Iw, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[1,2], 'Iw', kwargs_overlay=kwargs_overlay)
             if showSubPlotLabels and 'Iw' in subPlotLabels:
                 axs[1,2].text(s=subPlotLabels['Iw'], transform=axs[1,2].transAxes, **kwargs_spLbl)
@@ -2381,12 +2386,14 @@ class profile:
             if showSubPlotLabels and 'xLu' in subPlotLabels:
                 axs[2,0].text(s=subPlotLabels['xLu'], transform=axs[2,0].transAxes, **kwargs_spLbl)
         if 'xLv' in self.stats_core.keys():
-            self.plotProfile_any('xLv', ax=axs[2,1], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLv, yLimits=yLimits, kwargs=kwargs_plt)
+            self.plotProfile_any('xLv', ax=axs[2,1], label=label, normalize=normalize, xLabel=xLabel, yLabel='' if sharey else zLabel, 
+                                 xLimits=xLimits_xLv, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[2,1], 'xLv', kwargs_overlay=kwargs_overlay)
             if showSubPlotLabels and 'xLv' in subPlotLabels:
                 axs[2,1].text(s=subPlotLabels['xLv'], transform=axs[2,1].transAxes, **kwargs_spLbl)
         if 'xLw' in self.stats_core.keys():
-            self.plotProfile_any('xLw', ax=axs[2,2], label=label, normalize=normalize, xLabel=xLabel, yLabel=zLabel, xLimits=xLimits_xLw, yLimits=yLimits, kwargs=kwargs_plt)
+            self.plotProfile_any('xLw', ax=axs[2,2], label=label, normalize=normalize, xLabel=xLabel, yLabel='' if sharey else zLabel, 
+                                 xLimits=xLimits_xLw, yLimits=yLimits, kwargs=kwargs_plt)
             addOverlay(axs[2,2], 'xLw', kwargs_overlay=kwargs_overlay)
             if showSubPlotLabels and 'xLw' in subPlotLabels:
                 axs[2,2].text(s=subPlotLabels['xLw'], transform=axs[2,2].transAxes, **kwargs_spLbl)
@@ -2599,11 +2606,12 @@ class profile:
                     normalizeVel=False,
                     dataLabels='auto', # automatically taken from the profile object
                     xLabel='auto',
-                    yLabels=("U(H,t)","V(H,t)","W(H,t)"), 
+                    yLabels=[r'$U(H,t)$ $[m/s]$', r'$V(H,t)$ $[m/s]$', r'$W(H,t)$ $[m/s]$'], 
                     xLimits='auto', # [tMin,tMax]
                     yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
-                    figSize=[15, 5],
-                    alwaysShowFig=False
+                    figSize=[15, 3],
+                    alwaysShowFig=False,
+                    lineW=0.5,
                     ):
         if all((self.UofT is None, self.VofT is None, self.WofT is None)):
             raise Exception("At least one of UofT, VofT, or WofT has to be provided to plot time history.")
@@ -2632,7 +2640,7 @@ class profile:
             yLabels = ("U(t)/Uh","V(t)/Uh","W(t)/Uh") if normalizeVel else ("U(t)","V(t)","W(t)")
         name = self.name if dataLabels == 'auto' else dataLabels
         
-        wplt.plotVelTimeHistories(
+        fig = wplt.plotVelTimeHistories(
                                 T=(t,),
                                 U=(U,),
                                 V=(V,),
@@ -2644,8 +2652,10 @@ class profile:
                                 xLimits=xLimits,
                                 yLimits=yLimits,
                                 figSize=figSize,
-                                alwaysShowFig=alwaysShowFig
-                                )   
+                                alwaysShowFig=alwaysShowFig,
+                                lineW=lineW,
+                                )
+        return fig
 
     def plotBasicStatsTable(self,
                                 fig=None,
@@ -2900,7 +2910,7 @@ class ESDU74:
 
     def toProfileObj(self,name=None,n=None) -> profile:
         if name is None:
-            name = f'ESDU-74 (z0={self.z0:.3g}m)'
+            name = f'ESDU-74 ($z_0={self.z0:.3g} m$)'
 
         if n is None:
             n = np.multiply(DEFAULT_RF, np.divide(self.Uref, self.Zref))
@@ -3195,7 +3205,7 @@ class ESDU85:
 
     def toProfileObj(self,name=None,n=None) -> profile:
         if name is None:
-            name = f'ESDU-85 (z0={self.z0:.3g}m)'
+            name = f'ESDU-85 ($z_0={self.z0:.3g} m$)'
 
         if n is None:
             n = np.multiply(DEFAULT_RF, np.divide(self.Uref, self.Zref))
@@ -3803,7 +3813,7 @@ class bldgCp(windCAD.building):
         z0_MS = self.profile.z0_Iu
         z0 = z0_MS / self.lScl
         if debugMode:
-            print(f"Computing C&C Load factor ...")
+            print(f"Computing C&C Load factor for {self.name} ...")
             print(f"full_scale_duration = {full_scale_duration}")
             print(f"z0 = {z0_MS:.3g}m (@MS), {z0:.3g}m (@FS)\n")
 
@@ -4614,7 +4624,7 @@ class Profiles:
                         nCols=4
                         )
     
-    def plotProfile_basic2(self, figsize=[12,12], label=None, hspace=0.3, wspace=0.3,
+    def plotProfile_basic2(self, figsize=[12,12], label=None, hspace=0.2, wspace=0.2, sharey=False,
                         normalize=True, subPlotLabels=None, showSubPlotLabels=True, includeNormalizers=True,
                         xLabel=None, zLabel=None, xLimits_U=None, xLimits_Iu=None, xLimits_Iv=None, xLimits_Iw=None, 
                         xLimits_xLu=None, xLimits_xLv=None, xLimits_xLw=None, xLimits_uw=None,
@@ -4622,7 +4632,7 @@ class Profiles:
                         yLimits=None, lgnd_kwargs={'bbox_to_anchor': (0.5, 0.5), 'loc': 'center', 'ncol': 1},
                         kwargs_plt=None, kwargs_ax={}):
         
-        fig, axs = plt.subplots(3,3)
+        fig, axs = plt.subplots(3,3, sharey=sharey)
         fig.set_size_inches(figsize)
         # relax the space between subplots
         fig.subplots_adjust(hspace=hspace, wspace=wspace)
@@ -4630,7 +4640,10 @@ class Profiles:
         kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
         
         if normalize and includeNormalizers:
-            print("Future feature: include a table of normalizers like H, Uref, etc. next to the legend.")
+            print("Future feature: a table of normalizers like H, Uref, etc. next to the legend.")
+            print(f"          Location: {__file__}")
+            print(f"          Function: {inspect.currentframe().f_code.co_name}")
+            print(f"          Line number: {inspect.currentframe().f_lineno}")
 
         if yLimits is None:
             
@@ -4649,14 +4662,15 @@ class Profiles:
 
         for i, prof in enumerate(self.profiles):
             if i == 0 and overlayThese is not None:
-                _,_,bxPltObj = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, subPlotLabels=subPlotLabels, showSubPlotLabels=showSubPlotLabels,
+                _,_,bxPltObj = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, subPlotLabels=subPlotLabels, 
+                                                showSubPlotLabels=showSubPlotLabels, sharey=sharey,
                                                 xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, 
                                                 xLimits_Iu=xLimits_Iu, xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, 
                                                 xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, xLimits_uw=xLimits_uw, 
                                                 overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay,
                                                 yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
             else:
-                _,_,_ = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, showSubPlotLabels=False,
+                _,_,_ = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, showSubPlotLabels=False, sharey=sharey,
                                                 xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, 
                                                 xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
                                                 xLimits_uw=xLimits_uw, 
@@ -4683,6 +4697,8 @@ class Profiles:
         for ax in axs.flatten():
             formatAxis(ax, **kwargs_ax)
         # plt.show()
+        # fig.tight_layout()
+        
         return fig, axs
 
     def plotTimeHistory(self,
@@ -4823,7 +4839,7 @@ class Profiles:
         return fig
 
     def plotSpect(self, 
-                fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], wspace=0.3,
+                fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], wspace=0.3, shareY=False,
                 xLabel=None, yLabel_Suu=None, yLabel_Svv=None, yLabel_Sww=None,
                 xLimits=None, yLimits=None, subPlotLabels=None, showSubPlotLabels=True, subPlotLabel_xy=(0.075,0.925),
                 normalize=True, normZ:Literal['Z','xLi']='Z', normU:Literal['U','sigUi']='U',         
@@ -4834,9 +4850,10 @@ class Profiles:
                 kwargs_subplot_lbl={'fontsize': 12, 'bbox':{'facecolor': 'w', 'alpha': 0.5, 'edgecolor': 'none'}, 
                                     'ha': 'center', 'va': 'center'},
                 ):
-        fig, axs = plt.subplots(1,3)
+        fig, axs = plt.subplots(1,3, sharey=shareY)
         fig.set_size_inches(figsize)
         fig.subplots_adjust(wspace=wspace)
+        
 
         ax_Suu = axs[0] if ax_Suu is None else ax_Suu
         ax_Svv = axs[1] if ax_Svv is None else ax_Svv
@@ -4875,6 +4892,7 @@ class Profiles:
         for ax in axs.flatten():
             formatAxis(ax, **kwargs_ax, numFormat='default')
         # plt.show()
+        # fig.tight_layout()
         return fig, axs
 
     def plotRefHeightStatsTable(self,
@@ -5818,12 +5836,13 @@ class validator():
         axs = np.array(axs).flatten()
         _, errorEqn = measureError(returnEqn=True, cfdName=mLbl, expName=tLbl)
         normFactor = 100.0 if plotNormalizedErrorsAsPercentage else 1.0
-        normTxt = ' [%]' if plotNormalizedErrorsAsPercentage else ''
+        normTxt = ' [\%]' if plotNormalizedErrorsAsPercentage else ''
 
         for i, err in enumerate(errorType):
             nf = normFactor if err in NORMALIZED_ERROR_TYPES else 1.0
             ntxt = normTxt if err in NORMALIZED_ERROR_TYPES else ''
             ax = axs[np.unravel_index(i, axs.shape)]
+            formatAxis(ax=ax, gridMajor=False, gridMinor=False)
             
             if lumpAllAoAs:
                 if plotType == 'line':
@@ -5854,7 +5873,6 @@ class validator():
             # ax.set_xlabel(targetLabel)
             ax.set_ylabel(err+ntxt)
 
-            # formatAxis(ax=ax, gridMajor=False, gridMinor=False)
             if i == 0:
                 ax.legend(**kwargs_legend)
 
