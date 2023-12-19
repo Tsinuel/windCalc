@@ -108,8 +108,8 @@ def plotVelTimeHistories(
                     W=None, # ([n1,], [n2,], ... [nN,])
                     dataLabels=None, # ("str1", "str2", ... "strN")
                     pltFile=None, # "/path/to/plot/file.pdf"
-                    xLabel=r"$t [s]$",
-                    yLabels=(r"$U(t)$",r"$V(t)$",r"$W(t)$"), 
+                    xLabel=r"$t$ $[s]$",
+                    yLabels=(r"$U(t) [m/s]$",r"$V(t) [m/s]$",r"$W(t) [m/s]$"),
                     xLimits='auto', # [tMin,tMax]
                     yLimits='auto', # ([Umin, Umax], [Vmin, Vmax], [Wmin, Wmax])
                     figSize=[15, 5],

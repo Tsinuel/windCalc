@@ -78,8 +78,21 @@ def_cols2 = list(mcolors.CSS4_COLORS.values())
 def_cols3 = list(mcolors.XKCD_COLORS.values())
 def_cols4 = list(mcolors.BASE_COLORS.values())
 def_cols5 = list(mcolors.CSS4_COLORS.values())
-def_mk = ['o','s','^','v','<','>','D','P','X','*','+','x','1','2','3','4','8','p','h','H','d','|','_']
-def_ls = ['-','--','-.',':']
+
+def_mk_smpl = ['o','s','^','v','<','>','D','P','X','*','+','x','1','2','3','4','8','p','h','H','d','|','_',]
+
+# def_mk_more = [{'marker': x, 'fillstyle': 'full'} for x in def_mk_smpl]
+# def_mk_more = def_mk_more.extend([{'marker': x, 'fillstyle': 'left'} for x in def_mk_smpl])
+# def_mk_more = def_mk_more.extend([{'marker': x, 'fillstyle': 'right'} for x in def_mk_smpl])
+# def_mk_more = def_mk_more.extend([{'marker': x, 'fillstyle': 'bottom'} for x in def_mk_smpl])
+# def_mk_more = def_mk_more.extend([{'marker': x, 'fillstyle': 'top'} for x in def_mk_smpl])
+# def_mk_more = def_mk_more.extend([{'marker': x, 'fillstyle': 'none'} for x in def_mk_smpl])
+
+# def_ls = ['-','--','-.',':', 
+#           {'ls':'--', 'dashes':(6,1,2,1,2,1), 'dash_capstyle':'butt'}, 
+#           {'ls':'--', 'dash_capstyle':'butt'}, 
+#           {'ls':'--', 'dash_capstyle':'projecting'}]
+
 
 #===============================================================================
 #=============================== FUNCTIONS =====================================
@@ -187,15 +200,17 @@ def mathName(rawname):
         return '$\\overline{v\'w\'}/U_H^2$'
     elif rawname == 'z0':
         return '$z_0$ [$m$]'
+    elif rawname == 'u*':
+        return '$u_*$ [$m/s$]'
     elif rawname == 'Je':
         return '$Je$'
     # Spectra
     elif rawname == 'Suu':
-        return '$S_{uu}$ [$m^2/s$]'
+        return '$S_{uu}$ $[m^2/s]$'
     elif rawname == 'Svv':
-        return '$S_{vv}$ [$m^2/s$]'
+        return '$S_{vv}$ $[m^2/s]$'
     elif rawname == 'Sww':
-        return '$S_{ww}$ [$m^2/s$]'
+        return '$S_{ww}$ $[m^2/s]$'
     elif rawname == 'nSuu/Uh^2':
         return '$nS_{uu}/U_H^2$'
     elif rawname == 'nSuu/u^2':
@@ -209,7 +224,7 @@ def mathName(rawname):
     elif rawname == 'nSww/w^2':
         return '$nS_{ww}/\\sigma_w^2$'
     elif rawname == 'n':
-        return '$n$'
+        return '$n$ [$Hz$]'
     elif rawname == 'f':
         return '$f$'
     elif rawname == 'nH/Uh':
@@ -223,7 +238,7 @@ def mathName(rawname):
         return '$H$ [$m$]'
     elif rawname == 'T':
         return '$T$ [$s$]'
-    elif rawname == 'T_star':
+    elif rawname == 'T*':
         return '$TU_H/H$'
     elif rawname == 'n_smpl':
         return r'$n_{smpl}$ [$Hz$]'
@@ -237,6 +252,8 @@ def mathName(rawname):
         return '$\lambda_T$ = 1:'
     elif rawname == 'Re':
         return '$Re$'
+    elif rawname == 'ReTau':
+        return '$Re_{\\tau}=u_* z_0/\\nu$'
     # Cp
     elif rawname == 'mean':
         return '$\\overline{C_p}$'
@@ -304,6 +321,8 @@ def fullName(rawname, abbreviate=False):
         return 'Normalized covariance of lateral and vertical velocity fluctuations'
     elif rawname == 'z0':
         return 'Roughness length'
+    elif rawname == 'u*':
+        return 'Friction velocity'
     elif rawname == 'Je':
         return 'Jensen number'
     # Geometry and scaling
@@ -311,7 +330,7 @@ def fullName(rawname, abbreviate=False):
         return 'Mean roof height'
     elif rawname == 'T':
         return 'Sampling duration'
-    elif rawname == 'T_star':
+    elif rawname == 'T*':
         return 'Non-dimensional sampling duration'
     elif rawname == 'n_smpl':
         return 'Sampling frequency'
@@ -325,6 +344,8 @@ def fullName(rawname, abbreviate=False):
         return 'Time scaling factor'    
     elif rawname == 'Re':
         return 'Reynolds number'
+    elif rawname == 'ReTau':
+        return 'Friction Reynolds number'
     # Cp
     elif rawname == 'mean':
         return r'Mean $C_p$'
@@ -358,6 +379,34 @@ def fullName(rawname, abbreviate=False):
     else:
         warnings.warn("Unknown rawname: "+rawname)
         return rawname
+
+def LaTeXise(rawname):
+    if '_' in rawname:
+        parts = rawname.split('_')
+        parts = [part+'\\_' for part in parts]
+        rawname = ''.join(parts)
+        
+    if '^' in rawname:
+        parts = rawname.split('^')
+        parts = [part+'\\^' for part in parts]
+        rawname = ''.join(parts)
+        
+    if '%' in rawname:
+        parts = rawname.split('%')
+        parts = [part+'\\%' for part in parts]
+        rawname = ''.join(parts)
+        
+    if '&' in rawname:
+        parts = rawname.split('&')
+        parts = [part+'\\&' for part in parts]
+        rawname = ''.join(parts)
+        
+    if '#' in rawname:
+        parts = rawname.split('#')
+        parts = [part+'\\#' for part in parts]
+        rawname = ''.join(parts)
+        
+    return rawname
 
 def measureError(cfd=None, exp=None, 
                  errorTypes:Literal['all','RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R^2',]=['RMSE','NRMSE','MAE','PCC','R^2'],
@@ -1618,6 +1667,8 @@ class profile:
                 keepTH=True,
                 interpolateToH=False, 
                 units=DEFAULT_SI_UNITS,
+                fluidDensity=1.0,
+                fluidKinematicViscosity=1.48e-5,
                 kwargs_z0_fit={'fitTo':'Iu', # 'Iu' or 'U'
                                'uStar_init':1.0, 
                                'z0_init':0.001, 
@@ -1699,6 +1750,8 @@ class profile:
         self.origFileName = fileName
         self.interpolateToH = interpolateToH
         self.units = units
+        self.fluidDensity = fluidDensity
+        self.fluidKinematicViscosity = fluidKinematicViscosity
 
         self.keepTH = keepTH
 
@@ -1719,7 +1772,6 @@ class profile:
             self.WofT = None
             self.pOfT = None
 
-    
     def __verifyData(self):
         if self.UofT is not None and self.VofT is not None and self.WofT is not None:
             if not np.shape(self.UofT) == np.shape(self.VofT) == np.shape(self.WofT):
@@ -1770,6 +1822,44 @@ class profile:
             return None
         else:
             return self.Z[self.idx_eff]
+
+    @property
+    def shearVelocity(self):
+        # use the z0_U and log law to calculate the shear velocity
+        # log law: U(z) = uStar/kappa * ln(z/z0)
+        # uStar = kappa * U(z) / ln(z/z0)
+        # use H and Uh to calculate uStar
+        if self.z0_U is None or self.H is None or self.Uh is None:
+            return None
+        else:
+            if self.z0_Iu is not None and np.abs(self.z0_Iu-self.z0_U) > 1e-3:
+                warnings.warn("z0_Iu and z0_U are not close. Using z0_U to calculate shear velocity.")
+            return VON_KARMAN_CONST * self.Uh / np.log(self.H/self.z0_U)
+    
+    @property
+    def z0(self):
+        if self.z0_Iu is not None:
+            # print("Using z0_Iu.")
+            return self.z0_Iu
+        elif self.z0_U is not None:
+            print("Using z0_U.")
+            return self.z0_U
+        else:
+            return None
+    
+    @property
+    def ReTau(self):
+        if self.shearVelocity is None or self.fluidKinematicViscosity is None or self.z0 is None:
+            return None
+        else:
+            return self.shearVelocity * self.z0 / self.fluidKinematicViscosity
+    
+    @property
+    def Z_plus(self):
+        if self.fluidKinematicViscosity is None or self.shearVelocity is None or self.Z is None:
+            return None
+        else:
+            return self.Z * self.shearVelocity/self.fluidKinematicViscosity
 
     @property
     def T(self):
@@ -1831,6 +1921,13 @@ class profile:
         if self.stats_core is None or 'U' not in self.stats_core:
             return None
         return self.stats_core['U']
+
+    @property
+    def U_plus(self):
+        if self.U is None or self.shearVelocity is None:
+            return None
+        else:
+            return self.U/self.shearVelocity
 
     @property
     def Iu(self) -> Union[np.ndarray, None]:
@@ -2014,7 +2111,7 @@ class profile:
     def paramsTable(self, normalized=True, fields=None,) -> dict:
         if fields is None:
             fields = list(self.stats_core.keys())
-            fields.extend(['Name','H','Uh','T','n_smpl','z0','Je'])
+            fields.extend(['Name','H','Uh','T','n_smpl','z0','u*','Je','ReTau'])
             
         data = {}
         if 'Name' in fields:
@@ -2033,12 +2130,16 @@ class profile:
                     data[mathName(st)] = self.stat_at_H(st)
         if 'z0' in fields:
             data[mathName('z0')+' @FS'] = self.z0_Iu/self.lScl if self.z0_Iu is not None else None
+        if 'u*' in fields:
+            data[mathName('u*')+' @MS'] = self.shearVelocity
         if 'Je' in fields:
             data[mathName('Je')] = self.Je
+        if 'ReTau' in fields:
+            data[mathName('ReTau')] = self.ReTau
 
         if 'T' in fields:
             if normalized:
-                data[mathName('T_star')] = self.T_star
+                data[mathName('T*')] = self.T_star
             else:
                 data[mathName('T')] = self.T
         if 'n_smpl' in fields:
@@ -2635,9 +2736,9 @@ class profile:
         t = self.t * self.Uh / self.H if normalizeTime else self.t
 
         if xLabel == 'auto':
-            xLabel = r't^*' if normalizeTime else 't [s]'
+            xLabel = r'$t^*$' if normalizeTime else r'$t$ $[s]$'
         if yLabels == 'auto':
-            yLabels = ("U(t)/Uh","V(t)/Uh","W(t)/Uh") if normalizeVel else ("U(t)","V(t)","W(t)")
+            yLabels = ("$U(t)/U_H$","$V(t)/U_H$","$W(t)/U_H$") if normalizeVel else ("$U(t)$ $[m/s]$","$V(t)$ $[m/s]$","$W(t)$ $[m/s]$")
         name = self.name if dataLabels == 'auto' else dataLabels
         
         fig = wplt.plotVelTimeHistories(
@@ -3795,6 +3896,9 @@ class bldgCp(windCAD.building):
     def write(self):
         pass
 
+    def copy(self):
+        return copy.deepcopy(self)
+
     def checkStatField(self,fld):
         if self.CpStats is None:
             raise Exception(f"CpStats is not defined.")
@@ -3862,15 +3966,24 @@ class bldgCp(windCAD.building):
         data = {}
         if self.profile is not None:
             data = self.profile.paramsTable(normalized=normalized)
+        data[mathName('T*')+' (for $C_p$)'] = np.nan if self.T_star is None else np.mean(np.array(self.T_star))
         Re = self.Re
         if Re is not None and not np.isscalar(Re):
             Re = [r for r in Re if r is not None]
             Re = np.mean(Re) if len(Re) > 0 else None
+        data['$H_{avg}$ $[m]$ @FS'] = np.nan if self.H is None or self.lScl is None else self.H/self.lScl
+        data['$H_e$ $[m]$ @FS'] = np.nan if self.He is None or self.lScl is None else self.He/self.lScl
+        data['$H_r$ $[m]$ @FS'] = np.nan if self.Hr is None or self.lScl is None else self.Hr/self.lScl
+        data['$B$ $[m]$ @FS'] = np.nan if self.B is None or self.lScl is None else self.B/self.lScl
+        data['$D$ $[m]$ @FS'] = np.nan if self.D is None or self.lScl is None else self.D/self.lScl
+        data['Roof slope $[^\circ]$'] = np.nan if self.roofSlope is None else self.roofSlope
         data[mathName('Re')] = np.nan if Re is None else Re
-        data['design '+mathName('Uh')+' @FS'] = np.nan if self.Uref_FS is None else self.Uref_FS
+        data['Design '+mathName('Uh')+' @FS'] = np.nan if self.Uref_FS is None else self.Uref_FS
         data[mathName('lScl')] = np.nan if self.lScl is None else 1/self.lScl
         data[mathName('vScl')] = np.nan if self.vScl is None else 1/self.vScl
         data[mathName('tScl')] = np.nan if self.tScl is None else 1/self.tScl
+        data['No. of AoA'] = np.nan if self.NumAoA is None else self.NumAoA
+        data['No. of taps'] = np.nan if self.NumTaps is None else self.NumTaps
 
         return data
 
@@ -4145,14 +4258,16 @@ class bldgCp(windCAD.building):
                     plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, CandCLoadFormat:Literal['default','NBCC','ASCE']='default', 
                     invertYAxis=False,
                     label_min=None, label_max=None,
-                    overlayThese=None, overlayFactors=None, kwargs_overlay={'color':'k', 'linewidth':2, 'linestyle':'-'},
+                    overlayThese=None, overlayFactors=None, overlayFirstInLegend=True, kwargs_overlay={'color':'k', 'linewidth':2, 'linestyle':'-'},
                     subplotLabels=None, subplotLabels_xy=[0.05,0.95], kwargs_subplotLabels={'fontsize':14},
                     legend_ax_idx=0, showLegend=True,
                     debugMode=False,
-                    plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], zoneShadeColor='k', kwargs_zonePlots={},
+                    plotZoneGeom=True, insetBounds:Union[list,dict]=[0.6, 0.0, 0.4, 0.4], insetAxAlpha=0.7, 
+                    zoneShadeColor=[0.25,0.25,0.25], kwargs_zonePlots={},
                     xLimits=None, yLimits=None, xLabel=None, yLabel=None,
                     kwargs_min={}, kwargs_max={}, kwargs_legend={},
                     kwargs_ax={'gridMajor':True, 'gridMinor':True}):
+        
         def addOverlay(ax, ar, val, overlayType, name='_', kwargs_overlay={}):
             if overlayThese is None:
                 return
@@ -4248,7 +4363,7 @@ class bldgCp(windCAD.building):
                         bxPltName = overlayThis['Name']
                         bxPltObj = addOverlay(ax, [ar[0],], np.array(valMin).flatten(), 'errorBars', name=bxPltName, kwargs_overlay={})
                         addOverlay(ax, [ar[0],], np.array(valMax).flatten(), 'errorBars', name='_', kwargs_overlay={})
-
+            
             if invertYAxis:
                 ax.invert_yaxis()
             if plotZoneGeom:
@@ -4260,7 +4375,7 @@ class bldgCp(windCAD.building):
                 # ax_inset.axis('off')
                 ax_inset.axis('equal')
                 ax_inset.patch.set_facecolor('w')
-                ax_inset.patch.set_alpha(0.7)
+                ax_inset.patch.set_alpha(insetAxAlpha)
                 ax_inset.tick_params(axis='both', which='major', length=0)
                 ax_inset.set_xticklabels('')
                 ax_inset.set_yticklabels('')
@@ -4288,9 +4403,16 @@ class bldgCp(windCAD.building):
         if showLegend:
             if bxPltObj is None:
                 handles, labels = axs[0,0].get_legend_handles_labels()
+                if overlayFirstInLegend:
+                    # swap the first two handles and labels
+                    handles[0], handles[1] = handles[1], handles[0]
+                    labels[0], labels[1] = labels[1], labels[0]
                 axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles, labels, **kwargs_legend)
             else:
                 hndls, lbls = axs[0,0].get_legend_handles_labels()
+                if overlayFirstInLegend:
+                    hndls[0], hndls[1] = hndls[1], hndls[0]
+                    lbls[0], lbls[1] = lbls[1], lbls[0]
                 hndls.append(bxPltObj["boxes"][0])
                 lbls.append(bxPltName)
                 axs[np.unravel_index(legend_ax_idx, axs.shape)].legend(handles=hndls, labels=lbls, **kwargs_legend)
@@ -4661,6 +4783,7 @@ class Profiles:
                 yLimits = [min([y[0] for y in allYlims]), max([y[1] for y in allYlims])]
 
         for i, prof in enumerate(self.profiles):
+            showSubPlotLabels = False if i > 0 else showSubPlotLabels
             if i == 0 and overlayThese is not None:
                 _,_,bxPltObj = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, subPlotLabels=subPlotLabels, 
                                                 showSubPlotLabels=showSubPlotLabels, sharey=sharey,
@@ -4670,8 +4793,8 @@ class Profiles:
                                                 overlayThese=overlayThese, overlayType=overlayType, kwargs_overlay=kwargs_overlay,
                                                 yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
             else:
-                _,_,_ = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, showSubPlotLabels=False, sharey=sharey,
-                                                xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu, 
+                _,_,_ = prof.plotProfile_basic2(fig=fig, axs=axs, label=prof.name, normalize=normalize, showSubPlotLabels=showSubPlotLabels, subPlotLabels=subPlotLabels,
+                                                xLabel=xLabel, zLabel=zLabel, xLimits_U=xLimits_U, xLimits_Iu=xLimits_Iu,  sharey=sharey,
                                                 xLimits_Iv=xLimits_Iv, xLimits_Iw=xLimits_Iw, xLimits_xLu=xLimits_xLu, xLimits_xLv=xLimits_xLv, xLimits_xLw=xLimits_xLw, 
                                                 xLimits_uw=xLimits_uw, 
                                                 yLimits=yLimits, kwargs_plt=kwargs_plt[i], kwargs_ax=kwargs_ax)
@@ -4755,7 +4878,7 @@ class Profiles:
                                 figSize=figSize
                                 )   
 
-    def plotSpectra(self, 
+    def plotSpectra__depricated(self, 
                     figFile=None, 
                     figsize=[15,5], 
                     normalize=True,
@@ -4838,7 +4961,7 @@ class Profiles:
                         )
         return fig
 
-    def plotSpect(self, 
+    def plotSpectra(self, 
                 fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], wspace=0.3, shareY=False,
                 xLabel=None, yLabel_Suu=None, yLabel_Svv=None, yLabel_Sww=None,
                 xLimits=None, yLimits=None, subPlotLabels=None, showSubPlotLabels=True, subPlotLabel_xy=(0.075,0.925),
@@ -4976,7 +5099,7 @@ class Profiles:
             if not normalize:
                 params = mathName(['H','Uh','Iu','Iv','Iw','xLu','xLv','xLw','uw','z0','Je','T'])
             else:
-                params = mathName(['H','Uh','Iu','Iv','Iw','xLu/H','xLv/H','xLw/H','uw/Uh^2','z0','Je','T_star'])
+                params = mathName(['H','Uh','Iu','Iv','Iw','xLu/H','xLv/H','xLw/H','uw/Uh^2','z0','Je','T*'])
         elif params == 'all':
             params = list(tableContent.keys())
         else:
@@ -5052,7 +5175,7 @@ class BldgCps():
         self.memberBldgs: List[bldgCp] = memberBldgs
         print(f"Number of member bldgs: {len(memberBldgs)}")
 
-        self.master = memberBldgs[0] if masterBldg is None and len(memberBldgs) > 0 else masterBldg
+        self.master:bldgCp = memberBldgs[0] if masterBldg is None and len(memberBldgs) > 0 else masterBldg
         # super().__init__(caseName=mb.name, H=mb.H, He=mb.He, Hr=mb.Hr, B=mb.B, D=mb.D, roofSlope=mb.roofSlope, lScl=mb.lScl, valuesAreScaled=mb.valuesAreScaled, faces=mb.memberFaces,
         #                 # refProfile=mb.refProfile, samplingFreq=mb.samplingFreq, airDensity=mb.airDensity,
         #                 # Zref_input=mb.Zref, Uref_input=mb.Uref, Uref_FS=mb.Uref_FS, badTaps=mb.badTaps, AoA=mb.AoA, AoA_zero_deg_basisVector=mb.AoA_zero_deg_basisVector, 
@@ -5075,7 +5198,6 @@ class BldgCps():
     @property
     def N_bldgs(self):
         return len(self.memberBldgs)
-    
 
     """--------------------------------- Methods --------------------------------------"""
     def CpStats(self, errorPercentile=95.0,): 
@@ -5161,6 +5283,17 @@ class BldgCps():
                     params[key].append(temp[key])
 
         return params
+    
+    def asBldgObj(self, average=True,) -> bldgCp:
+        
+        bldg = self.master.copy()
+        if average:
+            bldg.CpOfT = None
+            bldg.pOfT = None
+            bldg.p0ofT = None
+            bldg.CpStats, _, _, _ = self.CpStats()
+        
+        return bldg
     
     """--------------------------------- Plotters -------------------------------------"""
     def plotTapCpStatsPerAoA(self, 
@@ -5254,12 +5387,13 @@ class BldgCps():
                         kwargs_table={'loc':'center',
                                         'cellLoc': 'center',
                                         'bbox': [0.0, 0.0, 1.0, 1.0],}):
+        print("TO DO: avoid displaying 'nan'. Instead display '-'")
         tableContent = self.paramsTable(normalized=normalize)
         if params == 'basic':
             if not normalize:
                 params = mathName(['H','Uh','Iu','Iv','Iw','xLu','xLv','xLw','uw','z0','T','Re','lScl','vScl','tScl'])
             else:
-                params = mathName(['H','Uh','Iu','Iv','Iw','xLu/H','xLv/H','xLw/H','uw/Uh^2','Je','T_star','Re','lScl','vScl','tScl'])
+                params = mathName(['H','Uh','Iu','Iv','Iw','xLu/H','xLv/H','xLw/H','uw/Uh^2','Je','T*','Re','lScl','vScl','tScl'])
         elif params == 'all':
             params = list(tableContent.keys())
         else:
@@ -5270,7 +5404,6 @@ class BldgCps():
             params[params.index(mathName('Uh'))] += ' @MS'
         if mathName('z0') in params:
             params[params.index(mathName('z0'))] += ' @FS'
-
 
         if fig is None:
             fntFctr = 1.0 if fontSz is None else fontSz/10.0
@@ -5283,7 +5416,6 @@ class BldgCps():
         ax.axis('off')
         ax.axis('tight')
 
-        # tableContent = self.paramsTable(normalized=normalize)
         cell_text = []
         for key in tableContent.keys():
             if key not in params:
@@ -5300,7 +5432,7 @@ class BldgCps():
             cell_text.append(val)
 
         table = ax.table(cellText=cell_text,
-                    colLabels=['Field',*[bldg.name for bldg in self.memberBldgs]],
+                    colLabels=['Field',*[LaTeXise(bldg.name) for bldg in self.memberBldgs]],
                     **kwargs_table)
         if fontSz is not None:
             table.auto_set_font_size(False)
@@ -5673,7 +5805,7 @@ class validator():
             for d, aoa in enumerate(self.commonAoA):
                 ax = axs[np.unravel_index(f*nPltCols+d, axs.shape)]
                 if f == 0:
-                    ax.set_title(r'$\theta = $'+f'${aoa:.1f}^\circ$')
+                    ax.set_title(r'$\theta = '+f'{aoa:.1f}^\circ$')
                 if d == 0: # write the field name on the left column rotated by 90 degrees
                     ax.text(-0.25, 0.5, mathName(fld), 
                             horizontalalignment='center', verticalalignment='center', 
@@ -5770,7 +5902,7 @@ class validator():
 
         for i, aoa in enumerate(AoAs):
             ax = axs[np.unravel_index(i, axs.shape)]
-            # ax.set_title(r'$\theta = $'+f'${aoa:.1f}^\circ$')
+            # ax.set_title(r'$\theta = '+f'{aoa:.1f}^\circ$')
             dtt = data[i,:] if len(AoAs) > 1 else data
             cObj = self.model.plotTapField(ax=ax, field=dtt, fldRange=fldRange, nLvl=nLvl, cmap=cmap, extend=extend,
                                     showValuesOnContour=showValuesOnContour, kwargs_contourTxt=kwargs_contourTxt,
@@ -5804,6 +5936,11 @@ class validator():
             cbar.set_label(title, fontsize=14,)
             if colBarOrientation == 'horizontal':
                 cbar.ax.xaxis.set_major_formatter(FuncFormatter(custom_formatter))
+                # have the ticks on the top
+                cbar.ax.xaxis.set_ticks_position('top')
+                cbar.ax.xaxis.set_label_position('top')
+                # have the title on the top too
+                cbar.ax.xaxis.set_label_coords(0.5, 3.5)
             else:
                 cbar.ax.yaxis.set_major_formatter(FuncFormatter(custom_formatter))
 

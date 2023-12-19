@@ -11,15 +11,18 @@ import os
 import warnings
 import shapely.geometry as shp
 import json
+import copy
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 
+from numpy import linalg as la
 from shapely.ops import voronoi_diagram
 from shapely.validation import make_valid
 from typing import List, Tuple, Dict, Literal
 from scipy.interpolate import griddata
-
+# from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+        
 #===============================================================================
 #==================== CONSTANTS & GLOBAL VARIABLES  ============================
 #===============================================================================
@@ -410,6 +413,9 @@ def calculateTapWeightsPerPanel(panels:shp.MultiPolygon,tapsAll,tapIdxAll, wghtT
 
 #--------------------------- COORDINATE SYSTEMS --------------------------------
 def transform(geomIn,orig,T):
+    # geomIn = np.asarray(geomIn,dtype=float)
+    # orig = np.asarray(orig,dtype=float)
+    # T = np.asarray(T,dtype=float)
     N,M = np.shape(geomIn)
     if len(orig) == 3 and M == 2:
         geomIn = np.append(geomIn,np.zeros((N,1)),axis=1)
@@ -685,6 +691,20 @@ class face:
         return transform(self.vertices, self.origin_plt, self.basisVectors_plt)
 
     @property
+    def boundingBox(self):
+        if self.vertices is None:
+            return None
+        return np.array([min(self.vertices[:,0]), max(self.vertices[:,0]), 
+                         min(self.vertices[:,1]), max(self.vertices[:,1])])
+        
+    @property
+    def aspectRatio(self):
+        if self.vertices is None:
+            return None
+        xtnts = self.boundingBox
+        return (xtnts[1]-xtnts[0])/(xtnts[3]-xtnts[2])
+
+    @property
     def NumTaps(self):
         num = 0 if self.tapNo is None else len(self.tapNo)
         return num
@@ -769,6 +789,9 @@ class face:
     def Refresh(self, showDetailedLog=False):
         self.__generateTributaries(showDetailedLog)
         self.__generatePanels(showDetailedLog)
+
+    def copy(self):
+        return copy.deepcopy(self)
 
     def to_dict(self,getDerived=False):
         basic = {}
@@ -858,7 +881,7 @@ class face:
 
         self.from_dict(basic, derived=derived)
 
-    def getNearestTapsToLine(self, start: np.ndarray, end: np.ndarray, distTolerance: float=0.0001):
+    def getNearestTapsToLine(self, start: np.ndarray, end: np.ndarray, distTolerance: float=0.0001, debug=False):
         """
         Returns the tap number that is nearest to the line defined by the start and end points. The distance is measured in the face-local coordinate system.
 
@@ -884,18 +907,55 @@ class face:
         """
         if self.tapCoord is None:
             return None, None
+        if debug:
+            fig = plt.figure(figsize=(10,10))
+            ax = fig.add_subplot()
+            ax.plot([start[0], end[0]], [start[1], end[1]], 'k-')
+            ax.plot(self.vertices[:,0], self.vertices[:,1], 'k-')
+            ax.plot(self.tapCoord[:,0], self.tapCoord[:,1], '.k')
+            ax.plot(start[0], start[1], 'ro')
+            ax.plot(end[0], end[1], 'go')
+            # ax.axis('equal')
+            # plt.show()
+            
+        start, end = np.array(start), np.array(end)
+        
         tapNos = []
         tapIdxs = []
         dist_from_start = []
         for t,tp in enumerate(self.tapCoord):
-            d = np.linalg.norm(np.cross(end-start, start-tp))/np.linalg.norm(end-start)
+            d = la.norm(np.cross(end-start, start-tp))/la.norm(end-start)
             if d <= distTolerance:
                 tapNos.append(self.tapNo[t])
                 tapIdxs.append(self.tapIdx[t])
-                dist_from_start.append(np.linalg.norm(tp-start))
+                dist_from_start.append(la.norm(tp-start))
         # sort the tapNos and tapIdxs by distance from the start point
         tapNos = [x for _,x in sorted(zip(dist_from_start,tapNos))]
         tapIdxs = [x for _,x in sorted(zip(dist_from_start,tapIdxs))]
+        
+        if debug:
+            ax.plot(self.tapCoord[tapIdxs,0], self.tapCoord[tapIdxs,1], 'xr')
+            # plot the tolerance margin around the line
+            start_tol_upper_point = start + distTolerance*(end-start)/la.norm(end-start)
+            start_tol_lower_point = start - distTolerance*(end-start)/la.norm(end-start)
+            end_tol_upper_point = end + distTolerance*(end-start)/la.norm(end-start)
+            end_tol_lower_point = end - distTolerance*(end-start)/la.norm(end-start)
+            print(f"start_tol_upper_point: {start_tol_upper_point}")
+            print(f"start: {start}")
+            print(f"start_tol_lower_point: {start_tol_lower_point}")
+            print(f"end_tol_upper_point: {end_tol_upper_point}")
+            print(f"end: {end}")
+            print(f"end_tol_lower_point: {end_tol_lower_point}")
+            # plot a filled polygon
+            ax.fill([start_tol_upper_point[0], end_tol_upper_point[0], end_tol_lower_point[0], start_tol_lower_point[0]],
+                    [start_tol_upper_point[1], end_tol_upper_point[1], end_tol_lower_point[1], start_tol_lower_point[1]],
+                    'r', alpha=0.8)
+            # edges of the polygon
+            ax.plot([start_tol_upper_point[0], end_tol_upper_point[0]], [start_tol_upper_point[1], end_tol_upper_point[1]], 'r-', alpha=0.3)
+            
+            ax.axis('equal')
+            plt.show()
+        
         return tapNos, tapIdxs, dist_from_start
     
     def indexOfTap(self, tapNo):
@@ -933,6 +993,28 @@ class face:
             pass
         if newFig:
             ax.axis('equal')
+
+    def plotEdges_3D(self, ax=None, showName=True, drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0,
+                    kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'},
+                    kwargs_Name={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.3]},
+                    ):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot(projection='3d')
+        xyz = np.array(self.vertices3D)
+        ax.plot(xyz[:,0], xyz[:,1], xyz[:,2], **kwargs_Edge)
+        # # overlay a transparent filled polygon
+        # verts = xyz
+        # verts = np.append(verts, [verts[0]], axis=0)
+        # poly = Poly3DCollection([verts], alpha=0.3)
+        # ax.add_collection3d(poly, zs='z')
+        
+        if newFig:
+            ax.axis('equal')
+            
+            
 
     def plotTaps(self, ax=None, tapsToPlot=None, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
                  kwargs_dots={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
@@ -1137,8 +1219,8 @@ class face:
             
         return
 
-    def plot(self, figFile=None,xLimits=None,figSize=[15,5], showAxis=False, dotSize=3,
-             overlayTaps=False, overlayTribs=False, overlayPanels=False, overlayZones=False, useSubplotForDifferentNominalAreas=True, nSubPlotCols=3):
+    def plot(self, figFile=None,xLimits=None,figSize=[15,5], showAxis=True, dotSize=3,
+             overlayTaps=True, overlayTribs=True, overlayPanels=False, overlayZones=True, useSubplotForDifferentNominalAreas=True, nSubPlotCols=3):
 
         if overlayPanels:
             if useSubplotForDifferentNominalAreas:
@@ -1163,9 +1245,14 @@ class face:
                         plt.plot(x,y,'-b',lw=0.5)
                     pass
                 if overlayZones:
-                    for zDict in self.zoneDict:
-                        xy = self.zoneDict[zDict][2]
-                        plt.plot(xy[:,0], xy[:,1], '--k', lw=2)
+                    self.plotZones(ax=plt.gca(), zoneCol=None, drawEdge=False, fill=True, showLegend=False, zonesToPlot=None, overlayZoneIdx=False,
+                                      kwargs_Edge={'color':'k', 'lw':0.5, 'ls':'-'}, 
+                                      kwargs_Fill={'facecolor':[0,1,0,0.3], 'edgecolor':'None', 'lw':0.5, 'ls':'-'}, 
+                                      kwargs_text={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.3]},
+                                      kwargs_Legend={'loc':'upper left', 'bbox_to_anchor':(1.05, 1), 'borderaxespad':0.})
+                    # for zDict in self.zoneDict:
+                    #     xy = self.zoneDict[zDict][2]
+                    #     plt.plot(xy[:,0], xy[:,1], '--k', lw=2)
                 plt.axis('equal')
                 if not showAxis:
                     ax = plt.gca()
@@ -1760,42 +1847,140 @@ class building(Faces):
         # finally add derived things if any
         pass
 
+    """--------------------------------- Plotters -------------------------------------"""
+    def plotBldg_3D(self, ax=None, figsize=(10,10), 
+                    showAxis=True, showTaps=False, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
+                    kwargs_taps={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
+                    kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
+                    ):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure(figsize=figsize)
+            ax = fig.add_subplot(projection='3d')
+        # for fc in self._memberFaces:
+        #     fc.plotEdges_3D(ax=ax, showName=False)
+        #     break
+        self._memberFaces[2].plotEdges_3D(ax=ax, showName=False)
+        self._memberFaces[3].plotEdges_3D(ax=ax, showName=False)
+            
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_zlabel('z')
+
 class samplingLine:
     def __init__(self, 
                 name=None,
-                faces: List[face]=[],
-                startEndPointPairs: List[List[float]]=[],
-                labels: List[str]=[],
+                parentFace: face=None,
+                start_xy =None,
+                end_xy=None,
+                label: str=None,
                 dist_tolerance=1e-3,
-                iterpolationMethod='nearest',
+                iterpolationMethod: Literal['nearest','2D_interp']='nearest',
+                debug=False,
                 ):
         self.name = name
-        self.faces: List[face] = faces
-        self.startEndPointPairs: List[List[List[float]]] = startEndPointPairs # [nFaces][2][2]
-        self.labels: List[str] = labels
+        self.parentFace: face = parentFace
+        self.label: str= label
         self.dist_tolerance = dist_tolerance
         self.iterpolationMethod = iterpolationMethod
+        self.start_xy = start_xy
+        self.end_xy = end_xy
 
-        self.tapNo = []
-        self.tapIdx = []
-        self.d_tap = []
-        self.d_vertices = []
+        self.origin = start_xy
+        vec = np.array([end_xy[0]-start_xy[0], end_xy[1]-start_xy[1]])
+        self.length = la.norm(vec)
+        vec = vec/la.norm(vec)
+        self.basisVectors = np.array([vec, np.array([-vec[1], vec[0]])])
+        
+        
+        if debug:
+            print('origin: ', self.origin)
+            print('basisVectors: ', self.basisVectors)
+            
+            scl = 0.1*self.length
+            
+            fig = plt.figure(figsize=(10,10))
+            ax = fig.add_subplot()
+            self.parentFace.plotEdges(ax=ax, showName=False, kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'})
+            self.parentFace.plotTaps(ax=ax)
+            self.parentFace.plotTribs(ax=ax)
+            xy = np.array([self.start_xy, self.end_xy])
+            ax.plot(xy[:,0], xy[:,1], '-k', lw=1.0, marker='x', markersize=5,)
+            # plot the basis vectors and the origin (labelled) normalize the vector lengths to 0.1*length
+            ax.plot(self.origin[0], self.origin[1], 'ok', markersize=5)
+            ax.arrow(self.origin[0], self.origin[1], self.basisVectors[0,0]*scl, self.basisVectors[0,1]*scl, head_width=0.15*scl, head_length=0.3*scl, fc='r', ec='r')
+            ax.arrow(self.origin[0], self.origin[1], self.basisVectors[1,0]*scl, self.basisVectors[1,1]*scl, head_width=0.15*scl, head_length=0.3*scl, fc='b', ec='b')
+            ax.text(self.origin[0]+self.basisVectors[0,0]*scl*1.5, self.origin[1]+self.basisVectors[0,1]*scl*1.5, 
+                    '$\hat{e}_1$', ha='left', va='bottom', color='r', fontsize=24, backgroundcolor=[1,1,1,0.7])
+            ax.text(self.origin[0]+self.basisVectors[1,0]*scl*1.5, self.origin[1]+self.basisVectors[1,1]*scl*1.5, 
+                    '$\hat{e}_2$', ha='left', va='bottom', color='b', fontsize=24, backgroundcolor=[1,1,1,0.7])
+            ax.axis('equal')
+            plt.show()
 
-        self._identifyTaps()
+        # self.tapNo = []
+        # self.tapIdx = []
+        # self.L_tap = []
+        # self.d_vertices = []
+
+        # self._identifyTaps()
 
     def __str__(self):
         return 'Line name: '+self.name
     
     def _identifyTaps(self):
-        if len(self.faces) == 0:
+        if self.parentFace is None:
             return
-        self.tapNo = []
-        self.tapIdx = []
-        self.d_tap = []
-        for f, fc in enumerate(self.faces):
-            tapNos, tapIdxs, dist_from_start = fc.getNearestTapsToLine(self.startEndPointPairs[f][0], self.startEndPointPairs[f][1], distTolerance=self.dist_tolerance)
-            self.tapNo.extend(tapNos)
-            self.tapIdx.extend(tapIdxs)
-            self.d_tap.extend(dist_from_start)
-            
+        
+        self.tapNo, self.tapIdx, self.L_tap = self.parentFace.getNearestTapsToLine(self.start_xy, self.end_xy, distTolerance=self.dist_tolerance,
+                                                                                   debug=True)
+     
+    @property
+    def fringe(self):
+        # a polygon object of a rectangle that defines the boundary of the line to snatch taps from
+        pass
+       
+    @property
+    def tapCoord(self):
+        return self.parentFace.tapCoord[self.tapIdx]
     
+    @property
+    def tapCoordPlt(self):
+        return self.parentFace.tapCoordPlt[self.tapIdx]
+    
+    @property
+    def tapName(self):
+        return self.parentFace.tapName[self.tapIdx]
+    
+    def inLocalCoords(self, xy):
+        return np.dot(xy-self.origin, self.basisVectors)
+    
+    def plot(self, ax=None, showTaps=False, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0], plotParentFace=False,
+             kwargs_line={'color':'b', 'lw':1.0, 'ls':'-'},
+             kwargs_dots={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
+             kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot()
+        xy = np.array([self.start_xy, self.end_xy])
+        ax.plot(xy[:,0], xy[:,1], **kwargs_line)
+        if showTaps:
+            ax.plot(self.tapCoord[:,0],self.tapCoord[:,1],'.k',markersize=3)
+        if showTapNo:
+            for i,xyi in enumerate(self.tapCoord):
+                ax.text(xyi[0]+textOffset_tapNo[0], xyi[1]+textOffset_tapNo[1], str(self.tapNo[i]), **kwargs_text)
+        if showTapName:
+            for i,xyi in enumerate(self.tapCoord):
+                ax.text(xyi[0]+textOffset_tapName[0], xyi[1]+textOffset_tapName[1], str(self.tapName[i]), **kwargs_text)
+        if plotParentFace:
+            self.parentFace.plotEdges(ax=ax, showName=False, kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'})
+        if newFig:
+            ax.axis('equal')
+        return
+
+    def plotDefinition():
+        pass
+
+

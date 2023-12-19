@@ -1655,7 +1655,7 @@ class inflowTuner:
             profs.extend(self.refProfiles.profiles)
         profs = wind.Profiles(profs)
 
-        return profs.plotSpectra(figsize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_plt=kwargs_plt, **kwargs_pltSpectra)
+        return profs.plotSpectra__depricated(figsize=figSize, xLimits=xLimits, yLimits=yLimits, kwargs_plt=kwargs_plt, **kwargs_pltSpectra)
 
 
 
