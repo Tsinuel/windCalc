@@ -317,3 +317,14 @@ class BLWTL_HFPI:
             return -1
         sf = self.sampleRate if np.isscalar(self.sampleRate) else self.sampleRate[0]
         return int(self.trimTimeEnd * sf)
+    
+    def indexOfTaps(self, tapNos):
+        if isinstance(tapNos, int):
+            tapNos = [tapNos]
+        return [self.tapNos.index(tapNo) for tapNo in tapNos]
+    
+    def CpOfT_atTaps(self, tapNos, AoA=None):
+        if AoA is None:
+            AoA = self.AoA
+        idx = self.indexOfTaps(tapNos)
+        return self.CpTH[:,idx,:] if np.isscalar(AoA) else self.CpTH[:,idx,:][:,np.newaxis,:]

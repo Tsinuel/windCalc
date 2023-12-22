@@ -3907,6 +3907,25 @@ class bldgCp(windCAD.building):
         else:
             raise Exception(f"The field {fld} is not a part of the available stat fields. Available stat fields: {list(self.CpStats.keys())}")
     
+    def scaleCpStats(self, factor):
+        if self.CpStats is None:
+            return
+        # for local loads
+        for fld in self.CpStats:
+            if fld in SCALABLE_CP_STATS:
+                self.CpStats[fld] = self.CpStats[fld] * factor
+        # for area-averaged loads
+        
+        # self.CpStatsAreaAvg = [] # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
+        for f,fc in enumerate(self.faces):
+            for z, _ in enumerate(fc.zoneDict):
+                for a, _ in enumerate(self.NominalPanelArea):
+                    for _, fld in enumerate(self.CpStatsAreaAvg[f][z][a]):
+                        if fld in SCALABLE_CP_STATS:
+                            self.CpStatsAreaAvg[f][z][a][fld] = self.CpStatsAreaAvg[f][z][a][fld] * factor
+        
+                
+    
     def CandCLoad_factor(self, format:Literal['NBCC','ASCE']='ASCE', debugMode=False,):
         if self.T is None or self.tScl is None or self.H is None or self.profile is None:
             print(f"Cannot compute C&C Load factor. The following are required: T, tScl, H, profile")
@@ -3997,12 +4016,16 @@ class bldgCp(windCAD.building):
                             cols = ['r','k','b','g','m','r','k','b','g','m'],
                             mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], 
                             ls=['-','-','-','-','-','-','-','-','-','-',],
+                            hlinesAt=[-1,0,1],
                             mrkrSize=2,
                             kwargs_perFld=None, 
                             simpleLabel=True,
                             xticks=None, nAoA_ticks=5, xlim=None, 
-                            legend_bbox_to_anchor=(0.5, 0.905), pageNo_xy=(0.5,0.1), figsize=[15,20], sharex=True, sharey=True,
-                            overlayThis=None, overlay_AoA=None, overlayLabel=None, kwargs_overlay=None):
+                            legend_bbox_to_anchor=(0.5, 0.905), showPageNo=True, pageNo_xy=(0.5,0.1), figsize=[15,20], sharex=True, sharey=True,
+                            overlayThis=None, overlay_AoA=None, overlayLabel=None, kwargs_overlay=None,
+                            kwargs_axFrmt={},
+                            kwargs_hlines={'colors':['k','k','k'], 'linestyles':['-','-','-'], 'linewidths':0.3},
+                            ):
         if kwargs_perFld is None:
             kwargs_perFld = [{'color':cols[i], 
                               'marker':mrkrs[i], 
@@ -4012,6 +4035,7 @@ class bldgCp(windCAD.building):
         kwargs_overlay = [{} for _ in range(len(fields))] if kwargs_overlay is None else kwargs_overlay
 
         tapIdxs = self.tapIdx if tapsToPlot is None else self.tapIdxOf(tapsToPlot)
+        tapIdxsInData = [self.tapIdx[i] for i in tapIdxs]
         
         for fld in fields:
             self.checkStatField(fld)
@@ -4021,6 +4045,7 @@ class bldgCp(windCAD.building):
 
         tapPltCount = 0
         tapIdx = tapIdxs[tapPltCount]
+        tapIdxDt = tapIdxsInData[tapPltCount]
         
         newFig = False
         if figs is None:
@@ -4042,12 +4067,12 @@ class bldgCp(windCAD.building):
                     break
                 ax = axs[i//nCols,i%nCols]
                 for f,fld in enumerate(fields):
-                    label = fld if simpleLabel else self.name+' ('+fld+')'
+                    label = fullName(fld) if simpleLabel else self.name+': '+fullName(fld,abbreviate=True)
                     factor = scaleFactor if fld in SCALABLE_CP_STATS else 1.0
-                    ax.plot(self.AoA, self.CpStats[fld][:,tapIdx]*factor, label=label, **kwargs_perFld[f])
+                    ax.plot(self.AoA, self.CpStats[fld][:,tapIdxDt]*factor, label=label, **kwargs_perFld[f])
                     if overlayThis is not None:
                         ax.plot(overlay_AoA, overlayThis[fld][:,tapPltCount], label=overlayLabel+' ('+fld+')', **kwargs_overlay[f])
-                ax.hlines([-1,0,1],0,360,colors=['k','k','k'],linestyles=['--','-','--'],lw=0.7)
+                ax.hlines(hlinesAt,0,360,**kwargs_hlines)
                 if includeTapName:
                     if self.tapName is not None and self.tapName[tapIdx] != '':
                         tapName = '('+self.tapName[tapIdx]+')'
@@ -4070,7 +4095,7 @@ class bldgCp(windCAD.building):
                 
                 # ax.grid(which='both')
                 if addMarginDetails:
-                    formatAxis(ax)
+                    formatAxis(ax, **kwargs_axFrmt)
                 
                 if i//nCols == nRows-1:
                     ax.set_xlabel(r'AoA')
@@ -4079,15 +4104,17 @@ class bldgCp(windCAD.building):
                 tapPltCount += 1
                 if tapPltCount < len(tapIdxs):
                     tapIdx = tapIdxs[tapPltCount]
+                    tapIdxDt = tapIdxsInData[tapPltCount]
 
             handles, labels = ax.get_legend_handles_labels()
             if newFig or addMarginDetails:
                 pass
                 
             if newFig:
-                fig.legend(handles, fields, loc='upper center',ncol=len(fields), bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
+                fig.legend(handles, mathName(fields), loc='upper center',ncol=len(fields), bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
                 text = f"Page {p+1} of {nPages}\n Case: {self.name}"
-                plt.annotate(text, xy=pageNo_xy, xycoords='figure fraction', ha='center', va='top')
+                if showPageNo:
+                    plt.annotate(text, xy=pageNo_xy, xycoords='figure fraction', ha='center', va='top')
                 plt.show()
         if newFig:
             return figs, all_axes
@@ -4498,7 +4525,7 @@ class bldgCp(windCAD.building):
         ax.arrow(arr_orig_x, arr_orig_y, r_x, r_y,
                     head_width=0.3*basicSize*size, head_length=0.6*basicSize*size, **kwargs_arrow)
         ax.text(xOrig+r_x_txt*textOffsetFactor, yOrig+r_y_txt*textOffsetFactor,
-                f"{original_aoa}\u00b0", fontsize=12*size, **kwargs_txt)
+                f"${original_aoa}^\circ$", fontsize=12*size, **kwargs_txt)
 
         if drawDicorations:
             arc_orig_x, arc_orig_y = xOrig, yOrig
@@ -5306,9 +5333,10 @@ class BldgCps():
                             kwargs_perFld=None, 
                             xticks=None, nAoA_ticks=5, xlim=None, 
                             legend_bbox_to_anchor=(0.5, 0.905), nLgndCols=None, simpleLabel=False,
-                            pageNo_xy=(0.5,0.1), 
+                            showPageNo=True, pageNo_xy=(0.5,0.1), 
                             figsize=[15,20], sharex=True, sharey=True,
                             overlayThis=None, overlay_AoA=None, overlayLabel=None, kwargs_overlay={},
+                            kwargs_axFrmt={},
                              ):
         if kwargs_perFld is None:
             kwargs_perFld = [[{'color':cols[c], 
@@ -5354,7 +5382,7 @@ class BldgCps():
                                     xticks=xticks, nAoA_ticks=nAoA_ticks, xlim=xlim, 
                                     legend_bbox_to_anchor=legend_bbox_to_anchor, pageNo_xy=pageNo_xy,
                                     overlayThis=overlayThis, overlay_AoA=overlay_AoA, overlayLabel=overlayLabel, kwargs_overlay=kwargs_overlay,
-                                    nCols=nCols, nRows=nRows,
+                                    nCols=nCols, nRows=nRows, kwargs_axFrmt=kwargs_axFrmt,
                                     )
         
         caseNames = [bldg.name for bldg in self.memberBldgs]
@@ -5367,7 +5395,8 @@ class BldgCps():
                 pass
             fig.legend(handles, labels, loc='upper center',ncol=nLgndCols, bbox_to_anchor=legend_bbox_to_anchor, bbox_transform=fig.transFigure)
             text = f"Page {p+1} of {nPages}\n Cases: {caseNames}"
-            fig.text(pageNo_xy[0], pageNo_xy[1], text, ha='center', va='top')
+            if showPageNo:
+                fig.text(pageNo_xy[0], pageNo_xy[1], text, ha='center', va='top')
         
         # turn off the remaining axes
         if len(tapIdxs) < nPltPerPage*nPages:
@@ -5777,16 +5806,21 @@ class validator():
             plt.show()
         return fig, axs
 
-    def plotError_CpStats_perAoA(self, fig=None, axs=None, figsize_per_ax=[4,4], 
+    def plotError_CpStats_perAoA(self, fig=None, axs=None, figsize_per_ax=[4,4], AoA_list=None,
                           errorTypePerField:dict={'mean':'RMSE', 'std':'RMSE', 'peakMax':'RMSE', 'peakMin':'RMSE'}, 
-                          targetLabel='Target', modelLabel='Model',
-                          percentLinesAt=[10,30], percentLinesAt_kwargs=None, 
+                          targetLabel='Target', modelLabel='Model', shareLabel_x=True, shareLabel_y=True,
+                          percentLinesAt=[10,30], percentLinesAt_kwargs=None, abbreviateFldNames=True,
+                          AoA_txt_loc=(-0.3, 0.5),
                           kwargs_mainPlot={'color':'k', 'marker':'.', 'linestyle':''},
                           kwargs_annotation={'xy':(0.95, 0.05), 'xycoords':'axes fraction', 'ha':'right', 'va':'bottom'},
+                          kwargs_frmtAxis={'gridMajor':True, 'gridMinor':False},
+                          kwargs_fldLabel={},
+                          kwargs_AoA_label={'rotation':90, 'ha':'center', 'va':'center'},
                           ):
+        AoA_list = self.commonAoA if AoA_list is None else AoA_list
         nFlds = len(errorTypePerField.keys())
-        nPltCols = len(self.commonAoA)#+1
-        nPltRows = nFlds
+        nPltRows = len(AoA_list)#+1
+        nPltCols = nFlds
 
         newFig = False
         if fig is None:
@@ -5802,25 +5836,28 @@ class validator():
 
         flds = list(errorTypePerField.keys())
         for f, fld in enumerate(flds):
-            for d, aoa in enumerate(self.commonAoA):
-                ax = axs[np.unravel_index(f*nPltCols+d, axs.shape)]
+            for d, aoa in enumerate(AoA_list):
+                dIdx = np.where(self.commonAoA == aoa)[0][0]
+                ax = axs[np.unravel_index(d*nPltCols+f, axs.shape)]
                 if f == 0:
-                    ax.set_title(r'$\theta = '+f'{aoa:.1f}^\circ$')
-                if d == 0: # write the field name on the left column rotated by 90 degrees
-                    ax.text(-0.25, 0.5, mathName(fld), 
-                            horizontalalignment='center', verticalalignment='center', 
-                            transform=ax.transAxes, rotation=90)
-                ax.set_xlabel(targetLabel)
-                ax.set_ylabel(modelLabel)
+                    ax.text(AoA_txt_loc[0], AoA_txt_loc[1], r'$\theta = '+f'{aoa:.0f}^\circ$', 
+                            transform=ax.transAxes, **kwargs_AoA_label)
+                if d == 0: 
+                    ax.set_title(fullName(fld, abbreviate=abbreviateFldNames), **kwargs_fldLabel)
+                if not shareLabel_x or (d == nPltRows-1 and shareLabel_x):
+                    ax.set_xlabel(targetLabel)
+                if not shareLabel_y or (f == 0 and shareLabel_y):
+                    ax.set_ylabel(modelLabel)
                 ax.set_aspect('equal')
 
-                ax.plot(self.target.CpStats[fld][self.aoaIdx_target[d],self.tapIdx_target], 
-                        self.model.CpStats[fld][self.aoaIdx_model[d],self.tapIdx_model] * self.IuFctr, 
+                ax.plot(self.target.CpStats[fld][self.aoaIdx_target[dIdx],self.tapIdx_target], 
+                        self.model.CpStats[fld][self.aoaIdx_model[dIdx],self.tapIdx_model] * self.IuFctr, 
                         **kwargs_mainPlot)
 
                 errTxt = ''
                 for j, errType in enumerate(self.error_CpStats[fld]['perAoA'][aoa]):
-                    errTxt += f"${errType} = {self.error_CpStats[fld]['perAoA'][aoa][errType]:.3g}$"
+                    initPart = f"{errType} = $" if f == 0 and d == 0 else "$"
+                    errTxt += initPart + f"{self.error_CpStats[fld]['perAoA'][aoa][errType]:.3g}$"
                     if j < len(self.error_CpStats[fld]['perAoA'][aoa])-1:
                         errTxt += '\n'
                 ax.annotate(errTxt, **kwargs_annotation)
@@ -5828,13 +5865,13 @@ class validator():
                 xlim, ylim = ax.get_xlim(), ax.get_ylim()
                 xlim, ylim = ax.get_xlim(), ax.get_ylim()
                 minmax = np.array([np.min([xlim[0], ylim[0]]), np.max([xlim[1], ylim[1]])])
-                ax.plot(minmax, minmax, 'k-')
+                ax.plot(minmax, minmax, 'k-', linewidth=0.5)
                 for j, n in enumerate(percentLinesAt):
-                    ax.plot(minmax, minmax*(1+n/100), label=r'$\pm$'+f'{n}%', **percentLinesAt_kwargs[j])
+                    ax.plot(minmax, minmax*(1+n/100), label=r"$\pm"+f"{n}\%$", **percentLinesAt_kwargs[j])
                     ax.plot(minmax, minmax*(1-n/100), **percentLinesAt_kwargs[j])
                 ax.set_xlim(minmax)
                 ax.set_ylim(minmax)
-                formatAxis(ax=ax)
+                formatAxis(ax=ax, **kwargs_frmtAxis)
                 if d == 0 and f == 0:
                     ax.legend()
             

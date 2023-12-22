@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import matplotlib.patches as mpatches
 
-from numpy import linalg as la
+from numpy import linalg
 from shapely.ops import voronoi_diagram
 from shapely.validation import make_valid
 from typing import List, Tuple, Dict, Literal
@@ -422,6 +422,27 @@ def transform(geomIn,orig,T):
     geomOut =np.transpose(np.dot(T,np.transpose(np.add(geomIn,orig))))
     return geomOut
 
+def tranform2D(x, y, O, e1, e2, translateFirst=True,):
+    if translateFirst:
+        # ans = np.array([[np.sum(xyi*basisVectors[0]), np.sum(xyi*basisVectors[1])] for xyi in xy-origin], dtype=float)
+        ans_x = (x-O[0])*e1[0] + (y-O[1])*e1[1]
+        ans_y = (x-O[0])*e2[0] + (y-O[1])*e2[1]
+    else:
+        ans_x = (x*e1[0] + y*e1[1]) - O[0]
+        ans_y = (x*e2[0] + y*e2[1]) - O[1]
+    return np.array(ans_x, dtype=float), np.array(ans_y, dtype=float)
+
+
+def translate(x, y, t, z=None):
+    x, y = np.asarray(x,dtype=float), np.asarray(y,dtype=float)
+    t = np.array(t,dtype=float)
+    if z is None:
+        return x+t[0], y+t[1]
+    else:
+        z = np.asarray(z,dtype=float)
+        return x+t[0], y+t[1], z+t[2]
+    
+    
 
 #===============================================================================
 #================================ CLASSES ======================================
@@ -881,7 +902,7 @@ class face:
 
         self.from_dict(basic, derived=derived)
 
-    def getNearestTapsToLine(self, start: np.ndarray, end: np.ndarray, distTolerance: float=0.0001, debug=False):
+    def getNearestTapsToLine__to_be_redacted(self, start: np.ndarray, end: np.ndarray, distTolerance: float=0.0001, debug=False):
         """
         Returns the tap number that is nearest to the line defined by the start and end points. The distance is measured in the face-local coordinate system.
 
@@ -924,11 +945,11 @@ class face:
         tapIdxs = []
         dist_from_start = []
         for t,tp in enumerate(self.tapCoord):
-            d = la.norm(np.cross(end-start, start-tp))/la.norm(end-start)
+            d = linalg.norm(np.cross(end-start, start-tp))/linalg.norm(end-start)
             if d <= distTolerance:
                 tapNos.append(self.tapNo[t])
                 tapIdxs.append(self.tapIdx[t])
-                dist_from_start.append(la.norm(tp-start))
+                dist_from_start.append(linalg.norm(tp-start))
         # sort the tapNos and tapIdxs by distance from the start point
         tapNos = [x for _,x in sorted(zip(dist_from_start,tapNos))]
         tapIdxs = [x for _,x in sorted(zip(dist_from_start,tapIdxs))]
@@ -936,10 +957,10 @@ class face:
         if debug:
             ax.plot(self.tapCoord[tapIdxs,0], self.tapCoord[tapIdxs,1], 'xr')
             # plot the tolerance margin around the line
-            start_tol_upper_point = start + distTolerance*(end-start)/la.norm(end-start)
-            start_tol_lower_point = start - distTolerance*(end-start)/la.norm(end-start)
-            end_tol_upper_point = end + distTolerance*(end-start)/la.norm(end-start)
-            end_tol_lower_point = end - distTolerance*(end-start)/la.norm(end-start)
+            start_tol_upper_point = start + distTolerance*(end-start)/linalg.norm(end-start)
+            start_tol_lower_point = start - distTolerance*(end-start)/linalg.norm(end-start)
+            end_tol_upper_point = end + distTolerance*(end-start)/linalg.norm(end-start)
+            end_tol_lower_point = end - distTolerance*(end-start)/linalg.norm(end-start)
             print(f"start_tol_upper_point: {start_tol_upper_point}")
             print(f"start: {start}")
             print(f"start_tol_lower_point: {start_tol_lower_point}")
@@ -963,10 +984,27 @@ class face:
             return None
         return np.where(np.isin(self.tapNo, tapNo))[0]
 
+    def getTapsInFence(self, fence, debug=False):
+        if self.tapCoord is None:
+            return None
+        fence = shp.Polygon(fence)
+        # localIdx = fence.contains(shp.MultiPoint(self.tapCoord))
+        tapIdx_inFace = []
+        tapIdx_inData = []
+        for i,tp in enumerate(self.tapCoord):
+            if debug:
+                print(f"tap {i}: {tp}")
+                print(f"tap {i} is in fence: {fence.contains(shp.Point(tp))}")
+            if fence.contains(shp.Point(tp)):
+                tapIdx_inFace.append(i)
+                tapIdx_inData.append(self.tapIdx[i])
+        return tapIdx_inFace, tapIdx_inData
+
     """--------------------------------- Plotters -------------------------------------"""
-    def plotEdges(self, ax=None, showName=True, drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0,
+    def plotEdges(self, ax=None, showName=True, drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0, fill=False, 
                   kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'}, 
                   kwargs_Name={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.3]},
+                  kwargs_Fill={'facecolor':[0.8,0.8,0.8,0.3], 'edgecolor':'None', 'lw':0.5, 'ls':'-'},
                   ):
         newFig = False
         if ax is None:
@@ -975,6 +1013,8 @@ class face:
             ax = fig.add_subplot()
         xy = np.array(self.verticesPlt)
         ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
+        if fill:
+            ax.fill(xy[:,0], xy[:,1], **kwargs_Fill)
         if showName:
             txt = self.name
             txt = txt.replace('_', '\_')
@@ -1013,9 +1053,7 @@ class face:
         
         if newFig:
             ax.axis('equal')
-            
-            
-
+    
     def plotTaps(self, ax=None, tapsToPlot=None, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
                  kwargs_dots={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
                  kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
@@ -1568,7 +1606,7 @@ class Faces:
         for fc in self.memberFaces:
             fc.Refresh()
 
-    def tapIdxOf(self,tapNo) -> List[int]:
+    def tapIdxOf(self,tapNo,returnIdxInDataMatrixInstead=False) -> List[int]:
         tapNo = [tapNo,] if np.isscalar(tapNo) else tapNo
         tapNo = np.array(tapNo)
         allIdx = np.array(self.tapIdx)
@@ -1577,23 +1615,26 @@ class Faces:
             msg = f"The tapIdx (shape: {np.shape(allIdx)}) does not match the tapNo (shape: {np.shape(allTapNo)}) in this object."
             raise Exception(msg)
         
-        foundTapIdx = []
+        foundTaps_idxInDataMtx = []
+        foundTaps_idx = []
         notFoundTaps = []
         for t in tapNo:
             if t in allTapNo:
-                idx = np.where(allTapNo == t)[0][0]
-                foundTapIdx.append(idx)
+                localIdx = np.where(allTapNo == t)[0][0]
+                foundTaps_idx.append(localIdx)
+                foundTaps_idxInDataMtx.append(allIdx[localIdx])
             else:
                 notFoundTaps.append(t)
 
-        # foundTapIdx = allIdx[np.isin(allTapNo, tapNo).nonzero()[0]]
-        # notFoundTaps = tapNo[np.where(~np.isin(tapNo, allTapNo))[0]]
         if len(notFoundTaps) > 0:
             msg = f"ERROR: The following taps are not found in the object: {notFoundTaps}"
             raise Exception(msg)
-        if len(foundTapIdx) == 1:
-            return foundTapIdx[0]
-        return foundTapIdx
+        if len(foundTaps_idxInDataMtx) == 1:
+            return foundTaps_idxInDataMtx[0]
+        if returnIdxInDataMatrixInstead:
+            return foundTaps_idxInDataMtx
+        else:
+            return foundTaps_idx
 
     def writeToFile(self,file_basic, file_derived=None):
         getDerived = file_derived is not None
@@ -1629,8 +1670,9 @@ class Faces:
             self.memberFaces.append(mem)
 
     """--------------------------------- Plotters -------------------------------------"""
-    def plotEdges(self, ax=None, showName=True, 
+    def plotEdges(self, ax=None, showName=True, fill=False, 
                   kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'},
+                  kwargs_Fill={'facecolor':[0.8,0.8,0.8,0.3], 'edgecolor':'None', 'lw':0.5, 'ls':'-'},
                   ):
         newFig = False
         if ax is None:
@@ -1638,7 +1680,8 @@ class Faces:
             fig = plt.figure()
             ax = fig.add_subplot()
         for fc in self._memberFaces:
-            fc.plotEdges(ax=ax, showName=showName, kwargs_Edge=kwargs_Edge)
+            fc.plotEdges(ax=ax, showName=showName, fill=fill,
+                         kwargs_Edge=kwargs_Edge, kwargs_Fill=kwargs_Fill)
         if newFig:
             ax.axis('equal')
 
@@ -1875,112 +1918,360 @@ class samplingLine:
                 start_xy =None,
                 end_xy=None,
                 label: str=None,
-                dist_tolerance=1e-3,
+                fringeDistance=0.00001,
+                fringeDistanceMode: Literal['absolute','relative']='absolute',
                 iterpolationMethod: Literal['nearest','2D_interp']='nearest',
-                debug=False,
                 ):
         self.name = name
         self.parentFace: face = parentFace
         self.label: str= label
-        self.dist_tolerance = dist_tolerance
-        self.iterpolationMethod = iterpolationMethod
+        self.fringeDistance = fringeDistance
+        self.fringeDistanceMode: Literal['absolute','relative'] = fringeDistanceMode
+        self.iterpolationMethod: Literal['nearest','2D_interp'] = iterpolationMethod
         self.start_xy = start_xy
         self.end_xy = end_xy
-
-        self.origin = start_xy
-        vec = np.array([end_xy[0]-start_xy[0], end_xy[1]-start_xy[1]])
-        self.length = la.norm(vec)
-        vec = vec/la.norm(vec)
-        self.basisVectors = np.array([vec, np.array([-vec[1], vec[0]])])
         
-        
-        if debug:
-            print('origin: ', self.origin)
-            print('basisVectors: ', self.basisVectors)
-            
-            scl = 0.1*self.length
-            
-            fig = plt.figure(figsize=(10,10))
-            ax = fig.add_subplot()
-            self.parentFace.plotEdges(ax=ax, showName=False, kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'})
-            self.parentFace.plotTaps(ax=ax)
-            self.parentFace.plotTribs(ax=ax)
-            xy = np.array([self.start_xy, self.end_xy])
-            ax.plot(xy[:,0], xy[:,1], '-k', lw=1.0, marker='x', markersize=5,)
-            # plot the basis vectors and the origin (labelled) normalize the vector lengths to 0.1*length
-            ax.plot(self.origin[0], self.origin[1], 'ok', markersize=5)
-            ax.arrow(self.origin[0], self.origin[1], self.basisVectors[0,0]*scl, self.basisVectors[0,1]*scl, head_width=0.15*scl, head_length=0.3*scl, fc='r', ec='r')
-            ax.arrow(self.origin[0], self.origin[1], self.basisVectors[1,0]*scl, self.basisVectors[1,1]*scl, head_width=0.15*scl, head_length=0.3*scl, fc='b', ec='b')
-            ax.text(self.origin[0]+self.basisVectors[0,0]*scl*1.5, self.origin[1]+self.basisVectors[0,1]*scl*1.5, 
-                    '$\hat{e}_1$', ha='left', va='bottom', color='r', fontsize=24, backgroundcolor=[1,1,1,0.7])
-            ax.text(self.origin[0]+self.basisVectors[1,0]*scl*1.5, self.origin[1]+self.basisVectors[1,1]*scl*1.5, 
-                    '$\hat{e}_2$', ha='left', va='bottom', color='b', fontsize=24, backgroundcolor=[1,1,1,0.7])
-            ax.axis('equal')
-            plt.show()
-
-        # self.tapNo = []
-        # self.tapIdx = []
-        # self.L_tap = []
-        # self.d_vertices = []
-
-        # self._identifyTaps()
-
     def __str__(self):
         return 'Line name: '+self.name
     
-    def _identifyTaps(self):
-        if self.parentFace is None:
-            return
-        
-        self.tapNo, self.tapIdx, self.L_tap = self.parentFace.getNearestTapsToLine(self.start_xy, self.end_xy, distTolerance=self.dist_tolerance,
-                                                                                   debug=True)
-     
     @property
-    def fringe(self):
+    def origin(self):
+        return self.start_xy
+    
+    @property
+    def length(self):
+        if self.start_xy is None or self.end_xy is None:
+            return None
+        vec = np.array([self.end_xy[0]-self.start_xy[0], self.end_xy[1]-self.start_xy[1]])
+        return linalg.norm(vec)
+    
+    @property
+    def basisVectors(self):
+        if self.start_xy is None or self.end_xy is None:
+            return None
+        vec = np.array([self.end_xy[0]-self.start_xy[0], self.end_xy[1]-self.start_xy[1]])
+        vec = vec/linalg.norm(vec)
+        return np.array([vec, np.array([-vec[1], vec[0]])])
+    
+    @property
+    def orientation(self):
+        if self.start_xy is None or self.end_xy is None:
+            return None
+        return np.arctan2(self.end_xy[1]-self.start_xy[1], self.end_xy[0]-self.start_xy[0])
+    
+    @property
+    def reverseBasisVectors(self):
+        if self.start_xy is None or self.end_xy is None:
+            return None
+        invBasis = [[self.basisVectors[0,0], -self.basisVectors[0,1]],
+                    [-self.basisVectors[1,0], self.basisVectors[1,1]]]
+        return invBasis
+    
+    @property
+    def fringeDistance_abs(self):
+        if self.fringeDistance is None or self.start_xy is None or self.end_xy is None:
+            return None
+        if self.fringeDistanceMode == 'absolute':
+            return self.fringeDistance
+        elif self.fringeDistanceMode == 'relative':
+            return self.fringeDistance*self.length
+        else:
+            raise Exception('Invalid fringeDistanceMode. Valid options are: absolute, relative.')
+    
+    @property
+    def fringeZone_localCoord(self):
         # a polygon object of a rectangle that defines the boundary of the line to snatch taps from
-        pass
+        # coordinates are in the local coordinate system of the line
+        if self.start_xy is None or self.end_xy is None or self.fringeDistance is None:
+            return None
+        # the corners are fringeDistance above and below the local x-axis at the origin and the end of the line
+        f = self.fringeDistance_abs
+        L = self.length
+        return np.array([[0, f],
+                        [L, f],
+                        [L, -f],
+                        [0, -f],
+                        [0, f]])
+        
+    @property
+    def fringeZone_faceCoord(self):
+        if self.fringeDistance is None or self.start_xy is None or self.end_xy is None:
+            return None
+        x, y = self.fringeZone_localCoord[:,0], self.fringeZone_localCoord[:,1]
+        return self.toFaceCoords(x, y)
+       
+    @property
+    def tapIdx(self):
+        if self.parentFace is None:
+            return None
+        _, tapIdx_inData = self.parentFace.getTapsInFence(self.fringeZone_faceCoord)
+        return tapIdx_inData
+
+    @property
+    def tapIdx_inFace(self):
+        if self.parentFace is None:
+            return None
+        lclIdx, _ = self.parentFace.getTapsInFence(self.fringeZone_faceCoord)
+        return lclIdx
+       
+    @property
+    def tapNo(self):
+        if self.parentFace is None:
+            return None
+        return self.parentFace.tapNo[self.tapIdx_inFace]
        
     @property
     def tapCoord(self):
-        return self.parentFace.tapCoord[self.tapIdx]
+        return self.parentFace.tapCoord[self.tapIdx_inFace]
     
     @property
     def tapCoordPlt(self):
-        return self.parentFace.tapCoordPlt[self.tapIdx]
+        return self.parentFace.tapCoordPlt[self.tapIdx_inFace]
     
+    @property
+    def tapCoordLocal(self):
+        return self.toLocalCoords(self.tapCoord[:,0], self.tapCoord[:,1])
+    
+    @property
+    def tap_L(self):
+        if self.parentFace is None or self.tapCoordLocal is None:
+            return None
+        return self.tapCoordLocal[:,0]
+    
+    @property
+    def sortedIdx(self):
+        if self.tap_L is None:
+            return None
+        return np.argsort(self.tap_L)
+        
     @property
     def tapName(self):
         return self.parentFace.tapName[self.tapIdx]
     
-    def inLocalCoords(self, xy):
-        return np.dot(xy-self.origin, self.basisVectors)
+    '''-------------------------------- Data handlers ---------------------------------'''
+    def toLocalCoords(self, x, y):
+        e1 = self.basisVectors[0]
+        e2 = self.basisVectors[1]
+        x,y = tranform2D(x, y, self.origin, e1, e2, translateFirst=True,)
+        return np.array([x,y]).T
     
-    def plot(self, ax=None, showTaps=False, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0], plotParentFace=False,
-             kwargs_line={'color':'b', 'lw':1.0, 'ls':'-'},
-             kwargs_dots={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
-             kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},):
+    def toFaceCoords(self, x, y):
+        e1 = self.reverseBasisVectors[0]
+        e2 = self.reverseBasisVectors[1]
+        x,y = tranform2D(x, y, np.dot(-1,self.origin), e1, e2, translateFirst=False,)
+        return np.array([x,y]).T
+    
+    def faceCoordOf_L(self, L):
+        return self.toFaceCoords(L, np.zeros_like(L))        
+    
+    '''--------------------------------- Plotters -------------------------------------'''
+    def plotLine(self, ax=None, showName=True, 
+                addArrowHead=True, arrowPosition:Literal['start','middle','end']='end', arrowSize=0.001, arrowHeadSize=(None,None),
+                alignTextToLine=True, txtDistFromLine=0.0,
+                kwargs_Edge={'color':'k', 'lw':1.2, 'ls':'-', 'marker':'x', 'markersize':3}, 
+                kwargs_Name={'ha':'center', 'va':'bottom', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'medium', },
+                kwargs_Arrow={'head_width':0.004, 'head_length':0.012, 'fc':'k', 'ec':'k','ls':'-','lw':1.0},
+                ):
         newFig = False
         if ax is None:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
         xy = np.array([self.start_xy, self.end_xy])
-        ax.plot(xy[:,0], xy[:,1], **kwargs_line)
-        if showTaps:
-            ax.plot(self.tapCoord[:,0],self.tapCoord[:,1],'.k',markersize=3)
-        if showTapNo:
-            for i,xyi in enumerate(self.tapCoord):
-                ax.text(xyi[0]+textOffset_tapNo[0], xyi[1]+textOffset_tapNo[1], str(self.tapNo[i]), **kwargs_text)
-        if showTapName:
-            for i,xyi in enumerate(self.tapCoord):
-                ax.text(xyi[0]+textOffset_tapName[0], xyi[1]+textOffset_tapName[1], str(self.tapName[i]), **kwargs_text)
-        if plotParentFace:
-            self.parentFace.plotEdges(ax=ax, showName=False, kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'})
+        ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
+        if addArrowHead:
+            if arrowPosition == 'start':
+                xy = xy[0,:]
+                vector = self.basisVectors[0,:]*arrowSize
+                kwargs_Arrow['head_starts_at_zero'] = True
+            elif arrowPosition == 'middle':
+                xy = self.toFaceCoords(self.length/2-linalg.norm(self.basisVectors[0,:])*arrowSize, 0)
+                vector = self.basisVectors[0,:]*arrowSize
+                kwargs_Arrow['length_includes_head'] = True
+            elif arrowPosition == 'end':
+                xy = xy[1,:]
+                vector = self.basisVectors[0,:]*arrowSize
+                xy = xy - vector
+                kwargs_Arrow['length_includes_head'] = True
+            else:
+                raise Exception('Invalid arrowPosition. Valid options are: start, middle, end.')
+            kwargs_Arrow['head_width'] = arrowHeadSize[0] if arrowHeadSize[0] is not None else kwargs_Arrow['head_width']
+            kwargs_Arrow['head_length'] = arrowHeadSize[1] if arrowHeadSize[1] is not None else kwargs_Arrow['head_length']
+            ax.arrow(xy[0], xy[1], vector[0], vector[1], 
+                     **kwargs_Arrow)
+            
+        if showName:
+            txt = self.name.replace('_', '\_')
+            rotation = np.rad2deg(self.orientation) if alignTextToLine else 0
+            txt_xy = self.toFaceCoords(self.length/2, txtDistFromLine)
+            ax.text(txt_xy[0], txt_xy[1], txt, rotation=rotation,
+                    **kwargs_Name)
         if newFig:
             ax.axis('equal')
-        return
-
-    def plotDefinition():
+    
+    def plotBasisVectors(self, ax=None,):
         pass
+    
+    def plotFringeZone(self, ax=None, fill=True, edges=False,
+                       kwargs_fill={'facecolor':[1,0,0,0.3], 'edgecolor':'None', 'lw':0.5, 'ls':'-'},
+                       ):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot()
+        xy = self.fringeZone_faceCoord
+        if fill:
+            kwargs_fill['facecolor'] = kwargs_fill['facecolor'] if 'facecolor' in kwargs_fill else [1,0,0,0.3]
+        if edges:
+            kwargs_fill['edgecolor'] = kwargs_fill['edgecolor'] if 'edgecolor' in kwargs_fill else 'k'
+            kwargs_fill['lw'] = kwargs_fill['lw'] if 'lw' in kwargs_fill else 0.5
+            kwargs_fill['ls'] = kwargs_fill['ls'] if 'ls' in kwargs_fill else '--'
+            
+        ax.fill(xy[:,0], xy[:,1], **kwargs_fill)
+        
+        if newFig:
+            ax.axis('equal')
+    
+    def plotTaps(self, ax=None, showTapNo=False, showTapName=False, connectToLine=True, showProjectedLocationInstead=False,
+                 textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
+                 kwargs_dots={'color':'r', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
+                 kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
+                 kwargs_connector={'color':'k', 'lw':0.5, 'ls':'--'},
+                 ):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot()
+            
+        xy = self.tapCoordPlt
+        xy_proj = self.toFaceCoords(self.tapCoordLocal[:,0], np.zeros_like(self.tapCoordLocal[:,0]))
+        if showProjectedLocationInstead:
+            xy = xy_proj
+        ax.plot(xy[:,0], xy[:,1], **kwargs_dots)
+        if showTapNo:
+            for i,xyi in enumerate(xy):
+                ax.text(xyi[0]+textOffset_tapNo[0], xyi[1]+textOffset_tapNo[1], str(self.tapNo[i]), **kwargs_text)
+        if showTapName:
+            for i,xyi in enumerate(xy):
+                ax.text(xyi[0]+textOffset_tapName[0], xyi[1]+textOffset_tapName[1], str(self.tapName[i]), **kwargs_text)
+        if connectToLine:
+            for i,(xyi, xyi_p) in enumerate(zip(xy, xy_proj)):
+                ax.plot([xyi[0], xyi_p[0]], [xyi[1], xyi_p[1]], **kwargs_connector)
+                
+        if newFig:
+            ax.axis('equal')
+    
+    def plot(self, ax=None, plotParentFace=True, detailed=False,
+             kwargs_line=None, kwargs_fringeZone=None, kwargs_taps=None, 
+             kwargs_faceEdge=None, kwargs_faceTaps=None):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot()
+        
+        if kwargs_line is None:
+            self.plotLine(ax=ax,)
+        else:
+            self.plotLine(ax=ax, **kwargs_line)
+            
+        if kwargs_taps is None:
+            self.plotTaps(ax=ax,)
+        else:
+            self.plotTaps(ax=ax, **kwargs_taps)
+        
+        if detailed:
+            if kwargs_fringeZone is None:
+                self.plotFringeZone(ax=ax,)
+            else:
+                self.plotFringeZone(ax=ax, **kwargs_fringeZone)
+                
+            self.plotBasisVectors(ax=ax,)
+                
+            if plotParentFace:
+                if kwargs_faceEdge is None:
+                    self.parentFace.plotEdges(ax=ax,)
+                else:
+                    self.parentFace.plotEdges(ax=ax, **kwargs_faceEdge)
+                if kwargs_faceTaps is None:
+                    self.parentFace.plotTaps(ax=ax, showTapNo=False, kwargs_dots={'color':'k', 'marker':'.', 'ms':1, 'ls':''})
+                else:
+                    self.parentFace.plotTaps(ax=ax, showTapNo=False, **kwargs_faceTaps)
+
+        if newFig:
+            ax.axis('equal')
+            ax.axis('off')
+
+class SamplingLines:
+    def __init__(self, 
+                lines: List[samplingLine]=[],
+                ):
+        self.lines: List[samplingLine] = lines
+        
+    def __str__(self):
+        return str([l.name for l in self.lines])
+    
+    @property
+    def tapIdx(self):
+        if self.parentFace is None:
+            return None
+        tapIdx = []
+        for l in self.lines:
+            tapIdx.extend(l.tapIdx[l.sortedIdx])
+        return tapIdx
+        
+    @property
+    def tapNo(self):
+        if self.parentFace is None:
+            return None
+        tapNo = []
+        for l in self.lines:
+            tapNo.extend(l.tapNo[l.sortedIdx])
+        return tapNo
+    
+    @property
+    def tap_L(self):
+        if self.parentFace is None:
+            return None
+        tap_L = []
+        cummulativeLength = 0
+        for l in self.lines:
+            L = l.tap_L[l.sortedIdx] + cummulativeLength
+            tap_L.extend(L)
+            cummulativeLength += l.length
+        return tap_L
+    
+    @property
+    def tapName(self):
+        if self.parentFace is None:
+            return None
+        tapName = []
+        for l in self.lines:
+            tapName.extend(l.tapName[l.sortedIdx])
+        return tapName
+    
+    '''-------------------------------- Data handlers ---------------------------------'''
+    
+    '''--------------------------------- Plotters -------------------------------------'''
+    def plot(self, ax=None, plotParentFace=True, detailed=False, 
+             kwargs_line=None, kwargs_fringeZone=None, kwargs_taps=None, 
+             kwargs_faceEdge=None, kwargs_faceTaps=None):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot()
+        
+        for l in self.lines:
+            l.plot(ax=ax, plotParentFace=plotParentFace, detailed=detailed,
+                   kwargs_line=kwargs_line, kwargs_fringeZone=kwargs_fringeZone, kwargs_taps=kwargs_taps, 
+                   kwargs_faceEdge=kwargs_faceEdge, kwargs_faceTaps=kwargs_faceTaps)
+        
+        if newFig:
+            ax.axis('equal')
+            ax.axis('off')
+
 
 
