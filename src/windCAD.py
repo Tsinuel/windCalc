@@ -453,7 +453,7 @@ class face:
     """---------------------------------- Internals -----------------------------------"""
     def __init__(self,
                 ID=None,
-                name=None,
+                name="Unnamed face",
                 faceType:Literal['roof','wall','other']=None,
                 note=None,
                 origin=None,
@@ -702,6 +702,18 @@ class face:
     @property
     def tapCoordPlt(self):
         return transform(self.tapCoord, self.origin_plt, self.basisVectors_plt)
+
+    @property
+    def orientation(self):
+        if self.basisVectors is None:
+            return None
+        return np.arctan2(self.basisVectors[1][1], self.basisVectors[1][0])
+    
+    @property
+    def orientation_plt(self):
+        if self.basisVectors_plt is None:
+            return None
+        return np.arctan2(self.basisVectors_plt[1][1], self.basisVectors_plt[1][0])
 
     @property
     def vertices3D(self):
@@ -1844,90 +1856,19 @@ class Faces:
             ax.axis('equal')
             ax.axis('off')
 
-class building(Faces):
-    """---------------------------------- Internals -----------------------------------"""
-    def __init__(self, 
-                name=None,
-                H=None,     # average roof height
-                He=None,    # eave height
-                Hr=None,    # ridge height 
-                B=None,     # shorter plan-inscribing-rectangle width
-                D=None,     # longer plan-inscribing-rectangle width
-                roofSlope=None,
-                lScl=1.0,   # length scale
-                valuesAreScaled=True, # weather or not the dimensions are scaled
-                faces: List[face]=[], 
-                tapNos: List[int]=[],
-                faces_file_basic=None, 
-                faces_file_derived=None,
-                ):
-        super().__init__(memberFaces=faces, tapNos=tapNos, file_basic=faces_file_basic, file_derived=faces_file_derived)
-        self.name = name
-        self.H = H
-        self.He = He
-        self.Hr = Hr
-        self.B = B
-        self.D = D
-        self.roofSlope = roofSlope
-        self.lScl = lScl
-        self.valuesAreScaled = valuesAreScaled
-    
-    def __str__(self):
-        return 'Building name: '+self.name+'\n'+super().__str__()
-    
-    """--------------------------------- Properties -----------------------------------"""
-    @property
-    def faces(self) -> List[face]:
-        return self._memberFaces
-    @faces.setter
-    def faces(self,value: List[face]) -> None:
-        self._memberFaces = value
-
-    """-------------------------------- Data handlers ---------------------------------"""
-    def writeToFile(self, file_basic, file_derived=None) -> None:
-        # write the basic building details to the file 
-        super().writeToFile(file_basic, file_derived)
-        # finally add derived things if any
-        pass
-
-    """--------------------------------- Plotters -------------------------------------"""
-    def plotBldg_3D(self, ax=None, figsize=(10,10), 
-                    showAxis=True, showTaps=False, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
-                    kwargs_taps={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
-                    kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
-                    ):
-        newFig = False
-        if ax is None:
-            newFig = True
-            fig = plt.figure(figsize=figsize)
-            ax = fig.add_subplot(projection='3d')
-        # for fc in self._memberFaces:
-        #     fc.plotEdges_3D(ax=ax, showName=False)
-        #     break
-        self._memberFaces[2].plotEdges_3D(ax=ax, showName=False)
-        self._memberFaces[3].plotEdges_3D(ax=ax, showName=False)
-            
-        ax.set_xlabel('x')
-        ax.set_ylabel('y')
-        ax.set_zlabel('z')
-
 class samplingLine:
     def __init__(self, 
-                name=None,
+                name="Unnamed line",
                 parentFace: face=None,
                 start_xy =None,
                 end_xy=None,
-                label: str=None,
                 fringeDistance=0.00001,
                 fringeDistanceMode: Literal['absolute','relative']='absolute',
-                iterpolationMethod: Literal['nearest','2D_interp']='nearest',
                 ):
         self.name = name
         self.parentFace: face = parentFace
-        self.label: str= label
         self.fringeDistance = fringeDistance
         self.fringeDistanceMode: Literal['absolute','relative'] = fringeDistanceMode
-        self.iterpolationMethod: Literal['nearest','2D_interp'] = iterpolationMethod
         self.start_xy = start_xy
         self.end_xy = end_xy
         
@@ -1937,6 +1878,12 @@ class samplingLine:
     @property
     def origin(self):
         return self.start_xy
+    
+    @property
+    def xy(self):
+        if self.start_xy is None or self.end_xy is None:
+            return None
+        return np.array([self.start_xy, self.end_xy], dtype=float)
     
     @property
     def length(self):
@@ -2001,11 +1948,11 @@ class samplingLine:
         return self.toFaceCoords(x, y)
        
     @property
-    def tapIdx(self):
+    def tapIdx_inData(self):
         if self.parentFace is None:
             return None
         _, tapIdx_inData = self.parentFace.getTapsInFence(self.fringeZone_faceCoord)
-        return tapIdx_inData
+        return np.asarray(tapIdx_inData, dtype=int)
 
     @property
     def tapIdx_inFace(self):
@@ -2025,28 +1972,52 @@ class samplingLine:
         return self.parentFace.tapCoord[self.tapIdx_inFace]
     
     @property
-    def tapCoordPlt(self):
-        return self.parentFace.tapCoordPlt[self.tapIdx_inFace]
-    
-    @property
     def tapCoordLocal(self):
         return self.toLocalCoords(self.tapCoord[:,0], self.tapCoord[:,1])
     
     @property
-    def tap_L(self):
+    def L(self):
         if self.parentFace is None or self.tapCoordLocal is None:
             return None
         return self.tapCoordLocal[:,0]
     
     @property
-    def sortedIdx(self):
-        if self.tap_L is None:
+    def sortOrder(self):
+        if self.L is None:
             return None
-        return np.argsort(self.tap_L)
+        return np.argsort(self.L)
         
     @property
     def tapName(self):
-        return self.parentFace.tapName[self.tapIdx]
+        return self.parentFace.tapName[self.tapIdx_inData]
+    
+    '''---------------------- Properties in plot coordinates --------------------------'''
+    @property
+    def xy_plt(self):
+        if self.start_xy is None or self.end_xy is None or self.parentFace is None:
+            return None
+        xy = np.array([self.start_xy, self.end_xy])
+        return self.toFaceCoords_plt(xy[:,0], xy[:,1])
+    
+    @property
+    def orientation_Plt(self):
+        if self.start_xy is None or self.end_xy is None or self.parentFace is None or self.parentFace.orientation_plt is None or self.parentFace.orientation is None:
+            return None
+        ori = self.orientation
+        # add the angle difference of the parent face between e1 (basis vector in x) and e1_plt (basis vector in x_plt)
+        ori += self.parentFace.orientation_plt - self.parentFace.orientation
+        return ori
+    
+    @property
+    def tapCoord_Plt(self):
+        return self.parentFace.tapCoordPlt[self.tapIdx_inFace]
+    
+    @property
+    def fringeZone_faceCoord_plt(self):
+        if self.fringeDistance is None or self.start_xy is None or self.end_xy is None:
+            return None
+        xy = self.fringeZone_faceCoord
+        return self.toFaceCoords_plt(xy[:,0], xy[:,1])
     
     '''-------------------------------- Data handlers ---------------------------------'''
     def toLocalCoords(self, x, y):
@@ -2055,10 +2026,21 @@ class samplingLine:
         x,y = tranform2D(x, y, self.origin, e1, e2, translateFirst=True,)
         return np.array([x,y]).T
     
-    def toFaceCoords(self, x, y):
-        e1 = self.reverseBasisVectors[0]
-        e2 = self.reverseBasisVectors[1]
+    def toFaceCoords(self, x, y, forPlot=False):
+        x, y = np.array(x), np.array(y)
+        e1, e2 = self.reverseBasisVectors[0], self.reverseBasisVectors[1]
         x,y = tranform2D(x, y, np.dot(-1,self.origin), e1, e2, translateFirst=False,)
+        if forPlot:
+            # return self.toFaceCoords_plt(np.array([x,y]).T)
+            return self.toFaceCoords_plt(x, y)
+        else:
+            return np.array([x,y]).T
+    
+    def toFaceCoords_plt(self, x, y):
+        x, y = np.array(x), np.array(y)
+        e1, e2 = self.parentFace.basisVectors_plt[0], self.parentFace.basisVectors_plt[1]
+        # return transform(xy, self.parentFace.origin_plt, self.parentFace.basisVectors_plt)
+        x, y = tranform2D(x, y, self.parentFace.origin_plt, e1, e2, translateFirst=True,)
         return np.array([x,y]).T
     
     def faceCoordOf_L(self, L):
@@ -2066,10 +2048,10 @@ class samplingLine:
     
     '''--------------------------------- Plotters -------------------------------------'''
     def plotLine(self, ax=None, showName=True, 
-                addArrowHead=True, arrowPosition:Literal['start','middle','end']='end', arrowSize=0.001, arrowHeadSize=(None,None),
-                alignTextToLine=True, txtDistFromLine=0.0,
+                addArrowHead=False, arrowPosition:Literal['start','middle','end']='end', arrowSize=0.0005, arrowHeadSize=(None,None),
+                alignTextToLine=False, txtDistFromLine=0.0,
                 kwargs_Edge={'color':'k', 'lw':1.2, 'ls':'-', 'marker':'x', 'markersize':3}, 
-                kwargs_Name={'ha':'center', 'va':'bottom', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'medium', },
+                kwargs_Name={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.8], 'fontsize':'medium', },
                 kwargs_Arrow={'head_width':0.004, 'head_length':0.012, 'fc':'k', 'ec':'k','ls':'-','lw':1.0},
                 ):
         newFig = False
@@ -2077,20 +2059,18 @@ class samplingLine:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        xy = np.array([self.start_xy, self.end_xy])
+        xy = self.xy_plt
         ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
         if addArrowHead:
+            vector = self.toFaceCoords_plt(self.basisVectors[0,0], self.basisVectors[0,1])*arrowSize
             if arrowPosition == 'start':
                 xy = xy[0,:]
-                vector = self.basisVectors[0,:]*arrowSize
                 kwargs_Arrow['head_starts_at_zero'] = True
             elif arrowPosition == 'middle':
-                xy = self.toFaceCoords(self.length/2-linalg.norm(self.basisVectors[0,:])*arrowSize, 0)
-                vector = self.basisVectors[0,:]*arrowSize
+                xy = self.toFaceCoords(self.length/2-linalg.norm(self.basisVectors[0,:])*arrowSize, 0, forPlot=True)
                 kwargs_Arrow['length_includes_head'] = True
             elif arrowPosition == 'end':
                 xy = xy[1,:]
-                vector = self.basisVectors[0,:]*arrowSize
                 xy = xy - vector
                 kwargs_Arrow['length_includes_head'] = True
             else:
@@ -2102,10 +2082,11 @@ class samplingLine:
             
         if showName:
             txt = self.name.replace('_', '\_')
-            rotation = np.rad2deg(self.orientation) if alignTextToLine else 0
-            txt_xy = self.toFaceCoords(self.length/2, txtDistFromLine)
+            rotation = np.rad2deg(self.orientation_Plt)  if alignTextToLine else 0
+            txt_xy = self.toFaceCoords((self.length/2,), (txtDistFromLine,), forPlot=True)[0]
             ax.text(txt_xy[0], txt_xy[1], txt, rotation=rotation,
                     **kwargs_Name)
+            
         if newFig:
             ax.axis('equal')
     
@@ -2120,7 +2101,7 @@ class samplingLine:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot()
-        xy = self.fringeZone_faceCoord
+        xy = self.fringeZone_faceCoord_plt
         if fill:
             kwargs_fill['facecolor'] = kwargs_fill['facecolor'] if 'facecolor' in kwargs_fill else [1,0,0,0.3]
         if edges:
@@ -2145,8 +2126,8 @@ class samplingLine:
             fig = plt.figure()
             ax = fig.add_subplot()
             
-        xy = self.tapCoordPlt
-        xy_proj = self.toFaceCoords(self.tapCoordLocal[:,0], np.zeros_like(self.tapCoordLocal[:,0]))
+        xy = self.tapCoord_Plt
+        xy_proj = self.toFaceCoords(self.tapCoordLocal[:,0], np.zeros_like(self.tapCoordLocal[:,0]), forPlot=True)
         if showProjectedLocationInstead:
             xy = xy_proj
         ax.plot(xy[:,0], xy[:,1], **kwargs_dots)
@@ -2213,46 +2194,65 @@ class SamplingLines:
     def __str__(self):
         return str([l.name for l in self.lines])
     
-    @property
-    def tapIdx(self):
-        if self.parentFace is None:
-            return None
+    def tapIdx(self, sortByL=True):
         tapIdx = []
         for l in self.lines:
-            tapIdx.extend(l.tapIdx[l.sortedIdx])
+            # print(f"Line {l.name}: l.tapIdx_inData: {l.tapIdx_inData}, type: {type(l.tapIdx_inData)}")
+            # print(f"Line {l.name}: l.sortOrder: {l.sortOrder}, type: {type(l.sortOrder)}")
+            # print(f"Line {l.name}: l.tapIdx_inData[l.sortOrder]: {np.asarray(l.tapIdx_inData)[l.sortOrder]}")
+            if sortByL:
+                tapIdx.extend(l.tapIdx_inData[l.sortOrder])
+            else:
+                tapIdx.extend(l.tapIdx_inData)
         return tapIdx
         
-    @property
-    def tapNo(self):
-        if self.parentFace is None:
-            return None
+    def tapNo(self, sortByL=True):
         tapNo = []
         for l in self.lines:
-            tapNo.extend(l.tapNo[l.sortedIdx])
+            if sortByL:
+                tapNo.extend(l.tapNo[l.sortOrder])
+            else:
+                tapNo.extend(l.tapNo)
         return tapNo
     
     @property
-    def tap_L(self):
-        if self.parentFace is None:
-            return None
+    def L(self):
         tap_L = []
         cummulativeLength = 0
         for l in self.lines:
-            L = l.tap_L[l.sortedIdx] + cummulativeLength
+            L = l.L[l.sortOrder] + cummulativeLength
             tap_L.extend(L)
             cummulativeLength += l.length
         return tap_L
     
     @property
-    def tapName(self):
-        if self.parentFace is None:
+    def joint_L(self):
+        jL = []
+        cummulativeLength = 0
+        for l in self.lines:
+            jL.append(cummulativeLength)
+            cummulativeLength += l.length
+        return jL
+    
+    @property
+    def length(self):
+        if len(self.lines) == 0:
             return None
+        return np.sum([l.length for l in self.lines])
+    
+    def tapName(self, sortByL=True):
         tapName = []
         for l in self.lines:
-            tapName.extend(l.tapName[l.sortedIdx])
+            if sortByL:
+                tapName.extend(l.tapName[l.sortOrder])
+            else:
+                tapName.extend(l.tapName)
         return tapName
     
     '''-------------------------------- Data handlers ---------------------------------'''
+    
+    def copy(self) -> 'SamplingLines':
+        return copy.deepcopy(self)
     
     '''--------------------------------- Plotters -------------------------------------'''
     def plot(self, ax=None, plotParentFace=True, detailed=False, 
@@ -2273,5 +2273,71 @@ class SamplingLines:
             ax.axis('equal')
             ax.axis('off')
 
+class building(Faces):
+    """---------------------------------- Internals -----------------------------------"""
+    def __init__(self, 
+                name="Unnamed building",
+                H=None,     # average roof height
+                He=None,    # eave height
+                Hr=None,    # ridge height 
+                B=None,     # shorter plan-inscribing-rectangle width
+                D=None,     # longer plan-inscribing-rectangle width
+                roofSlope=None,
+                lScl=1.0,   # length scale
+                valuesAreScaled=True, # weather or not the dimensions are scaled
+                faces: List[face]=[], 
+                tapNos: List[int]=[],
+                faces_file_basic=None, 
+                faces_file_derived=None,
+                ):
+        super().__init__(memberFaces=faces, tapNos=tapNos, file_basic=faces_file_basic, file_derived=faces_file_derived)
+        self.name = name
+        self.H = H
+        self.He = He
+        self.Hr = Hr
+        self.B = B
+        self.D = D
+        self.roofSlope = roofSlope
+        self.lScl = lScl
+        self.valuesAreScaled = valuesAreScaled
+    
+    def __str__(self):
+        return 'Building name: '+self.name+'\n'+super().__str__()
+    
+    """--------------------------------- Properties -----------------------------------"""
+    @property
+    def faces(self) -> List[face]:
+        return self._memberFaces
+    @faces.setter
+    def faces(self,value: List[face]) -> None:
+        self._memberFaces = value
+
+    """-------------------------------- Data handlers ---------------------------------"""
+    def writeToFile(self, file_basic, file_derived=None) -> None:
+        # write the basic building details to the file 
+        super().writeToFile(file_basic, file_derived)
+        # finally add derived things if any
+        pass
+
+    """--------------------------------- Plotters -------------------------------------"""
+    def plotBldg_3D(self, ax=None, figsize=(10,10), 
+                    showAxis=True, showTaps=False, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
+                    kwargs_taps={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
+                    kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
+                    ):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure(figsize=figsize)
+            ax = fig.add_subplot(projection='3d')
+        # for fc in self._memberFaces:
+        #     fc.plotEdges_3D(ax=ax, showName=False)
+        #     break
+        self._memberFaces[2].plotEdges_3D(ax=ax, showName=False)
+        self._memberFaces[3].plotEdges_3D(ax=ax, showName=False)
+            
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_zlabel('z')
 
 

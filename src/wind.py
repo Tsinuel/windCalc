@@ -23,6 +23,7 @@ from scipy.interpolate import interp1d
 from matplotlib.patches import Arc
 from matplotlib.patches import Patch
 from matplotlib.ticker import FuncFormatter
+from windCAD import SamplingLines
 
 # internal imports
 import windPlotting as wplt
@@ -2813,6 +2814,9 @@ class ESDU74:
             self.Z = np.sort(np.append(self.Z, self.Zref))
         # remove all Z values that are smaller than z0
         self.Z = self.Z[self.Z >= self.z0]
+        
+        print("Message from ESDU74: Functionality for uncertainty bounds is not implemented yet.")
+
 
     def __str__(self):
         return 'ESDU-74 (z0 = '+str(self.z0)+'m)'
@@ -3086,6 +3090,9 @@ class ESDU85:
         
         if not self.Zref in self.Z:
             self.Z = np.sort(np.append(self.Z, self.Zref))
+            
+        print("Message from ESDU85: Functionality for zero-plane displacement is not implemented yet.")
+        print("Message from ESDU85: Functionality for uncertainty bounds is not implemented yet.")
 
     def __str__(self):
         return 'ESDU-85 (z0 = '+str(self.z0)+'m)'
@@ -3342,7 +3349,7 @@ class ESDU85:
 #---------------------------- SURFACE PRESSURE ---------------------------------
 class faceCp(windCAD.face):
     def __init__(self, 
-                 ID=None, name=None, note=None, origin=None, basisVectors=None, origin_plt=None, basisVectors_plt=None, vertices=None, tapNo: List[int] = None, tapIdx: List[int] = None, tapName: List[str] = None, badTaps=None, allBldgTaps=None, tapCoord=None, zoneDict=None, nominalPanelAreas=None, numOfNominalPanelAreas=5, file_basic=None, file_derived=None):
+                 ID=None, name="Unnamed faceCp", note=None, origin=None, basisVectors=None, origin_plt=None, basisVectors_plt=None, vertices=None, tapNo: List[int] = None, tapIdx: List[int] = None, tapName: List[str] = None, badTaps=None, allBldgTaps=None, tapCoord=None, zoneDict=None, nominalPanelAreas=None, numOfNominalPanelAreas=5, file_basic=None, file_derived=None):
         super().__init__(ID, name, note, origin, basisVectors, origin_plt, basisVectors_plt, vertices, tapNo, tapIdx, tapName, badTaps, allBldgTaps, tapCoord, zoneDict, nominalPanelAreas, numOfNominalPanelAreas, file_basic, file_derived)
 
     @property
@@ -3352,10 +3359,10 @@ class faceCp(windCAD.face):
 class bldgCp(windCAD.building):
     def __init__(self, 
                 # Inputs for the base class
-                bldgName='myBuilding', H=None, He=None, Hr=None, B=None, D=None, roofSlope=None, lScl=1, valuesAreScaled=True, 
+                bldgName='Unnamed building', H=None, He=None, Hr=None, B=None, D=None, roofSlope=None, lScl=1, valuesAreScaled=True, 
                 faces: List[windCAD.face] = [], faces_file_basic=None, faces_file_derived=None, tapNos: List[int]=[],
                 # Inputs for the derived class
-                caseName='myBuilding_testCase',
+                caseName='Unnamed case',
                 notes_Cp=" ",
                 AoA_zero_deg_basisVector=None,
                 AoA_rotation_direction:Literal['CW','CCW']=None,
@@ -3378,6 +3385,8 @@ class bldgCp(windCAD.building):
                 peakSpecs=DEFAULT_PEAK_SPECS,
                 keepTH=True,
                 reScaleProfileToMatchUref=True,
+                # Inputs for mixed use between the base and derived classes
+                sampleLines={},
                 ):
         """
         This class handles the computation of building wind load by inheriting the windCAD.building 
@@ -3509,6 +3518,7 @@ class bldgCp(windCAD.building):
         self.CpStats = CpStats          # dict{nFlds:[N_AoA,Ntaps]}
         self.peakSpecs = peakSpecs
         self.CpStats_fields = CpStats_fields
+        self.sampleLines: Dict[SampleLinesCp] = sampleLines
 
         self.CpStatsAreaAvg = None      # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
         self.velRatio = None
@@ -4564,6 +4574,160 @@ class bldgCp(windCAD.building):
             plt.show()
             return fig, ax
 
+class line(windCAD.samplingLine):
+    def __init__(self,
+                 # parameters for windCAD.samplingLine
+                 name="Unnamed line",
+                 parentFaceCp: faceCp=None,
+                 start_xy =None,
+                 end_xy=None,
+                 fringeDistance=0.00001,
+                 fringeDistanceMode: Literal['absolute','relative']='absolute',
+                 # parameters for wind.samplingLine
+                 parentBldg: bldgCp=None,
+                 iterpolationMethod: Literal['nearest','2D_interp']='nearest',
+                 ):
+        super().__init__(name=name,
+                        parentFace=parentFaceCp,
+                        start_xy=start_xy,
+                        end_xy=end_xy,
+                        fringeDistance=fringeDistance,
+                        fringeDistanceMode=fringeDistanceMode,
+                        )
+        self.parentFace: faceCp = parentFaceCp
+        self.parentBldg: bldgCp = parentBldg
+        self.interpolationMethod: Literal['nearest','2D_interp'] = iterpolationMethod
+        
+    def CpStats(self, sortByL=False):
+        if self.parentFace is None or self.parentFace.CpStats is None:
+            return None
+        idx = self.tapIdx_inData[self.sortOrder] if sortByL else self.tapIdx_inData
+        if len(idx) == 0:
+            warnings.warn(f"Line {self.name} in face {self.parentFace.name} has no taps in the data. Returning None.")
+            return None
+        stats = {}
+        for fld in self.parentBldg.CpStats.keys():
+            stats[fld] = self.parentFace.CpStats[fld][:,idx]
+        return stats
+
+class SampleLinesCp(windCAD.SamplingLines):
+    def __init__(self, 
+                 name:str=None,
+                 lines:List[windCAD.samplingLine]=[],
+                 parentBldg:Union[bldgCp,None]=None,
+                 ) -> None:
+        super().__init__(lines=lines)
+        self.givenName = name
+        self.parentBldg = parentBldg
+        
+    @property
+    def name(self):
+        if self.givenName is not None:
+            return self.givenName
+        else:
+            name = ''
+            for i, line in enumerate(self.lines):
+                name += line.name
+                if i < len(self.lines)-1:
+                    name += '-'
+            return name
+        
+    @property
+    def L_norm(self):
+        if self.parentBldg is None:
+            return None
+        return self.L/self.parentBldg.H
+            
+    @property
+    def length_Norm(self):
+        if len(self.lines) == 0:
+            return None
+        return self.length/self.parentBldg.H
+    
+    @property
+    def joint_L_norm(self):
+        if self.parentBldg is None:
+            return None
+        return np.asarray(self.joint_L)/self.parentBldg.H
+    
+    def CpStat(self, sortByL=True):
+        if self.parentBldg is None or self.parentBldg.CpStats is None or len(self.lines) == 0:
+            return None
+        idx = self.tapIdx(sortByL=sortByL)
+        
+        stats = {}
+        for key in self.parentBldg.CpStats.keys():
+            stats[key] = self.parentBldg.CpStats[key][:,idx]
+        return stats
+    
+    def copy(self) -> SamplingLines:
+        return copy.deepcopy(self)
+    
+    '''--------------------------------- Plotters -------------------------------------'''
+    def plotCpStats(self, field, AoA, ax=None, figsize=[15,4], 
+                    normalize=True, label=None, showXLabel=True, showYLabel=True, xLabel=None, yLabel=None,
+                    plotLineJoints=True, showLineSegmentNames=True, lineSegNameY=0, showLineSegArrow=True,
+                    kwargs_plt={}, 
+                    kwargs_lineJoints={'color':'gray', 'linewidth':0.5, 'linestyle':'-'},
+                    kwargs_lineSegmentNames={'ha':'center', 'va':'center', 'bbox':{'facecolor':'w', 'alpha':0.8, 'pad':0.15, 'edgecolor':'none'}, 
+                                             'color':'k'},
+                    kwargs_arrow={'head_width':0.05, 'head_length':0.05, 'fc':'k', 'ec':'k', 'linewidth':0.5},
+                    ):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig, ax = plt.subplots()
+            fig.set_size_inches(figsize)
+        else:
+            fig = ax.get_figure()
+        
+        if normalize:
+            L = self.L_norm
+            xLabel = '$l/H$' if xLabel is None else xLabel
+        else:
+            L = self.L
+            xLabel = '$l$ $[m]$' if xLabel is None else xLabel
+            
+        aoaIdx = None
+        for i, aoa in enumerate(self.parentBldg.AoA):
+            if aoa == AoA:
+                aoaIdx = i
+                break
+        if aoaIdx is None:
+            raise Exception(f"Cannot find AoA={AoA} in the parent bldg. Available AoAs are: {self.parentBldg.AoA}")
+            
+        label = self.parentBldg.name if label is None else label
+        ax.plot(L, self.CpStat(sortByL=True)[field][aoaIdx,:], label=label, **kwargs_plt)
+        if showXLabel:
+            ax.set_xlabel(xLabel)
+        if showYLabel:
+            yLabel = fullName(field, abbreviate=True) if yLabel is None else yLabel
+            ax.set_ylabel(yLabel)
+            
+        if plotLineJoints:
+            L_joints = self.joint_L_norm if normalize else self.joint_L
+            for l in L_joints:
+                ax.axvline(l, **kwargs_lineJoints)
+        if showLineSegmentNames:
+            L_joints = self.joint_L_norm if normalize else self.joint_L
+            for i, line in enumerate(self.lines):
+                l_i = line.length/self.parentBldg.H if normalize else line.length
+                x = L_joints[i] + l_i/2
+                ax.text(x, lineSegNameY, line.name, **kwargs_lineSegmentNames)
+                # if showLineSegArrow:
+                #     x_start = L_joints[i]
+                #     x_end = L_joints[i] + l_i
+                #     y_start = lineSegNameY
+                #     y_end = lineSegNameY
+                #     # draw double-headed arrow
+                #     ax.arrow(x_start, y_start, x_end-x_start, y_end-y_start, **kwargs_arrow)
+                #     ax.arrow(x_end, y_end, x_start-x_end, y_start-y_end, **kwargs_arrow)
+        
+        if newFig:
+            ax.legend()
+            plt.show()
+    
+
 #------------------------------- COLLECTIONS -----------------------------------
 class Profiles:
     def __init__(self, profiles=[]):
@@ -4789,7 +4953,7 @@ class Profiles:
         kwargs_plt = [{} if kwargs_plt is None else kwargs_plt[i] for i in range(self.N)]
         
         if normalize and includeNormalizers:
-            print("Future feature: a table of normalizers like H, Uref, etc. next to the legend.")
+            print("Message from Profiles.plotProfile_basic2(): Future feature notice: a table of normalizers like H, Uref, etc. next to the legend.")
             print(f"          Location: {__file__}")
             print(f"          Function: {inspect.currentframe().f_code.co_name}")
             print(f"          Line number: {inspect.currentframe().f_lineno}")
