@@ -970,6 +970,11 @@ def readSurfacePressure(caseDir, probeName,
         pressure = np.load(outDir+probeName+"_pressure.npy")
         probes = np.load(outDir+probeName+"_probes.npy")
         time = np.load(outDir+probeName+"_time.npy")
+        if showLog:
+            print(f"      Shape of pressure data: {np.shape(pressure)}")
+            print(f"      Shape of probes data: {np.shape(probes)}")
+            print(f"      Shape of time data: {np.shape(time)}")
+            print("             << Done!")
    
     if showLog:
         print("             << Done!")

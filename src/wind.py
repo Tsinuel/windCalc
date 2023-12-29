@@ -3349,8 +3349,8 @@ class ESDU85:
 #---------------------------- SURFACE PRESSURE ---------------------------------
 class faceCp(windCAD.face):
     def __init__(self, 
-                 ID=None, name="Unnamed faceCp", note=None, origin=None, basisVectors=None, origin_plt=None, basisVectors_plt=None, vertices=None, tapNo: List[int] = None, tapIdx: List[int] = None, tapName: List[str] = None, badTaps=None, allBldgTaps=None, tapCoord=None, zoneDict=None, nominalPanelAreas=None, numOfNominalPanelAreas=5, file_basic=None, file_derived=None):
-        super().__init__(ID, name, note, origin, basisVectors, origin_plt, basisVectors_plt, vertices, tapNo, tapIdx, tapName, badTaps, allBldgTaps, tapCoord, zoneDict, nominalPanelAreas, numOfNominalPanelAreas, file_basic, file_derived)
+                 ID=None, name="Unnamed faceCp", note=None, origin=None, basisVectors=None, origin_plt=None, basisVectors_plt=None, vertices=None, tapNo: List[int] = None, tapIdx: List[int] = None, tapName: List[str] = None, tapCoord=None, zoneDict=None, nominalPanelAreas=None, numOfNominalPanelAreas=5, file_basic=None, file_derived=None):
+        super().__init__(ID, name, note, origin, basisVectors, origin_plt, basisVectors_plt, vertices, tapNo, tapIdx, tapName, tapCoord, zoneDict, nominalPanelAreas, numOfNominalPanelAreas, file_basic, file_derived)
 
     @property
     def Cf_N(self):
@@ -3376,12 +3376,12 @@ class bldgCp(windCAD.building):
                 fluidKinematicViscosity=1.48e-5,
                 AoA=None,
                 CpOfT=None,  # Cp TH referenced to Uref at Zref
-                badTaps=None, # tap numbers to remove
                 reReferenceCpToH=True, # whether or not to re-reference Cp to building height velocity
                 pOfT=None,
                 p0ofT=None,
                 CpStats=None,
                 CpStats_fields: Literal['mean','std','peak','peakMin','peakMax','skewness','kurtosis'] = ['mean','std','peak'],
+                computeAreaAveragedCpStats=True,
                 peakSpecs=DEFAULT_PEAK_SPECS,
                 keepTH=True,
                 reScaleProfileToMatchUref=True,
@@ -3452,8 +3452,6 @@ class bldgCp(windCAD.building):
                         fluid density, and Uref is the reference velocity. If both CpOfT
                         and pOfT are provided, then CpOfT is used. Defaults to None.
                         Shape: [N_AoA,Ntaps,Ntime]. 
-            badTaps (List[int], optional): 
-                        List of tap numbers to remove. Defaults to None.
             reReferenceCpToH (bool, optional): 
                         Whether or not to re-reference the Cp time history to the 
                         building height. Defaults to True.
@@ -3509,13 +3507,13 @@ class bldgCp(windCAD.building):
         self.AoA = [AoA,] if np.isscalar(AoA) else AoA          # [N_AoA]
         self.Uref = np.array([Uref_input for _ in AoA]) if np.isscalar(Uref_input) else Uref_input
         self.Uref_FS = Uref_FS
-        self.badTaps = badTaps
         self.AoA_zero_deg_basisVector = AoA_zero_deg_basisVector
         self.AoA_rotation_direction: Literal['CW','CCW'] = AoA_rotation_direction
         self.CpOfT = CpOfT      # [N_AoA,Ntaps,Ntime]
         self.pOfT = pOfT        # [N_AoA,Ntaps,Ntime]
         self.p0ofT = p0ofT      # [N_AoA,Ntime]
         self.CpStats = CpStats          # dict{nFlds:[N_AoA,Ntaps]}
+        self.computeAreaAveragedCpStats = computeAreaAveragedCpStats
         self.peakSpecs = peakSpecs
         self.CpStats_fields = CpStats_fields
         self.sampleLines: Dict[SampleLinesCp] = sampleLines
@@ -3523,7 +3521,7 @@ class bldgCp(windCAD.building):
         self.CpStatsAreaAvg = None      # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
         self.velRatio = None
 
-        self.__handleBadTaps()
+        # self.__handleBadTaps()
         if reReferenceCpToH:
             self.__reReferenceCp()
         elif self.Zref is None:
@@ -3900,8 +3898,39 @@ class bldgCp(windCAD.building):
         if self.CpOfT is not None:
             print(f"Computing Cp statistics ...")
             self.CpStats = get_CpTH_stats(self.CpOfT,axis=len(np.shape(self.CpOfT))-1,peakSpecs=self.peakSpecs, fields=self.CpStats_fields)
-        self.__computeAreaAveragedCp()
+        if self.computeAreaAveragedCpStats:
+            self.__computeAreaAveragedCp()
         print(f"Done refreshing {self.name}.\n")
+    
+    def RemoveBadTaps(self, badTaps, onlyFromData=False):
+        alreadyRemoved = self.RemovedBadTaps
+        copyOfBadTaps = badTaps.copy()
+        if alreadyRemoved is not None and not onlyFromData:
+            print(f"Already removed taps: {list(alreadyRemoved.keys())}")
+            print(f"Removing taps: {badTaps}")
+            for bt in badTaps:
+                if bt in list(alreadyRemoved.keys()):
+                    print(f"Tap {bt} has already been removed. Skipping it ...")
+                    copyOfBadTaps.remove(bt)
+        if len(copyOfBadTaps) == 0:
+            return
+        
+        if not onlyFromData:
+            idxInData = self.tapIdxOf(copyOfBadTaps, returnIdxInDataMatrixInstead=True).copy()
+            for fc in self.faces:
+                fc.RemoveBadTaps(copyOfBadTaps, idxInData)
+        else:
+            if alreadyRemoved is None:
+                raise Exception(f"There is no record of already removed taps. Cannot remove taps from data only.")
+            idxInData = [alreadyRemoved[tap]['IndexInData'] for tap in alreadyRemoved.keys()]
+        
+        if self.CpOfT is not None:
+            self.CpOfT = np.delete(self.CpOfT, idxInData, axis=1)
+        if self.pOfT is not None:
+            self.pOfT = np.delete(self.pOfT, idxInData, axis=1)
+        self.Refresh()
+        
+        return self.RemovedBadTaps
     
     def write(self):
         pass
@@ -3933,8 +3962,6 @@ class bldgCp(windCAD.building):
                     for _, fld in enumerate(self.CpStatsAreaAvg[f][z][a]):
                         if fld in SCALABLE_CP_STATS:
                             self.CpStatsAreaAvg[f][z][a][fld] = self.CpStatsAreaAvg[f][z][a][fld] * factor
-        
-                
     
     def CandCLoad_factor(self, format:Literal['NBCC','ASCE']='ASCE', debugMode=False,):
         if self.T is None or self.tScl is None or self.H is None or self.profile is None:
@@ -4573,6 +4600,92 @@ class bldgCp(windCAD.building):
             ax.axis('equal')
             plt.show()
             return fig, ax
+
+    def plotCpTimeHistories(self, figs=None, all_axes=None, addMarginDetails=False, 
+                            tapsToPlot=None, AoA=None,
+                            includeTapName=True,
+                            nCols=5, nRows=15, 
+                            xlim=None, 
+                            showPageNo=True, pageNo_xy=(0.5,0.1), figsize=[15,20], sharex=True, sharey=True,
+                            kwargs_plt={'linewidth':0.5, 'linestyle':'-', 'color':'k'},
+                            ):
+        if self.CpOfT is None:
+            raise Exception("CpOfT is not defined.")
+        if AoA is None:
+            AoA = self.AoA[0]
+        
+        tapIdxs = self.tapIdx if tapsToPlot is None else self.tapIdxOf(tapsToPlot)
+        tapIdxsInData = [self.tapIdx[i] for i in tapIdxs]
+        aoaIdx = self.AoA.index(AoA)
+        
+        xlim = [self.t[0], self.t[-1]] if xlim is None else xlim
+        
+        nPltPerPage = nCols * nRows
+        nPltTotal = len(tapIdxs)
+        nPages = int(np.ceil(nPltTotal/nPltPerPage))
+
+        tapPltCount = 0
+        tapIdx = tapIdxs[tapPltCount]
+        tapIdxDt = tapIdxsInData[tapPltCount]
+        
+        newFig = False
+        if figs is None:
+            newFig = True
+            addMarginDetails = True
+            figs = []
+            all_axes = []
+        for p in range(nPages):
+            if newFig:
+                fig, axs = plt.subplots(nRows, nCols, figsize=figsize, sharex=sharex, sharey=sharey)
+                all_axes.append(axs)
+                figs.append(fig)
+            else:
+                axs = all_axes[p]
+            for i in range(nRows*nCols):
+                if i >= len(tapIdxs):
+                    axs[np.unravel_index(i, axs.shape)].axis('off')
+                    continue
+                ax = axs[np.unravel_index(i, axs.shape)]
+                ax.plot(self.t, self.CpOfT[aoaIdx,tapIdxDt,:], **kwargs_plt)
+                ax.axhline(0, color='gray', linestyle='-', linewidth=0.3)
+                if includeTapName:
+                    if self.tapName is not None and self.tapName[tapIdx] != '':
+                        tapName = '('+self.tapName[tapIdx]+')'
+                    else:
+                        tapName = ''
+                else:
+                    tapName = ''
+                tag = str(self.tapNo[tapIdx]) + tapName
+                ax.annotate(tag, xy=(0,0), xycoords='axes fraction',xytext=(0.05, 0.05), textcoords='axes fraction',
+                            fontsize=12, ha='left', va='bottom', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.7))
+                ax.set_xlim(xlim)
+                
+                # ax.grid(which='both')
+                if addMarginDetails:
+                    formatAxis(ax, gridMajor=False)
+                
+                if i//nCols == nRows-1:
+                    ax.set_xlabel(mathName('T'))
+                if i%nCols == 0:
+                    ax.set_ylabel(r'$C_p$')
+                tapPltCount += 1
+                if tapPltCount < len(tapIdxs):
+                    tapIdx = tapIdxs[tapPltCount]
+                    tapIdxDt = tapIdxsInData[tapPltCount]
+                    
+            handles, labels = ax.get_legend_handles_labels()
+            if newFig or addMarginDetails:
+                pass
+            
+            if newFig:
+                text = f"Page {p+1} of {nPages}\n Case: {self.name}"
+                if showPageNo:
+                    plt.annotate(text, xy=pageNo_xy, xycoords='figure fraction', ha='center', va='top')
+                plt.show()
+        if newFig:
+            return figs, all_axes
+        else:
+            return None, None
 
 class line(windCAD.samplingLine):
     def __init__(self,
@@ -5358,7 +5471,7 @@ class Profiles:
         plt.show()
         return fig, ax
 
-class BldgCps():
+class BldgCps:
     def __init__(self,
                 memberBldgs:List[bldgCp]=[],
                 masterBldg:Union[bldgCp,None]=None,
@@ -5367,13 +5480,6 @@ class BldgCps():
         print(f"Number of member bldgs: {len(memberBldgs)}")
 
         self.master:bldgCp = memberBldgs[0] if masterBldg is None and len(memberBldgs) > 0 else masterBldg
-        # super().__init__(caseName=mb.name, H=mb.H, He=mb.He, Hr=mb.Hr, B=mb.B, D=mb.D, roofSlope=mb.roofSlope, lScl=mb.lScl, valuesAreScaled=mb.valuesAreScaled, faces=mb.memberFaces,
-        #                 # refProfile=mb.refProfile, samplingFreq=mb.samplingFreq, airDensity=mb.airDensity,
-        #                 # Zref_input=mb.Zref, Uref_input=mb.Uref, Uref_FS=mb.Uref_FS, badTaps=mb.badTaps, AoA=mb.AoA, AoA_zero_deg_basisVector=mb.AoA_zero_deg_basisVector, 
-        #                 # AoA_rotation_direction=mb.AoA_rotation_direction,
-        #                 # CpOfT=mb.CpOfT, pOfT=mb.pOfT, p0ofT=mb.p0ofT, CpStats=mb.CpStats, peakSpecs=mb.peakSpecs,
-        #                 )
-        # self.master = masterBldg
 
     def __fold(self):
         flds = self.master.CpStats.keys()
@@ -5655,7 +5761,7 @@ class BldgCps():
         plt.show()
         return fig, ax
 
-class validator():
+class validator:
     def __init__(self, 
                 target:Union[None, bldgCp, BldgCps]=None,
                 model:Union[None, bldgCp, BldgCps]=None,
@@ -6229,5 +6335,196 @@ class validator():
     
     def plotStats_on_lines(self):
         raise NotImplementedError
+
+class BldgCp_cummulative:
+    def __init__(self, 
+                mainBldg:bldgCp=None,
+                N_steps=None,
+                kwargs_bldgDef={},
+                ):
+        self.mainBldg:bldgCp = mainBldg
+        self.N_steps = N_steps
+        self.kwargs_bldgDef = kwargs_bldgDef
+        
+        self.subBldgs: List[bldgCp] = []
+        self.__CpStats = None
+        self.__CpStats_NormTmax = None
+        self.__CpStats_NormTmax_AoAavg = None
+        self.__CpStats_NormTmax_TapAvg = None
+        self.__CpStats_NormTmax_AoATapAvg = None
+        
+        self.Refresh()
+        
+    def __createSubBldgs(self,):
+        N_tot = self.mainBldg.N_t
+        n_step = int(np.floor(N_tot/self.N_steps))
+        print('***********************************************************************************************')
+        print(f"Creating {self.N_steps} sub-buildings with an increment of {n_step} time steps.")
+        print('-----------------------------------------------------------------------------------------------')
+        
+        if 'CpOfT' in self.kwargs_bldgDef.keys():
+            warnings.warn(f"Overwriting 'CpOfT' in kwargs_bldgDef")
+            self.kwargs_bldgDef.pop('CpOfT')
+        if 'keepTH' in self.kwargs_bldgDef.keys():
+            warnings.warn(f"Overwriting 'keepTH' in kwargs_bldgDef")
+            self.kwargs_bldgDef.pop('keepTH')
+        if 'bldgName' in self.kwargs_bldgDef.keys():
+            warnings.warn(f"Overwriting 'bldgName' in kwargs_bldgDef")
+            self.kwargs_bldgDef.pop('bldgName')
+        
+        self.subBldgs = []
+        for i in range(self.N_steps):
+            nmin = N_tot if i == self.N_steps-1 else (i+1)*n_step
+            T = self.mainBldg.dt * nmin
+            bldg = bldgCp(
+                    bldgName=self.mainBldg.name+f' ($T={T:.2f}$)',
+                    CpOfT=self.mainBldg.CpOfT[:,:,:nmin],
+                    keepTH=False,
+                    **self.kwargs_bldgDef,
+                    )
+            self.subBldgs.append(bldg)
+            print(f"    Created sub-building {i+1} of {self.N_steps}")
+            print(f"        T = {T:.2f} s")
+            print('-----------------------------------------------------------------------------------------------')
     
+    def __calculateInnerStats(self,):
+        print('  Calculating cumulative CpStats...')
+        self.__CpStats = {}
+        self.__CpStats_NormTmax = {}
+        self.__CpStats_NormTmax_AoAavg = {}
+        self.__CpStats_NormTmax_TapAvg = {}
+        self.__CpStats_NormTmax_AoATapAvg = {}
+        for key in self.subBldgs[0].CpStats.keys():
+            self.__CpStats[key] = np.array([bldg.CpStats[key] for bldg in self.subBldgs])
+            self.__CpStats_NormTmax[key] = np.divide(np.abs(self.__CpStats[key] - self.__CpStats[key][-1,...]), 
+                                                      np.abs(self.__CpStats[key][-1,...]))
+            self.__CpStats_NormTmax_AoAavg[key] = np.mean(self.__CpStats_NormTmax[key], axis=1)
+            self.__CpStats_NormTmax_TapAvg[key] = np.mean(self.__CpStats_NormTmax[key], axis=2)
+            self.__CpStats_NormTmax_AoATapAvg[key] = np.mean(self.__CpStats_NormTmax[key], axis=(1,2))
+            
+    
+    """-------------------------------- Properties ------------------------------------"""
+    @property
+    def T(self,):
+        return np.array([bldg.T for bldg in self.subBldgs])
+    
+    @property
+    def T_star(self,):
+        return np.array([bldg.T_star for bldg in self.subBldgs])
+    
+    @property
+    def T_star_AoAavg(self,):
+        return np.mean(self.T_star, axis=-1)
+    
+    @property
+    def CpStats(self,):
+        # cpStats = {}
+        # for key in self.subBldgs[0].CpStats.keys():
+        #     cpStats[key] = np.array([bldg.CpStats[key] for bldg in self.subBldgs])
+        # return cpStats
+        return self.__CpStats
+    
+    @property
+    def CpStats_NormTmax(self,):
+        # cpStats_raw = self.CpStats
+        # cpStats = {}
+        # for key in cpStats_raw.keys():
+        #     cpStats[key] = np.divide(np.abs(cpStats_raw[key] - cpStats_raw[key][-1,...]), 
+        #                              np.abs(cpStats_raw[key][-1,...]))
+        # return cpStats
+        return self.__CpStats_NormTmax
+    
+    @property
+    def CpStats_NormTmax_eqn(self,):
+        return r'$$\frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p(T_{max})\right|}$$'
+    
+    @property
+    def CpStats_NormTmax_AoAavg(self,):
+        # cpStats_raw = self.CpStats_NormTmax
+        # cpStats = {}
+        # for key in cpStats_raw.keys():
+        #     cpStats[key] = np.mean(cpStats_raw[key], axis=1)
+        # return cpStats
+        return self.__CpStats_NormTmax_AoAavg
+    
+    @property
+    def CpStats_NormTmax_AoAavg_eqn(self,):
+        return r'$$\frac{1}{N_{\theta}} \sum_{j=1}^{N_{\theta}} \left[ \frac{1}{N_{t}}\sum_{k=1}^{N_{t}} \left[ \frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p(T_{max})\right|}\right]\right]$$'
+    
+    @property
+    def CpStats_NormTmax_TapAvg(self,):
+        # cpStats_raw = self.CpStats_NormTmax
+        # cpStats = {}
+        # for key in cpStats_raw.keys():
+        #     cpStats[key] = np.mean(cpStats_raw[key], axis=2)
+        # return cpStats
+        return self.__CpStats_NormTmax_TapAvg
+    
+    @property
+    def CpStats_NormTmax_TapAvg_eqn(self,):
+        return r'$$\frac{1}{N_{taps}} \sum_{i=1}^{N_{taps}} \left[ \frac{1}{N_{t}}\sum_{k=1}^{N_{t}} \left[ \frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p(T_{max})\right|}\right]\right]$$'
+    
+    @property
+    def CpStats_NormTmax_AoATapAvg(self,):
+        # cpStats_raw = self.CpStats_NormTmax
+        # cpStats = {}
+        # for key in cpStats_raw.keys():
+        #     cpStats[key] = np.mean(cpStats_raw[key], axis=(1,2))
+        # return cpStats 
+        return self.__CpStats_NormTmax_AoATapAvg 
+    
+    @property
+    def CpStats_NormTmax_AoATapAvg_eqn(self,):
+        return r'$$\frac{1}{N_{\theta}} \sum_{j=1}^{N_{\theta}} \left[ \frac{1}{N_{taps}}\sum_{i=1}^{N_{taps}} \left[ \frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p(T_{max})\right|}\right]\right]$$'
+    
+    """---------------------------------- Methods -------------------------------------"""
+    def Refresh(self,):
+        self.__createSubBldgs()
+        self.__calculateInnerStats()
+        
+    """---------------------------------- Plots ---------------------------------------"""
+    def plot_CpStats_byTap(self, ax=None, figsize=[12,10], tapsToPlot=None, AoAsToPlot=None, fields=None,
+                           normalizeTime=True, normalizeCpStatsByTmax=True, 
+                           addLabels=False, addLegend=False,
+                           kwargs_plt={'color':'darkgray', 'marker':'', 'linestyle':'-', 'lw':0.5, 'alpha':0.5},):
+        newFig = False
+        tapsToPlot = self.mainBldg.tapNo if tapsToPlot is None else tapsToPlot
+        fields = self.mainBldg.CpStats.keys() if fields is None else fields
+        AoAsToPlot = self.mainBldg.AoA if AoAsToPlot is None else AoAsToPlot
+        if ax is None:
+            newFig = True
+            fig = plt.figure(figsize=figsize)
+            ax = fig.add_subplot()
+        else:
+            fig = ax.figure
+            
+        tapIdx = self.mainBldg.tapIdxOf(tapsToPlot)
+        if normalizeTime:
+            T = self.T_star
+            xlabel = mathName('T*')
+        else:
+            T = self.T
+            xlabel = mathName('T')
+        if normalizeCpStatsByTmax:
+            CpStats = self.CpStats_NormTmax
+            ylabel = r'$$\frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p(T_{max})\right|}$$'
+        else:
+            CpStats = self.CpStats
+            ylabel = r'$C_p(T)$'
+        
+        for _, fld in enumerate(fields):
+            for a, aoa in enumerate(AoAsToPlot):
+                for j, tIdx in enumerate(tapIdx):
+                    label = f'Tap {tapsToPlot[j]}, $\\theta={aoa}^\circ$, {mathName(fld)}' if addLabels else None
+                    ax.plot(T, CpStats[fld][:,a,tIdx], label=label, **kwargs_plt)
+        
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(ylabel)
+        if addLegend:
+            ax.legend()
+        
+        if newFig:
+            # fig.tight_layout()  
+            plt.show()
+            return fig, ax
     

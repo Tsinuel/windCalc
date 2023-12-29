@@ -464,8 +464,8 @@ class face:
                 tapNo: List[int]=None,
                 tapIdx: List[int]=None,
                 tapName: List[str]=None,
-                badTaps=None,
-                allBldgTaps=None,
+                # badTaps=None,
+                # allBldgTaps=None,
                 tapCoord=None,
                 zoneDict=None,
                 nominalPanelAreas=None,
@@ -543,10 +543,11 @@ class face:
 
         # Tap things
         self.tapNo: List[int] = tapNo                  # [Ntaps,]
-        self.tapNo_all = self.tapNo                    # includes the bad taps
+        # self.tapNo_all = self.tapNo                    # includes the bad taps
         self.tapIdx: List[int] = tapIdx                # [Ntaps,] tap indices in the main matrix of the entire building
         self.tapName: List[str] = tapName              # [Ntaps,]
-        self.badTaps: List[int] = badTaps
+        self.badTaps: List[int] = None
+        self.RemovedBadTaps: dict = None
         self.tapCoord = tapCoord            # [Ntaps,2]   ... from the local face origin
         
         # derived
@@ -559,7 +560,7 @@ class face:
         self.error_in_zones = None
 
         # fill derived
-        self.__handleBadTaps(allBldgTaps)
+        # self.__handleBadTaps(allBldgTaps)
         if file_basic is None:
             self.Refresh(showDetailedLog)
         elif file_derived is None:
@@ -819,6 +820,39 @@ class face:
         return errDict
 
     """-------------------------------- Data handlers ---------------------------------"""
+    def RemoveBadTaps(self, badTaps, idxInData):
+        self.RemovedBadTaps = {} if self.RemovedBadTaps is None else self.RemovedBadTaps
+        
+        thisFaceHasChanged = False
+        tapIdxList = list(self.tapIdx)
+        for bt,idxData in zip(badTaps, idxInData):
+            print(f"Face {self.name}: Removing bad tap {bt} with index in data {idxData} ...")
+            for i in range(len(tapIdxList)):
+                if tapIdxList[i] > idxData:
+                    # print(f"  ... data Index is higher than {self.tapIdx[i]} in face {self.name}")
+                    tapIdxList[i] -= 1
+            if bt in self.tapNo:
+                print(f"  ... found it in face {self.name}")
+                thisFaceHasChanged = True
+                idx = np.where(self.tapNo == bt)[0]
+                self.tapNo = np.delete(self.tapNo, idx)
+                tapIdxList = np.delete(tapIdxList, idx)
+                if self.tapName is not None:
+                    self.tapName = np.delete(self.tapName, idx)
+                self.tapCoord = np.delete(self.tapCoord, idx, axis=0)
+                self.RemovedBadTaps[bt] = {
+                                            'IndexInData': idxData,
+                                            'Face': self.name, 
+                                            'tapName': self.tapName[idx] if self.tapName is not None else '', 
+                                            'tapCoord': list(self.tapCoord[idx]) if self.tapCoord is not None else [],
+                                           }
+                    
+        self.tapIdx = tapIdxList
+        
+        if thisFaceHasChanged:
+            print(f"Removed bad taps from face {self.name}:\n\t{self.RemovedBadTaps}")
+            self.Refresh()
+    
     def Refresh(self, showDetailedLog=False):
         self.__generateTributaries(showDetailedLog)
         self.__generatePanels(showDetailedLog)
@@ -1348,11 +1382,11 @@ class face:
 class Faces:
     """---------------------------------- Internals -----------------------------------"""
     def __init__(self,
-                    memberFaces: List[face]=[],
-                    tapNos: List[int]=[],
-                    file_basic=None,
-                    file_derived=None,
-                    ):
+                memberFaces: List[face]=[],
+                tapNos: List[int]=[],
+                file_basic=None,
+                file_derived=None,
+                ):
         self._currentIndex = 0
         self._memberFaces: List[face] = memberFaces
         self.tapNo_all_lumped = tapNos
@@ -1436,6 +1470,21 @@ class Faces:
                 tapName_i = f.tapName
             tapName.extend(tapName_i)
         return tapName
+    
+    @property
+    def RemovedBadTaps(self) -> Dict[str, List[int]]:
+        if self._numOfMembers() == 0:
+            return None
+        removedTaps = {}
+        for f in self.memberFaces:
+            if f.RemovedBadTaps is None:
+                continue
+            for key in f.RemovedBadTaps:
+                if key in removedTaps.keys():
+                    raise ValueError(f"Key {key} already exists in the dictionary.")
+                removedTaps[key] = f.RemovedBadTaps[key]
+                
+        return removedTaps
     
     @property
     def NominalPanelArea(self) -> List[float]:
@@ -1680,6 +1729,14 @@ class Faces:
             else:
                 mem.from_dict(basic=basic[bsc],derived=derived[bsc])
             self.memberFaces.append(mem)
+
+    def copy(self):
+        newFaces = []
+        for fc in self.memberFaces:
+            newFaces.append(fc.copy())
+        return Faces(memberFaces=newFaces,
+                     tapNos=self.tapNo_all_lumped.copy(),
+                     )
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotEdges(self, ax=None, showName=True, fill=False, 
@@ -2318,6 +2375,9 @@ class building(Faces):
         super().writeToFile(file_basic, file_derived)
         # finally add derived things if any
         pass
+
+    def copy(self) -> 'building':
+        return copy.deepcopy(self)
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotBldg_3D(self, ax=None, figsize=(10,10), 
