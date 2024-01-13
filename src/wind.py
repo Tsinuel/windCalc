@@ -69,8 +69,8 @@ DEFAULT_VELOCITY_STAT_FIELDS = ['U','Iu','Iv','Iw','xLu','xLv','xLw','uw']
 PATH_SRC = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_RF = np.logspace(-5,3,400)
 VON_KARMAN_CONST = 0.4
-VALID_ERROR_TYPES = ['RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R^2']
-NORMALIZED_ERROR_TYPES = ['NMAE', 'NRMSE', 'RAE']
+VALID_ERROR_TYPES = ['RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', '$R^2$', 'Y-INTERCEPT', 'SLOPE']
+NORMALIZED_ERROR_TYPES = ['NMAE', 'NRMSE', 'RAE', 'SMAPE']
 with open(PATH_SRC+r'/refData/bluecoeff.json', 'r') as f:
     BLUE_COEFFS = json.load(f)
 
@@ -410,7 +410,7 @@ def LaTeXise(rawname):
     return rawname
 
 def measureError(cfd=None, exp=None, 
-                 errorTypes:Literal['all','RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', 'R^2',]=['RMSE','NRMSE','MAE','PCC','R^2'],
+                 errorTypes:Literal['all','RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', '$R^2$',]=['RMSE','NRMSE','MAE','PCC','$R^2$'],
                  returnEqn=False, cfdName='CFD', expName='Exp'):
     '''
     Parameters
@@ -461,16 +461,18 @@ def measureError(cfd=None, exp=None,
         raise Exception("Unknown error type(s): "+str(errorTypes))
     
     eqn = {
-        'RMSE': r'$RMSE = \sqrt{\frac{1}{N}\sum_{i=1}^{N}(' + cfdName + r'_i - ' + expName + r'_i)^2}$',
-        'MAE': r'$MAE = \frac{1}{N}\sum_{i=1}^{N}|' + cfdName + r'_i - ' + expName + r'_i|$',
-        'NMAE': r'$NMAE = \frac{1}{N}\sum_{i=1}^{N}\frac{\left|' + cfdName + r'_i - ' + expName + r'_i\right|}{' + expName + r'_{max} - ' + expName + r'_{min}}$',
-        'SMAPE': r'$SMAPE = \frac{1}{N}\sum_{i=1}^{N}\frac{|' + cfdName + r'_i - ' + expName + r'_i|}{(|' + cfdName + r'_i| + |' + expName + r'_i|)/2}$',
-        'MSLE': r'$MSLE = \frac{1}{N}\sum_{i=1}^{N}(\log(' + cfdName + r'_i + 1) - \log(' + expName + r'_i + 1))^2$',
-        'NRMSE': r'$NRMSE = \frac{\sqrt{\frac{1}{N}\sum_{i=1}^{N}(' + cfdName + r'_i - ' + expName + r'_i)^2}}{' + expName + r'_{max} - ' + expName + r'_{min}}$',
-        'RAE': r'$RAE = \frac{\sum_{i=1}^{N}|' + cfdName + r'_i - ' + expName + r'_i|}{\sum_{i=1}^{N}|' + expName + r'_i - \bar{' + expName + r'}|}$',
-        'MBD': r'$MBD = \frac{\sum_{i=1}^{N}(' + cfdName + r'_i - ' + expName + r'_i)}{\sum_{i=1}^{N}' + expName + r'_i}$',
-        'PCC': r'$PCC = \frac{\sum_{i=1}^{N}(' + cfdName + r'_i - \bar{' + cfdName + r'})(data_i - \bar{data})}{\sqrt{\sum_{i=1}^{N}(' + cfdName + r'_i - \bar{' + cfdName + r'})^2}\sqrt{\sum_{i=1}^{N}(data_i - \bar{data})^2}}$',
-        'R^2': r'$R^2 = 1 - \frac{\sum_{i=1}^{N}(' + cfdName + r'_i - ' + expName + r'_i)^2}{\sum_{i=1}^{N}(' + expName + r'_i - \bar{' + expName + r'})^2}$',
+        'RMSE': r'$$\textrm{RMSE} = \sqrt{\frac{1}{N}\sum_{i=1}^{N}(' + cfdName + r'_i - ' + expName + r'_i)^2}$$',
+        'MAE': r'$$\textrm{MAE} = \frac{1}{N}\sum_{i=1}^{N}|' + cfdName + r'_i - ' + expName + r'_i|$$',
+        'NMAE': r'$$\textrm{NMAE} = \frac{1}{N}\sum_{i=1}^{N}\frac{\left|' + cfdName + r'_i - ' + expName + r'_i\right|}{' + expName + r'_{max} - ' + expName + r'_{min}}$$',
+        'SMAPE': r'$$\textrm{SMAPE} = \frac{1}{N}\sum_{i=1}^{N}\frac{|' + cfdName + r'_i - ' + expName + r'_i|}{(|' + cfdName + r'_i| + |' + expName + r'_i|)/2}$$',
+        'MSLE': r'$$\textrm{MSLE} = \frac{1}{N}\sum_{i=1}^{N}(\log(' + cfdName + r'_i + 1) - \log(' + expName + r'_i + 1))^2$$',
+        'NRMSE': r'$$\textrm{NRMSE} = \frac{\sqrt{\frac{1}{N}\sum_{i=1}^{N}(' + cfdName + r'_i - ' + expName + r'_i)^2}}{' + expName + r'_{max} - ' + expName + r'_{min}}$$',
+        'RAE': r'$$\textrm{RAE} = \frac{\sum_{i=1}^{N}|' + cfdName + r'_i - ' + expName + r'_i|}{\sum_{i=1}^{N}|' + expName + r'_i - \bar{' + expName + r'}|}$$',
+        'MBD': r'$$\textrm{MBD} = \frac{\sum_{i=1}^{N}(' + cfdName + r'_i - ' + expName + r'_i)}{\sum_{i=1}^{N}' + expName + r'_i}$$',
+        'PCC': r'$$\textrm{PCC} = \frac{\sum_{i=1}^{N}(' + cfdName + r'_i - \bar{' + cfdName + r'})(data_i - \bar{data})}{\sqrt{\sum_{i=1}^{N}(' + cfdName + r'_i - \bar{' + cfdName + r'})^2}\sqrt{\sum_{i=1}^{N}(data_i - \bar{data})^2}}$$',
+        '$R^2$': r'$$R^2 = 1 - \frac{\sum_{i=1}^{N}(' + cfdName + r'_i - ' + expName + r'_i)^2}{\sum_{i=1}^{N}(' + expName + r'_i - \bar{' + expName + r'})^2}$$',
+        'Y-INTERCEPT': r'$$b \textrm{ in } y = mx + b$$',
+        'SLOPE': r'$$m \textrm{ in } y = mx + b$$',
     }
 
     if cfd is not None and exp is not None:
@@ -496,8 +498,12 @@ def measureError(cfd=None, exp=None,
                 error['PCC'] = pearsonr(cfd.flatten(), exp.flatten())[0]
             elif errorType == 'RAE':
                 error['RAE'] = np.sum(np.abs(cfd - exp)) / np.sum(np.abs(exp - np.mean(exp)))
-            elif errorType == 'R^2':
-                error['R^2'] = r2_score(exp, cfd)
+            elif errorType == '$R^2$':
+                error['$R^2$'] = r2_score(exp, cfd)
+            elif errorType == 'Y-INTERCEPT':
+                error['Y-INTERCEPT'] = np.mean(exp) - np.mean(cfd)
+            elif errorType == 'SLOPE':
+                error['SLOPE'] = np.cov(exp.flatten(), cfd.flatten())[0,1] / np.var(cfd.flatten())
             else:
                 raise Exception("Unknown error type: "+errorType)
     else:
@@ -2828,6 +2834,7 @@ class ESDU74:
         Z = self.Z if Z is None else Z
         return Z - self.d()
 
+    @property
     def f(self):
         # Coriolis parameter            ESDU 72026, section A.1
         return 2*self.__Omega*np.sin(np.radians(self.phi))
@@ -2842,10 +2849,10 @@ class ESDU74:
         if self.z0 is None or self.Uref is None or self.Zref is None or self.phi is None:
             return None
         else:
-            return np.divide(0.4*self.Uref, 2.303*np.log10(self.Zref/self.z0) + self.C()*self.f()*self.Zref)  # ESDU 72026, eq. A.2 (only for the lowest 200m)
+            return np.divide(0.4*self.Uref, 2.303*np.log10(self.Zref/self.z0) + self.C()*self.f*self.Zref)  # ESDU 72026, eq. A.2 (only for the lowest 200m)
 
     def C(self):
-        return -20.5858*np.log10(self.f()*self.z0) - 70.4644  # ESDU 72026, Figure A.2
+        return -20.5858*np.log10(self.f*self.z0) - 70.4644  # ESDU 72026, Figure A.2
 
     def checkZ(self,Z):
         if (Z > 200).any():
@@ -2853,7 +2860,7 @@ class ESDU74:
 
     def U(self,Z=None):
         Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
-        return np.multiply(self.uStar()/self.__k, 2.303*np.log10(Z/self.z0) + self.C()*self.f()*Z)    # ESDU 72026, eq. A.2 (only for the lowest 200m)
+        return np.multiply(self.uStar()/self.__k, 2.303*np.log10(Z/self.z0) + self.C()*self.f*Z)    # ESDU 72026, eq. A.2 (only for the lowest 200m)
 
     def lambda_(self):
         # ESDU 74031, eq. A.4b
@@ -2891,10 +2898,10 @@ class ESDU74:
     def uw(self,Z=None):
         Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
         sigU_sigW = self.Iu(Z)*self.Iw(Z)*np.power(self.U(Z),2)
-        Ro = np.divide(self.Ug(), self.f()*self.z0)
+        Ro = np.divide(self.Ug(), self.f*self.z0)
         Vstar_VG = np.divide(0.31, np.log10(Ro)) - 0.012
         alphaG = 58 - 5*np.log10(Ro)
-        return sigU_sigW * -0.16/(self.Fu(Z)*self.Fw(Z)) * (1-(self.f()*Z*np.sin(alphaG))/(self.Ug()*(Vstar_VG)**2))     # ESDU 74031, eq. A.10
+        return sigU_sigW * -0.16/(self.Fu(Z)*self.Fw(Z)) * (1-(self.f*Z*np.sin(alphaG))/(self.Ug()*(Vstar_VG)**2))     # ESDU 74031, eq. A.10
 
     def xLu(self,Z=None):
         Z = self.Zd(self.Z) if Z is None else self.Zd(Z)
@@ -3097,6 +3104,7 @@ class ESDU85:
     def __str__(self):
         return 'ESDU-85 (z0 = '+str(self.z0)+'m)'
 
+    @property
     def f(self):
         # Coriolis parameter            ESDU 82026, section A1
         return 2*self.__Omega*np.sin(np.radians(self.phi))
@@ -3106,11 +3114,12 @@ class ESDU85:
         if self.z0 is None or self.Uref is None or self.Zref is None or self.phi is None:
             return None
         else:
-            return (0.4*self.Uref - 34.5*self.f()*self.Zref)/(np.log(self.Zref/self.z0))
+            return (0.4*self.Uref - 34.5*self.f*self.Zref)/(np.log(self.Zref/self.z0))
     
+    @property
     def h(self):
-        # Boundary layer height         ESDU 82026, eq. A1.6
-        return self.uStar()/(6*self.f())
+        '''Boundary layer height. ESDU 82026, eq. A1.6'''
+        return self.uStar()/(6*self.f)
 
     def U(self,Z=None):
         Z = self.Z if Z is None else Z
@@ -3119,15 +3128,15 @@ class ESDU85:
         if Z is None or self.z0 is None or self.Uref is None or self.Zref is None:
             return None
         else:
-            return np.multiply(self.uStar()/0.4, (np.log(Z/self.z0) + 34.5*self.f()*Z/self.uStar())) # ESDU 82026, eq. A1.8. (Works for the lowest 300m)
+            return np.multiply(self.uStar()/0.4, (np.log(Z/self.z0) + 34.5*self.f*Z/self.uStar())) # ESDU 82026, eq. A1.8. (Works for the lowest 300m)
     
     def sigUbyUstar(self,Z=None):
         Z = self.Z if Z is None else Z
-        eta = 1 - np.divide(6*self.f()*Z, 
+        eta = 1 - np.divide(6*self.f*Z, 
                             self.uStar())
         p = eta**16
         return np.divide(7.5*eta * np.power(0.538 + 0.09*np.log(Z/self.z0), p),
-                                1 + 0.156*np.log(self.uStar()/(self.f()*self.z0)))      # ESDU 85020, eq. 4.2 
+                                1 + 0.156*np.log(self.uStar()/(self.f*self.z0)))      # ESDU 85020, eq. 4.2 
 
     def Iu(self,Z=None):
         Z = self.Z if Z is None else Z
@@ -3136,7 +3145,7 @@ class ESDU85:
 
     def sigVbySigU(self,Z=None):
         Z = self.Z if Z is None else Z
-        return 1 - 0.22 * np.power(np.cos(0.5*np.pi*np.divide(Z,self.h())) ,4)   # ESDU 85020, eq. 4.4
+        return 1 - 0.22 * np.power(np.cos(0.5*np.pi*np.divide(Z,self.h)) ,4)   # ESDU 85020, eq. 4.4
 
     def Iv(self,Z=None):
         Z = self.Z if Z is None else Z
@@ -3144,7 +3153,7 @@ class ESDU85:
 
     def sigWbySigU(self,Z=None):
         Z = self.Z if Z is None else Z
-        return 1 - 0.45 * np.power(np.cos(0.5*np.pi*np.divide(Z,self.h())) ,4)   # ESDU 85020, eq. 4.5
+        return 1 - 0.45 * np.power(np.cos(0.5*np.pi*np.divide(Z,self.h)) ,4)   # ESDU 85020, eq. 4.5
 
     def Iw(self,Z=None):
         Z = self.Z if Z is None else Z
@@ -3153,23 +3162,23 @@ class ESDU85:
     def uw(self,Z=None):
         Z = self.Z if Z is None else Z
         op1 = -1*np.multiply(np.multiply(self.Iu(Z),self.Iv(Z)), np.power(self.U(Z),2) )
-        op2 = np.divide(1 - 2*Z/self.h(),
+        op2 = np.divide(1 - 2*Z/self.h,
                           np.multiply(np.power(self.sigUbyUstar(Z),2), self.sigWbySigU(Z) ) )
         return np.multiply(op1,op2)     # ESDU 85020, eq. 4.7
     
     def A(self,Z=None):
         Z = self.Z if Z is None else Z
-        return 0.115 * np.power(1 + 0.315*np.power(1-Z/self.h(),6),2/3)   # ESDU 85020, eq. A2.15
+        return 0.115 * np.power(1 + 0.315*np.power(1-Z/self.h,6),2/3)   # ESDU 85020, eq. A2.15
 
     def xLu(self,Z=None):
         Z = self.Z if Z is None else Z
-        Ro = self.uStar()/(self.f()*self.z0) # Rosby number
+        Ro = self.uStar()/(self.f*self.z0) # Rosby number
         N = 1.24 * Ro**0.008    # ESDU 85020, eq. A2.21
         B = 24 * Ro**0.155      # ESDU 85020, eq. A2.20
         K0 = 0.39/(Ro**0.11)    # ESDU 85020, eq. A2.19
-        Kz = 0.19 - (0.19-K0)*np.exp(-1*B*np.power(Z/self.h(),N))    # ESDU 85020, eq. A2.18
+        Kz = 0.19 - (0.19-K0)*np.exp(-1*B*np.power(Z/self.h,N))    # ESDU 85020, eq. A2.18
         temp1 = np.multiply(np.power(self.A(Z),3/2), np.multiply(np.power(self.sigUbyUstar(Z),3), Z))
-        temp2 = np.multiply(2.5*np.power(Kz,3/2), np.multiply(np.power(1-Z/self.h(), 2), 1+5.75*Z/self.h() ))
+        temp2 = np.multiply(2.5*np.power(Kz,3/2), np.multiply(np.power(1-Z/self.h, 2), 1+5.75*Z/self.h ))
         return np.divide(temp1, temp2)      # ESDU 85020, eq. A2.14
 
     def xLv(self,Z=None):
@@ -3762,7 +3771,7 @@ class bldgCp(windCAD.building):
             for z, zone in enumerate(fc.zoneDict):
                 zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
                 area_z = []
-                for a, _ in enumerate(self.NominalPanelArea):
+                for a, _ in enumerate(self.panelArea_nominal):
                     area_z.extend(fc.panelAreas[z][a])
                 areas[zKey] = np.concatenate((areas[zKey], np.array(area_z)))
         return areas
@@ -3775,7 +3784,7 @@ class bldgCp(windCAD.building):
             for z, zone in enumerate(fc.zoneDict):
                 zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
                 val_z = []
-                for a, _ in enumerate(self.NominalPanelArea):
+                for a, _ in enumerate(self.panelArea_nominal):
                     val_z.append(np.min(np.array(self.CpStatsAreaAvg[f][z][a][fld]).flatten()))
                 if stats[zKey] == []:
                     stats[zKey] = np.array(val_z)
@@ -3791,7 +3800,7 @@ class bldgCp(windCAD.building):
             for z, zone in enumerate(fc.zoneDict):
                 zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
                 val_z = []
-                for a, _ in enumerate(self.NominalPanelArea):
+                for a, _ in enumerate(self.panelArea_nominal):
                     val_z.extend(np.min(np.array(self.CpStatsAreaAvg[f][z][a][fld]), axis=0))
                 stats[zKey].extend(val_z)
         return stats
@@ -3804,7 +3813,7 @@ class bldgCp(windCAD.building):
             for z, zone in enumerate(fc.zoneDict):
                 zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
                 val_z = []
-                for a, _ in enumerate(self.NominalPanelArea):
+                for a, _ in enumerate(self.panelArea_nominal):
                     val_z.append(np.max(np.array(self.CpStatsAreaAvg[f][z][a][fld]).flatten()))
                 if stats[zKey] == []:
                     stats[zKey] = np.array(val_z)
@@ -3820,7 +3829,7 @@ class bldgCp(windCAD.building):
             for z, zone in enumerate(fc.zoneDict):
                 zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
                 val_z = []
-                for a, _ in enumerate(self.NominalPanelArea):
+                for a, _ in enumerate(self.panelArea_nominal):
                     val_z.extend(np.max(np.array(self.CpStatsAreaAvg[f][z][a][fld]), axis=0))
                 stats[zKey].extend(val_z)
         return stats
@@ -3841,7 +3850,7 @@ class bldgCp(windCAD.building):
                     CpAavg[zone_m][2][fld] = None                
             else:
                 CpAavg[zone_m][2] = []
-                for a, _ in enumerate(self.faces[0].nominalPanelAreas):
+                for a, _ in enumerate(self.faces[0].panelAreas_nominal):
                     CpAavg[zone_m][2].append({})
                     for _, fld in enumerate(self.CpStatsAreaAvg[0][zm][0]):
                         CpAavg[zone_m][2][a][fld] = None
@@ -3865,7 +3874,7 @@ class bldgCp(windCAD.building):
         for f,fc in enumerate(self.faces):
             for z,zKey in enumerate(fc.zoneDictKeys):
                 zIdx = zNames.index(zKey)
-                for a,_ in enumerate(fc.nominalPanelAreas):
+                for a,_ in enumerate(fc.panelAreas_nominal):
                     for _, fld in enumerate(self.CpStatsAreaAvg[f][z][a]):
                         if mixNominalAreasFromAllZonesAndFaces:
                             if CpAavg[zIdx][2][fld] is None:
@@ -3885,8 +3894,8 @@ class bldgCp(windCAD.building):
             for zm, zone_m in enumerate(CpAavg):
                 CpAavg[zone_m][2] = {}
                 for _, fld in enumerate(self.CpStatsAreaAvg[0][zm][0]):
-                    CpAavg[zone_m][2][fld] = np.zeros_like(self.faces[0].nominalPanelAreas)
-                    for a, _ in enumerate(self.faces[0].nominalPanelAreas):
+                    CpAavg[zone_m][2][fld] = np.zeros_like(self.faces[0].panelAreas_nominal)
+                    for a, _ in enumerate(self.faces[0].panelAreas_nominal):
                         CpAavg[zone_m][2][fld][a] = np.squeeze(extremePerArea(__CpAavg[zone_m][2][a][fld]))
         return CpAavg
 
@@ -3916,10 +3925,12 @@ class bldgCp(windCAD.building):
             return
         
         if not onlyFromData:
+            print(f"Removing taps {copyOfBadTaps} from the building ...")
             idxInData = self.tapIdxOf(copyOfBadTaps, returnIdxInDataMatrixInstead=True).copy()
             for fc in self.faces:
                 fc.RemoveBadTaps(copyOfBadTaps, idxInData)
         else:
+            print(f"Removing taps {copyOfBadTaps} from the data only ...")
             if alreadyRemoved is None:
                 raise Exception(f"There is no record of already removed taps. Cannot remove taps from data only.")
             idxInData = [alreadyRemoved[tap]['IndexInData'] for tap in alreadyRemoved.keys()]
@@ -3958,7 +3969,7 @@ class bldgCp(windCAD.building):
         # self.CpStatsAreaAvg = [] # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
         for f,fc in enumerate(self.faces):
             for z, _ in enumerate(fc.zoneDict):
-                for a, _ in enumerate(self.NominalPanelArea):
+                for a, _ in enumerate(self.panelArea_nominal):
                     for _, fld in enumerate(self.CpStatsAreaAvg[f][z][a]):
                         if fld in SCALABLE_CP_STATS:
                             self.CpStatsAreaAvg[f][z][a][fld] = self.CpStatsAreaAvg[f][z][a][fld] * factor
@@ -3991,7 +4002,7 @@ class bldgCp(windCAD.building):
             return None
 
         zoneDictKeys = self.zoneDictKeys
-        area = {z: np.array(self.NominalPanelArea) for z in zoneDictKeys} if extremesPerNominalArea else self.allAreasForCpAavg
+        area = {z: np.array(self.panelArea_nominal) for z in zoneDictKeys} if extremesPerNominalArea else self.allAreasForCpAavg
         if extremesPerNominalArea:
             peakMax = self.CpAavg_envMax_peakMax_maxPerA
             peakMin = self.CpAavg_envMin_peakMin_minPerA
@@ -4053,11 +4064,11 @@ class bldgCp(windCAD.building):
                             cols = ['r','k','b','g','m','r','k','b','g','m'],
                             mrkrs = ['v','o','^','s','p','d','.','*','<','>','h'], 
                             ls=['-','-','-','-','-','-','-','-','-','-',],
-                            hlinesAt=[-1,0,1],
+                            drawHlines=True, hlinesAt=[-1,0,1], showTapNo=True,
                             mrkrSize=2,
                             kwargs_perFld=None, 
                             simpleLabel=True,
-                            xticks=None, nAoA_ticks=5, xlim=None, 
+                            xticks=None, nAoA_ticks=5, xlim=None, includeInLegend=True,
                             legend_bbox_to_anchor=(0.5, 0.905), showPageNo=True, pageNo_xy=(0.5,0.1), figsize=[15,20], sharex=True, sharey=True,
                             overlayThis=None, overlay_AoA=None, overlayLabel=None, kwargs_overlay=None,
                             kwargs_axFrmt={},
@@ -4104,12 +4115,17 @@ class bldgCp(windCAD.building):
                     break
                 ax = axs[i//nCols,i%nCols]
                 for f,fld in enumerate(fields):
-                    label = fullName(fld) if simpleLabel else self.name+': '+fullName(fld,abbreviate=True)
+                    if includeInLegend:
+                        label = fullName(fld) if simpleLabel else self.name+': '+fullName(fld,abbreviate=True)
+                    else:
+                        label = None
+                    # print(f"The label for {self.name}, field {fld} is {label}")
                     factor = scaleFactor if fld in SCALABLE_CP_STATS else 1.0
                     ax.plot(self.AoA, self.CpStats[fld][:,tapIdxDt]*factor, label=label, **kwargs_perFld[f])
                     if overlayThis is not None:
                         ax.plot(overlay_AoA, overlayThis[fld][:,tapPltCount], label=overlayLabel+' ('+fld+')', **kwargs_overlay[f])
-                ax.hlines(hlinesAt,0,360,**kwargs_hlines)
+                if drawHlines:
+                    ax.hlines(hlinesAt,0,360,**kwargs_hlines)
                 if includeTapName:
                     if self.tapName is not None and self.tapName[tapIdx] != '':
                         tapName = '('+self.tapName[tapIdx]+')'
@@ -4117,9 +4133,10 @@ class bldgCp(windCAD.building):
                         tapName = ''
                 else:
                     tapName = ''
-                tag = str(self.tapNo[tapIdx]) + tapName
-                ax.annotate(tag, xy=(0,0), xycoords='axes fraction',xytext=(0.05, 0.05), textcoords='axes fraction',
-                            fontsize=12, ha='left', va='bottom', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.7))
+                if showTapNo:
+                    tag = str(self.tapNo[tapIdx]) + tapName
+                    ax.annotate(tag, xy=(0,0), xycoords='axes fraction',xytext=(0.05, 0.05), textcoords='axes fraction',
+                                fontsize=12, ha='left', va='bottom', bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.7))
                 ax.set_ylim(fldRange)
                 if xlim is not None:
                     min_AoA, max_AoA = xlim
@@ -4248,7 +4265,7 @@ class bldgCp(windCAD.building):
         zoneDict = self.zoneDict
         zoneDictKeys = self.zoneDictKeys
         pnlA_all = self.panelAreas__to_be_redacted
-        pnlA_nom = np.array(self.NominalPanelArea)
+        pnlA_nom = np.array(self.panelArea_nominal)
         if plotExtremesPerNominalArea:
             areaAvgStats_min = self.CpStatsAreaAvgCollected(mixNominalAreasFromAllZonesAndFaces=True,envelope='min',extremesPerNominalArea='min')
             areaAvgStats_max = self.CpStatsAreaAvgCollected(mixNominalAreasFromAllZonesAndFaces=True,envelope='max',extremesPerNominalArea='max')
@@ -4381,9 +4398,16 @@ class bldgCp(windCAD.building):
         zoneDictKeys = self.zoneDictKeys
         # area = {z: np.array(self.NominalPanelArea, dtype=float)*areaFactor for z in zoneDictKeys} if plotExtremesPerNominalArea else {k: np.array(self.allAreasForCpAavg[k]*areaFactor, dtype=float) for k in self.allAreasForCpAavg.keys()}
         if plotExtremesPerNominalArea:
-            area = {z: np.array(self.NominalPanelArea, dtype=float)*areaFactor for z in zoneDictKeys}
+            # area = {z: np.array(self.panelArea_nominal, dtype=float)*areaFactor for z in zoneDictKeys}
+            area = {z: np.array(self.panelAreas_groupAvg[z], dtype=float)*areaFactor for z in zoneDictKeys}
             peakMax = self.CpAavg_envMax_peakMax_maxPerA
             peakMin = self.CpAavg_envMin_peakMin_minPerA
+            for z in zoneDictKeys:
+                # sort all three (area, peakMax, peakMin) by area
+                idx = np.argsort(area[z])
+                area[z] = area[z][idx]
+                peakMax[z] = peakMax[z][idx]
+                peakMin[z] = peakMin[z][idx]
         else:
             area = {k: np.array(self.allAreasForCpAavg[k]*areaFactor, dtype=float) for k in self.allAreasForCpAavg.keys()}
             peakMax = self.CpAavg_envMax_peakMax_allA
@@ -5536,7 +5560,7 @@ class BldgCps:
                 valueScaleFactor = bldg.CandCLoad_factor(debugMode=debugMode, format='ASCE')
             else:
                 raise Exception(f"Unknown CandCLoadFormat: {format}")
-            area = {z: np.array(bldg.NominalPanelArea) for z in zoneDictKeys} if extremesPerNominalArea else bldg.allAreasForCpAavg
+            area = {z: np.array(bldg.panelArea_nominal) for z in zoneDictKeys} if extremesPerNominalArea else bldg.allAreasForCpAavg
             if extremesPerNominalArea:
                 peakMax = bldg.CpAavg_envMax_peakMax_maxPerA
                 peakMin = bldg.CpAavg_envMin_peakMin_minPerA
@@ -5600,8 +5624,9 @@ class BldgCps:
                             mrkrs = ['^','o','v','s','p','d','.','*','<','>','h'], 
                             ls=['-','-','-','-','-','-','-','-','-','-',],
                             mrkrSize=2, lw=0.5, scaleFactors=1.0,
+                            drawHlines=True, hlinesAt=[-1,0,1], showTapNo=True,
                             kwargs_perFld=None, 
-                            xticks=None, nAoA_ticks=5, xlim=None, 
+                            xticks=None, nAoA_ticks=5, xlim=None, includeInLegend=None,
                             legend_bbox_to_anchor=(0.5, 0.905), nLgndCols=None, simpleLabel=False,
                             showPageNo=True, pageNo_xy=(0.5,0.1), 
                             figsize=[15,20], sharex=True, sharey=True,
@@ -5616,6 +5641,8 @@ class BldgCps:
                                 'linewidth':lw,
                                 } for i in range(len(fields))]
                                 for c in range(self.N_bldgs)] 
+        if includeInLegend is None:
+            includeInLegend = [True,]*self.N_bldgs
         
         tapIdxs = self.master.tapIdx if tapsToPlot is None else self.master.tapIdxOf(tapsToPlot)
 
@@ -5645,12 +5672,15 @@ class BldgCps:
             if i > 0:
                 overlayThis = None
                 addMarginDetails = False
+                includeTapName = False
+                drawHlines = False
+                showTapNo = False
             bldg.plotTapCpStatsPerAoA(figs=figs, all_axes=all_axes, addMarginDetails=addMarginDetails, scaleFactor=scaleFactors[i],
                                     fields=fields, fldRange=fldRange, tapsToPlot=tapsToPlot, includeTapName=includeTapName,
                                     kwargs_perFld=kwargs_perFld[i], 
-                                    simpleLabel=simpleLabel,
+                                    simpleLabel=simpleLabel, drawHlines=drawHlines, hlinesAt=hlinesAt, showTapNo=showTapNo,
                                     xticks=xticks, nAoA_ticks=nAoA_ticks, xlim=xlim, 
-                                    legend_bbox_to_anchor=legend_bbox_to_anchor, pageNo_xy=pageNo_xy,
+                                    legend_bbox_to_anchor=legend_bbox_to_anchor, pageNo_xy=pageNo_xy, includeInLegend=includeInLegend[i],
                                     overlayThis=overlayThis, overlay_AoA=overlay_AoA, overlayLabel=overlayLabel, kwargs_overlay=kwargs_overlay,
                                     nCols=nCols, nRows=nRows, kwargs_axFrmt=kwargs_axFrmt,
                                     )
@@ -5765,9 +5795,9 @@ class validator:
     def __init__(self, 
                 target:Union[None, bldgCp, BldgCps]=None,
                 model:Union[None, bldgCp, BldgCps]=None,
-                errorTypes_velStats = ['MAE', 'RMSE', 'NMAE', 'NRMSE'],  #['MAE', 'NRMSE', 'RMSE', 'R^2', 'SMAPE', 'PCC'],
-                errorTypes_CpStats = ['MAE', 'RMSE', 'NMAE', 'NRMSE'],  #['MAE', 'NRMSE', 'RMSE', 'R^2', 'SMAPE', 'PCC'],
-                errorTypes_CpAavg = ['MAE', 'RMSE', 'NMAE', 'NRMSE'],  #['MAE', 'NRMSE', 'RMSE', 'R^2', 'SMAPE', 'PCC'],
+                errorTypes_velStats = ['MAE', 'RMSE', 'NMAE', 'NRMSE'],  #['MAE', 'NRMSE', 'RMSE', '$R^2$', 'SMAPE', 'PCC'],
+                errorTypes_CpStats = ['MAE', 'RMSE', 'NMAE', 'NRMSE'],  #['MAE', 'NRMSE', 'RMSE', '$R^2$', 'SMAPE', 'PCC'],
+                errorTypes_CpAavg = ['MAE', 'RMSE', 'NMAE', 'NRMSE'],  #['MAE', 'NRMSE', 'RMSE', '$R^2$', 'SMAPE', 'PCC'],
                 extremesPerNominalArea=True,
                 CandCLoadFormat:Literal['default','NBCC','ASCE']='default',
                 combineMinAndMax = True,
@@ -5941,7 +5971,7 @@ class validator:
         zoneDictKeys = bldg_t.zoneDictKeys
         if zoneDictKeys != bldg_m.zoneDictKeys:
             raise Exception(f"Cannot compute CpAavg error. The zoneDictKeys of the target and model are not the same. Please check and make sure that all the tap layouts, averaging panel definitions, and other details are the same (except for the Cp data) between the target and model.")
-        area = {z: np.array(bldg_t.NominalPanelArea) for z in zoneDictKeys} if self.extremesPerNominalArea else bldg_t.allAreasForCpAavg
+        area = {z: np.array(bldg_t.panelArea_nominal) for z in zoneDictKeys} if self.extremesPerNominalArea else bldg_t.allAreasForCpAavg
         if self.extremesPerNominalArea:
             peakMax_t = bldg_t.CpAavg_envMax_peakMax_maxPerA
             peakMin_t = bldg_t.CpAavg_envMin_peakMin_minPerA
@@ -6078,6 +6108,7 @@ class validator:
 
     def plotError_CpStats_perAoA(self, fig=None, axs=None, figsize_per_ax=[4,4], AoA_list=None,
                           errorTypePerField:dict={'mean':'RMSE', 'std':'RMSE', 'peakMax':'RMSE', 'peakMin':'RMSE'}, 
+                          showErrTxt:bool=True,
                           targetLabel='Target', modelLabel='Model', shareLabel_x=True, shareLabel_y=True,
                           percentLinesAt=[10,30], percentLinesAt_kwargs=None, abbreviateFldNames=True,
                           AoA_txt_loc=(-0.3, 0.5),
@@ -6124,13 +6155,14 @@ class validator:
                         self.model.CpStats[fld][self.aoaIdx_model[dIdx],self.tapIdx_model] * self.IuFctr, 
                         **kwargs_mainPlot)
 
-                errTxt = ''
-                for j, errType in enumerate(self.error_CpStats[fld]['perAoA'][aoa]):
-                    initPart = f"{errType} = $" if f == 0 and d == 0 else "$"
-                    errTxt += initPart + f"{self.error_CpStats[fld]['perAoA'][aoa][errType]:.3g}$"
-                    if j < len(self.error_CpStats[fld]['perAoA'][aoa])-1:
-                        errTxt += '\n'
-                ax.annotate(errTxt, **kwargs_annotation)
+                if showErrTxt:
+                    errTxt = ''
+                    for j, errType in enumerate(self.error_CpStats[fld]['perAoA'][aoa]):
+                        initPart = f"{errType} = $" if f == 0 and d == 0 else "$"
+                        errTxt += initPart + f"{self.error_CpStats[fld]['perAoA'][aoa][errType]:.3g}$"
+                        if j < len(self.error_CpStats[fld]['perAoA'][aoa])-1:
+                            errTxt += '\n'
+                    ax.annotate(errTxt, **kwargs_annotation)
 
                 xlim, ylim = ax.get_xlim(), ax.get_ylim()
                 xlim, ylim = ax.get_xlim(), ax.get_ylim()
@@ -6260,9 +6292,14 @@ class validator:
                                    errorType:List[Literal['MAE', 'RMSE', 'NMAE', 'NRMSE']]=None, plotNormalizedErrorsAsPercentage:bool=True, showErrEqn:bool=True,
                                    fields:List[str]=None,
                                    nPltCols:int=3, figsize_per_ax=[4,4], lumpAllAoAs:bool=False,
-                                   tLbl='BLWT', mLbl='LES', yLims:dict=None, cols=def_cols,
-                                   kwargs_annotation={'xy':(0.95, 0.95), 'xycoords':'axes fraction', 'ha':'right', 'va':'top', 'backgroundcolor':[1,1,1,0.5], 'fontsize':12},
+                                   showSubPlotLabels=True, subplotLabels=None, 
+                                   kwargs_subplotLabels={'xy':(0.03, 0.95), 'xycoords':'axes fraction', 'ha':'left', 'va':'top', 'backgroundcolor':[1,1,1,0.5], 'fontsize':14},
+                                   tLbl=r'\textrm{BLWT}', mLbl=r'\textrm{LES}', yLims:dict=None, cols=def_cols,
+                                   kwargs_errEqnTxt={'xy':(0.95, 0.95), 'xycoords':'axes fraction', 'ha':'right', 'va':'top', 'backgroundcolor':[1,1,1,0.5], 'fontsize':12},
                                    kwargs_legend={'loc':'best'},
+                                   kwargs_bar={ # add some border controls
+                                                'linewidth':0.5, 'edgecolor':'k',               
+                                                },
                                    ):
         errorType = self.errorTypes_CpStats if errorType is None else errorType
         fields = list(self.target.CpStats.keys()) if fields is None else fields
@@ -6270,6 +6307,10 @@ class validator:
         nErrTypes = len(errorType)
         nPltCols = min(nErrTypes, nPltCols)
         nPltRows = int(np.ceil(nErrTypes/nPltCols))
+        if type(kwargs_errEqnTxt) is dict:
+            kwargs_errEqnTxt = [kwargs_errEqnTxt for i in range(nErrTypes)]
+        if subplotLabels is None:
+            subplotLabels = [f'({chr(97+i)})' for i in range(nErrTypes)]
 
         newFig = False
         if fig is None:
@@ -6304,18 +6345,23 @@ class validator:
                         ax.plot(np.arange(nFlds), [self.error_CpStats[fld]['perAoA'][aoa][err]*nf for fld in fields], '.-')
                     elif plotType == 'bar':
                         ax.bar(barLocPerAoA + j*barWidthPerAoA, [self.error_CpStats[fld]['perAoA'][aoa][err]*nf for fld in fields],
-                                width=barWidthPerAoA, label=f'${aoa:5.1f}^\circ$', color=cols[j])
+                                width=barWidthPerAoA, label=f'${aoa:5.1f}^\circ$', color=cols[j], **kwargs_bar)
                         ax.set_xticks(np.arange(nFlds))
                         ax.set_xticklabels(fullName(fields,abbreviate=True))
 
             if showErrEqn:
-                ax.annotate(errorEqn[err], **kwargs_annotation)
+                ax.annotate(errorEqn[err], **kwargs_errEqnTxt[i])
+                
+            if showSubPlotLabels:
+                ax.annotate(subplotLabels[i], **kwargs_subplotLabels)
 
             if yLims is not None and err in yLims.keys():
                 ax.set_ylim(yLims[err])
 
             # ax.set_xlabel(targetLabel)
             ax.set_ylabel(err+ntxt)
+            # set the font size of the axis tick labels for x axis
+            ax.tick_params(axis='x', labelsize=12)
 
             if i == 0:
                 ax.legend(**kwargs_legend)
@@ -6352,6 +6398,10 @@ class BldgCp_cummulative:
         self.__CpStats_NormTmax_AoAavg = None
         self.__CpStats_NormTmax_TapAvg = None
         self.__CpStats_NormTmax_AoATapAvg = None
+        self.__CpStats_NormRange = None
+        self.__CpStats_NormRange_AoAavg = None
+        self.__CpStats_NormRange_TapAvg = None
+        self.__CpStats_NormRange_AoATapAvg = None
         
         self.Refresh()
         
@@ -6387,20 +6437,6 @@ class BldgCp_cummulative:
             print(f"        T = {T:.2f} s")
             print('-----------------------------------------------------------------------------------------------')
     
-    def __calculateInnerStats(self,):
-        print('  Calculating cumulative CpStats...')
-        self.__CpStats = {}
-        self.__CpStats_NormTmax = {}
-        self.__CpStats_NormTmax_AoAavg = {}
-        self.__CpStats_NormTmax_TapAvg = {}
-        self.__CpStats_NormTmax_AoATapAvg = {}
-        for key in self.subBldgs[0].CpStats.keys():
-            self.__CpStats[key] = np.array([bldg.CpStats[key] for bldg in self.subBldgs])
-            self.__CpStats_NormTmax[key] = np.divide(np.abs(self.__CpStats[key] - self.__CpStats[key][-1,...]), 
-                                                      np.abs(self.__CpStats[key][-1,...]))
-            self.__CpStats_NormTmax_AoAavg[key] = np.mean(self.__CpStats_NormTmax[key], axis=1)
-            self.__CpStats_NormTmax_TapAvg[key] = np.mean(self.__CpStats_NormTmax[key], axis=2)
-            self.__CpStats_NormTmax_AoATapAvg[key] = np.mean(self.__CpStats_NormTmax[key], axis=(1,2))
             
     
     """-------------------------------- Properties ------------------------------------"""
@@ -6426,61 +6462,99 @@ class BldgCp_cummulative:
     
     @property
     def CpStats_NormTmax(self,):
-        # cpStats_raw = self.CpStats
-        # cpStats = {}
-        # for key in cpStats_raw.keys():
-        #     cpStats[key] = np.divide(np.abs(cpStats_raw[key] - cpStats_raw[key][-1,...]), 
-        #                              np.abs(cpStats_raw[key][-1,...]))
-        # return cpStats
         return self.__CpStats_NormTmax
+    
+    @property
+    def CpStats_NormTmax_AoAavg(self,):
+        return self.__CpStats_NormTmax_AoAavg
+    
+    @property
+    def CpStats_NormTmax_TapAvg(self,):
+        return self.__CpStats_NormTmax_TapAvg
+    
+    @property
+    def CpStats_NormTmax_AoATapAvg(self,):
+        return self.__CpStats_NormTmax_AoATapAvg 
+    
+    @property
+    def CpStats_NormRange(self,):
+        return self.__CpStats_NormRange
+    
+    @property
+    def CpStats_NormRange_AoAavg(self,):
+        return self.__CpStats_NormRange_AoAavg
+    
+    @property
+    def CpStats_NormRange_TapAvg(self,):
+        return self.__CpStats_NormRange_TapAvg
+    
+    @property
+    def CpStats_NormRange_AoATapAvg(self,):
+        return self.__CpStats_NormRange_AoATapAvg
     
     @property
     def CpStats_NormTmax_eqn(self,):
         return r'$$\frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p(T_{max})\right|}$$'
     
     @property
-    def CpStats_NormTmax_AoAavg(self,):
-        # cpStats_raw = self.CpStats_NormTmax
-        # cpStats = {}
-        # for key in cpStats_raw.keys():
-        #     cpStats[key] = np.mean(cpStats_raw[key], axis=1)
-        # return cpStats
-        return self.__CpStats_NormTmax_AoAavg
-    
-    @property
     def CpStats_NormTmax_AoAavg_eqn(self,):
         return r'$$\frac{1}{N_{\theta}} \sum_{j=1}^{N_{\theta}} \left[ \frac{1}{N_{t}}\sum_{k=1}^{N_{t}} \left[ \frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p(T_{max})\right|}\right]\right]$$'
-    
-    @property
-    def CpStats_NormTmax_TapAvg(self,):
-        # cpStats_raw = self.CpStats_NormTmax
-        # cpStats = {}
-        # for key in cpStats_raw.keys():
-        #     cpStats[key] = np.mean(cpStats_raw[key], axis=2)
-        # return cpStats
-        return self.__CpStats_NormTmax_TapAvg
     
     @property
     def CpStats_NormTmax_TapAvg_eqn(self,):
         return r'$$\frac{1}{N_{taps}} \sum_{i=1}^{N_{taps}} \left[ \frac{1}{N_{t}}\sum_{k=1}^{N_{t}} \left[ \frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p(T_{max})\right|}\right]\right]$$'
     
     @property
-    def CpStats_NormTmax_AoATapAvg(self,):
-        # cpStats_raw = self.CpStats_NormTmax
-        # cpStats = {}
-        # for key in cpStats_raw.keys():
-        #     cpStats[key] = np.mean(cpStats_raw[key], axis=(1,2))
-        # return cpStats 
-        return self.__CpStats_NormTmax_AoATapAvg 
-    
-    @property
     def CpStats_NormTmax_AoATapAvg_eqn(self,):
         return r'$$\frac{1}{N_{\theta}} \sum_{j=1}^{N_{\theta}} \left[ \frac{1}{N_{taps}}\sum_{i=1}^{N_{taps}} \left[ \frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p(T_{max})\right|}\right]\right]$$'
     
+    @property
+    def CpStats_NormRange_eqn(self,):
+        return r'$$\frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p^{max}(T_{max}) - C_p^{min}(T_{max})\right|}$$'
+    
+    @property
+    def CpStats_NormRange_AoAavg_eqn(self,):
+        return r'$$\frac{1}{N_{\theta}} \sum_{j=1}^{N_{\theta}} \left[ \frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p^{max}(T_{max}) - C_p^{min}(T_{max})\right|}\right]$$'
+    
+    @property
+    def CpStats_NormRange_TapAvg_eqn(self,):
+        return r'$$\frac{1}{N_{taps}} \sum_{i=1}^{N_{taps}} \left[ \frac{1}{N_{t}}\sum_{k=1}^{N_{t}} \left[ \frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p^{max}(T_{max}) - C_p^{min}(T_{max})\right|}\right]\right]$$'
+    
+    @property
+    def CpStats_NormRange_AoATapAvg_eqn(self,):
+        return r'$$\frac{1}{N_{\theta}} \sum_{j=1}^{N_{\theta}} \left[ \frac{1}{N_{taps}}\sum_{i=1}^{N_{taps}} \left[ \frac{\left|C_p(T) - C_p(T_{max})\right|}{\left|C_p^{max}(T_{max}) - C_p^{min}(T_{max})\right|}\right]\right]$$'
+    
     """---------------------------------- Methods -------------------------------------"""
+    def CalculateInnerStats(self,):
+        print('  Calculating cumulative CpStats...')
+        
+        self.__CpStats = {}
+        self.__CpStats_NormTmax = {}
+        self.__CpStats_NormTmax_AoAavg = {}
+        self.__CpStats_NormTmax_TapAvg = {}
+        self.__CpStats_NormTmax_AoATapAvg = {}
+        self.__CpStats_NormRange = {}
+        self.__CpStats_NormRange_AoAavg = {}
+        self.__CpStats_NormRange_TapAvg = {}
+        self.__CpStats_NormRange_AoATapAvg = {}
+        for key in self.subBldgs[0].CpStats.keys():
+            # get the difference between the maximum and minimum Cps across all dimensions of the matrix in self.mainBldg.CpStats[key]
+            absFieldRange = np.ptp(self.mainBldg.CpStats[key], axis=None)
+            self.__CpStats[key] = np.array([bldg.CpStats[key] for bldg in self.subBldgs])
+            self.__CpStats_NormTmax[key] = np.divide(np.abs(self.__CpStats[key] - self.__CpStats[key][-1,...]), 
+                                                      np.abs(self.__CpStats[key][-1,...]))
+            self.__CpStats_NormTmax_AoAavg[key] = np.mean(self.__CpStats_NormTmax[key], axis=1)
+            self.__CpStats_NormTmax_TapAvg[key] = np.mean(self.__CpStats_NormTmax[key], axis=2)
+            self.__CpStats_NormTmax_AoATapAvg[key] = np.mean(self.__CpStats_NormTmax[key], axis=(1,2))
+            self.__CpStats_NormRange[key] = np.divide(np.abs(self.__CpStats[key] - self.__CpStats[key][-1,...]),
+                                                         absFieldRange)
+            self.__CpStats_NormRange_AoAavg[key] = np.mean(self.__CpStats_NormRange[key], axis=1)
+            self.__CpStats_NormRange_TapAvg[key] = np.mean(self.__CpStats_NormRange[key], axis=2)
+            self.__CpStats_NormRange_AoATapAvg[key] = np.mean(self.__CpStats_NormRange[key], axis=(1,2))
+
     def Refresh(self,):
         self.__createSubBldgs()
-        self.__calculateInnerStats()
+        self.CalculateInnerStats()
         
     """---------------------------------- Plots ---------------------------------------"""
     def plot_CpStats_byTap(self, ax=None, figsize=[12,10], tapsToPlot=None, AoAsToPlot=None, fields=None,

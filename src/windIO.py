@@ -52,7 +52,7 @@ def extractTapDataFromVTK(vtkFile,tapCoords):
     # for i in range(nCells):
     #     pts = polydata.GetCell(i).GetPoints()    
     #     cell_i_vrtx = np.array([pts.GetPoint(i) for i in range(pts.GetNumberOfPoints())])
-    #     cellCenters[i,:] = np.mean(cell_i_vrtx,axis=0)
+    #     cellCenters[i,:] = np.mean(cell_i_vrtx,axis=0) 
 
     p = vtk_to_numpy(polydata.GetCellData().GetArray(0))
     return np.reshape(p[idx],[-1,1])

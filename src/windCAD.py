@@ -538,7 +538,7 @@ class face:
         self.basisVectors_plt = basisVectors_plt    # [[2,], [2,]] basis vectors of the local coord sys in 2D for plotting.
         self.vertices = np.array(vertices,dtype=float)            # [Nv, 2] face corners that form a non-self-intersecting polygon. No need to close it with the last edge.
         self.zoneDict = zoneDict            # dict of dicts: zone names per each zoning. e.g., [['NBCC-z1', 'NBCC-z2', ... 'NBCC-zM'], ['ASCE-a1', 'ASCE-a2', ... 'ASCE-aQ']]
-        self.nominalPanelAreas = nominalPanelAreas  # a vector of nominal areas to generate panels. The panels areas will be close but not necessarily exactly equal to these.
+        self.panelAreas_nominal = nominalPanelAreas  # a vector of nominal areas to generate panels. The panels areas will be close but not necessarily exactly equal to these.
         self.numOfNominalPanelAreas = numOfNominalPanelAreas
 
         # Tap things
@@ -599,20 +599,20 @@ class face:
         self.tapTribs = trimmedVoronoi(self.vertices, self.tapCoord, showLog=showDetailedLog)
 
     def __defaultZoneAndPanelConfig(self):
-        if self.zoneDict is None and self.nominalPanelAreas is None:
+        if self.zoneDict is None and self.panelAreas_nominal is None:
             return
         if self.zoneDict == {}:
             self.zoneDict = {
                                 0:['Default','Default', np.array(self.vertices)],
                         }
-        if self.nominalPanelAreas is None and self.zoneDict is not None:
+        if self.panelAreas_nominal is None and self.zoneDict is not None:
             bound = shp.Polygon(self.vertices)
             maxArea = bound.area
             minArea = maxArea
             for trib in self.tapTribs.geoms:
                 minArea = min((minArea, trib.area))
 
-            self.nominalPanelAreas = np.logspace(np.log10(minArea), np.log10(maxArea), self.numOfNominalPanelAreas)
+            self.panelAreas_nominal = np.logspace(np.log10(minArea), np.log10(maxArea), self.numOfNominalPanelAreas)
 
     def __generatePanels(self, showDetailedLog=False):
         self.__defaultZoneAndPanelConfig()
@@ -622,7 +622,7 @@ class face:
             return
         if showDetailedLog:
             print(f"Shape of tapTribs: {np.shape(self.tapTribs)}")
-            print(f"Shape of nominalPanelAreas: {np.shape(self.nominalPanelAreas)}")
+            print(f"Shape of nominalPanelAreas: {np.shape(self.panelAreas_nominal)}")
 
         self.panels : shp.MultiPolygon = ()    # [nZones][nAreas][nPanels]
         # self.panelAreas = ()    # [nZones][nAreas][nPanels]
@@ -639,7 +639,7 @@ class face:
             tapIdxByPnl_z = ()
             err_pnl_z = ()
             err_zn_z = ()
-            for a,area in enumerate(self.nominalPanelAreas):
+            for a,area in enumerate(self.panelAreas_nominal):
                 # print(f"\t\tWorking on nominal area: {area}")
                 # print(f"zoneBoundary: {zoneBoundary}, area: {area}")
                 # pnls,areas = meshRegionWithPanels(zoneBoundary,area,debug=False)
@@ -745,24 +745,24 @@ class face:
 
     @property
     def NumPanels(self):
-        if self.nominalPanelAreas is None:
+        if self.panelAreas_nominal is None:
             return 0
-        num = np.int32(np.multiply(self.nominalPanelAreas,0))
+        num = np.int32(np.multiply(self.panelAreas_nominal,0))
         if self.panels is None:
             return num
-        for a,_ in enumerate(self.nominalPanelAreas):
+        for a,_ in enumerate(self.panelAreas_nominal):
             for z,_ in enumerate(self.panels):
                 num[a] += len(self.panels[z][a].geoms)
         return np.sum(num)
 
     @property
     def NumPanelsPerArea(self):
-        if self.nominalPanelAreas is None:
+        if self.panelAreas_nominal is None:
             return 0
-        num = np.int32(np.multiply(self.nominalPanelAreas,0))
+        num = np.int32(np.multiply(self.panelAreas_nominal,0))
         if self.panels is None:
             return num
-        for a,_ in enumerate(self.nominalPanelAreas):
+        for a,_ in enumerate(self.panelAreas_nominal):
             for z,_ in enumerate(self.panels):
                 num[a] += len(self.panels[z][a].geoms)
         return num
@@ -770,7 +770,7 @@ class face:
     @property
     def panelAreas__redacted(self):
         return None
-        if self.nominalPanelAreas is None or self.panels is None:
+        if self.panelAreas_nominal is None or self.panels is None:
             return None
         
         panelAreas = []
@@ -813,9 +813,9 @@ class face:
         errDict = {}
         for z,zn in enumerate(self.zoneDict):
             zn_ID = self.zoneDict[zn][0] + ' -- ' + self.zoneDict[zn][1]
-            errDict[zn_ID] = {f"nom. areas idxs with tiling errors {self.nominalPanelAreas}": self.error_in_zones[z]}
+            errDict[zn_ID] = {f"nom. areas idxs with tiling errors {self.panelAreas_nominal}": self.error_in_zones[z]}
             errDict[zn_ID]['tap idxs with weight errors'] = {}
-            for a,area in enumerate(self.nominalPanelAreas):
+            for a,area in enumerate(self.panelAreas_nominal):
                 errDict[zn_ID]['tap idxs with weight errors'][f"A={area}"] = self.error_in_panels[z][a]
         return errDict
 
@@ -876,7 +876,7 @@ class face:
                     for i,x in enumerate(temp):
                         temp[i] = list(x)
                     basic['zoneDict'][val][2] = temp
-        basic['nominalPanelAreas'] = self.nominalPanelAreas
+        basic['nominalPanelAreas'] = self.panelAreas_nominal
         basic['numOfNominalPanelAreas'] = self.numOfNominalPanelAreas
         basic['tapNo'] = None if self.tapNo is None else self.tapNo.tolist()
         basic['tapIdx'] = None if self.tapIdx is None else self.tapIdx.tolist()
@@ -907,7 +907,7 @@ class face:
         if self.zoneDict is not None:
             for val in self.zoneDict:
                 self.zoneDict[val][2] = np.array(self.zoneDict[val][2])
-        self.nominalPanelAreas = basic['nominalPanelAreas']
+        self.panelAreas_nominal = basic['nominalPanelAreas']
         self.numOfNominalPanelAreas = basic['numOfNominalPanelAreas']
         self.tapNo = np.array(basic['tapNo'])
         self.tapIdx = np.array(basic['tapIdx'])
@@ -1210,7 +1210,7 @@ class face:
             panelsToPlot = {}
             for z,zKey in enumerate(self.zoneDict):
                 panelsToPlot[zKey] = {}
-                for a, aKey in enumerate(self.nominalPanelAreas):
+                for a, aKey in enumerate(self.panelAreas_nominal):
                     panelsToPlot[zKey][a] = np.arange(len(self.panels[z][a].geoms))
                     
         for zIdx,zKey in enumerate(self.zoneDict):
@@ -1309,9 +1309,9 @@ class face:
         if overlayPanels:
             if useSubplotForDifferentNominalAreas:
                 plt.figure(figsize=figSize)
-            for a,area in enumerate(self.nominalPanelAreas):
+            for a,area in enumerate(self.panelAreas_nominal):
                 if useSubplotForDifferentNominalAreas:
-                    nRows = int(np.ceil((len(self.nominalPanelAreas))/nSubPlotCols))
+                    nRows = int(np.ceil((len(self.panelAreas_nominal))/nSubPlotCols))
                     plt.subplot(nRows, nSubPlotCols, a+1)
                 else:
                     plt.figure(figsize=figSize)
@@ -1487,13 +1487,40 @@ class Faces:
         return removedTaps
     
     @property
-    def NominalPanelArea(self) -> List[float]:
-        nomArea = self._memberFaces[0].nominalPanelAreas
+    def panelArea_nominal(self) -> List[float]:
+        nomArea = self._memberFaces[0].panelAreas_nominal
         for f in self.memberFaces:
-            if f.nominalPanelAreas != nomArea:
+            if f.panelAreas_nominal != nomArea:
                 raise ValueError('All faces must have the same nominal panel areas.')
         return nomArea
-
+    
+    @property
+    def panelAreas_every(self) -> dict:
+        areas = {k:np.array([]) for k in self.zoneDictKeys}
+        for _,fc in enumerate(self.memberFaces): # self.CpStatsAreaAvg # [Nface][Nzones][N_area]{nFlds}[N_AoA,Npanels]
+            for z, zone in enumerate(fc.zoneDict):
+                zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
+                area_z = []
+                for a, _ in enumerate(self.panelArea_nominal):
+                    area_z.extend(fc.panelAreas[z][a])
+                areas[zKey] = np.concatenate((areas[zKey], np.array(area_z)))
+        return areas
+    
+    @property
+    def panelAreas_groupAvg(self) -> dict:
+        areas = {k:{ar:[] for ar in self.panelArea_nominal} for k in self.zoneDictKeys}
+        for _,fc in enumerate(self.memberFaces):
+            for z, zone in enumerate(fc.zoneDict):
+                zKey = fc.zoneDict[zone][0] + ', ' + fc.zoneDict[zone][1]
+                for a, ar in enumerate(self.panelArea_nominal):
+                    areas[zKey][ar].extend(fc.panelAreas[z][a])
+        aAvg = {k:np.array([], dtype=float) for k in self.zoneDictKeys}
+        for zKey in areas:
+            for ar in areas[zKey]:
+                aAvg[zKey] = np.append(aAvg[zKey], np.mean(areas[zKey][ar]))
+                
+        return aAvg
+    
     @property
     def zoneDict(self):
         allZones = {}
@@ -1589,7 +1616,7 @@ class Faces:
                 zone = list(zonei)[0:2]
                 zone.append([])
                 idxZ = list(mainZoneDict.values()).index(zone) # index of the current zone in the main zoneDict
-                for a,_ in enumerate(fc.nominalPanelAreas):
+                for a,_ in enumerate(fc.panelAreas_nominal):
                     Weights[idxZ].extend(fc.tapWghtPerPanel[z][a])     # [nZones][nAreas][nPanels][nTapsPerPanel]
         return Weights
 
@@ -1604,7 +1631,7 @@ class Faces:
                 zone = list(zonei)[0:2]
                 zone.append([])
                 idxZ = list(mainZoneDict.values()).index(zone) # index of the current zone in the main zoneDict
-                for a,_ in enumerate(fc.nominalPanelAreas):
+                for a,_ in enumerate(fc.panelAreas_nominal):
                     tapIdxs[idxZ].extend(fc.tapIdxPerPanel[z][a]) 
         return tapIdxs
 
@@ -1843,7 +1870,7 @@ class Faces:
                     kwargs_subPlotLabel={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'medium', },
                     ):
         newFig = False
-        areas = self.NominalPanelArea
+        areas = self.panelArea_nominal
         if axs is None:
             newFig = True
             nRows = int(np.ceil(len(areas)/nCols))

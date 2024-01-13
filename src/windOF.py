@@ -36,12 +36,17 @@ import os
 import glob
 import warnings
 import pandas as pd
+import time
+import vtk
 import scipy.interpolate as scintrp
 import matplotlib.pyplot as plt
 from typing import List,Literal,Dict,Tuple,Any
+import multiprocessing as mp
 
 from matplotlib.backends.backend_pdf import PdfPages
 from datetime import datetime
+from scipy.spatial import KDTree
+from vtk.util.numpy_support import vtk_to_numpy
 
 import wind
 # import windLoadCaseProcessors__toBeRemoved as wProc
@@ -116,9 +121,6 @@ def readBDformattedFile(file):
     return entries.astype('float64')
 
 def readVTKfile(vtkFile, fieldName, showLog=True):
-    import vtk
-    from vtk.util.numpy_support import vtk_to_numpy
-
     reader = vtk.vtkPolyDataReader()
     reader.SetFileName(vtkFile)
     reader.ReadAllFieldsOn()
@@ -143,6 +145,199 @@ def readVTKfile(vtkFile, fieldName, showLog=True):
         print("    Shape of points: "+str(np.shape(points)))
         print("    Shape of the field: "+str(np.shape(field)))
     return points, field
+
+def extractDataAtPoints_single(vtkFile, query_points, fieldName, distanceTolerance=1e-4, showLog=False, returnDist=False):
+    """Extract data at points from vtk file"""
+
+    # baseFileName = os.path.basename(vtkFile)
+    # print(f"    working on: {baseFileName}")
+    
+    # read vtk file
+    points, field = readVTKfile(vtkFile, fieldName, showLog=showLog)
+    
+    # interpolation (nearest neighbour)
+    tree = KDTree(points)
+    dist, idx = tree.query(query_points)
+    field_at_points = field[idx]
+    
+    if max(dist) > distanceTolerance:
+        percentageOfPoints = 100*len(dist[dist>distanceTolerance])/len(dist)
+        message = f"\nThe maximum distance between the points is {max(dist):.3e} which is greater than the tolerance of {distanceTolerance:.3e}. {percentageOfPoints:.1f}% of the points are farther than the tolerance."
+        warnings.warn(message)
+    
+    if returnDist:
+        return field_at_points, dist
+    else:
+        return field_at_points
+
+def extractDataAtPoints(vtkDir, query_points, fieldName, outputDir=None, timeMultiplier=1.0, filePrefix='', fileSuffix='', num_processors=1, showLog=True, 
+                        outFilePrefix='', numOfSplitWriteFiles=1, usePointCoordAsColIdx=False, 
+                        kwargs_extSingle={}, kwargs_csv_write={}):
+    """Extract data at points from vtk files in a directory"""
+    # Strategy:
+    # 1. get the list of vtk files in the directory
+    # 2. extract the time from the file names. It should be everything between filePrefix and fileSuffix+'.vtk'
+    # 3. sort the files based on time
+    # 4. For serial processing:
+    #       4.1. loop over the files
+    #       4.2. extract the data at points from each file
+    #       4.3. append the data to the list
+    #    For parallel processing:
+    #       4.1. create a pool of workers
+    #       4.2. loop over the files
+    #       4.3. submit the job to the pool
+    #       4.4. append the result to the list. Make sure that the order is preserved.
+    #       4.5. close the pool
+    #       4.6. join the pool
+    # 5. collect the field data into pandas.DataFrame with time as row index and points as column index.
+    #    If the field is a vector, the components are stored in separate pandas.DataFrame per component.
+    # 6. write the data to a file if writeToFile is not None. If the field is a vector, the components are stored in separate files.
+    #    6.1. if numOfSplitWriteFiles > 1, split the data into numOfSplitWriteFiles along the time axis and write each to a separate file
+    #    6.2. if outFilePrefix is not None, write the data to a single file with the given prefix. 
+    #           Otherwise, create the prefix from the input prefix, suffix, and the first and last time steps.
+    #
+    # Note: * The function extractDataAtPoints_single is used for extracting data at points from a single file.
+    #         It uses scipy.spatial.KDTree for interpolation.
+    #       * Collect the field data into pandas.DataFrame with time as row index and points as column index. 
+    #         If the field is a vector, the components are stored in separate pandas.DataFrame per component.
+    
+    
+    # start the timer
+    start = time.time()
+    
+    # get the list of vtk files in the directory
+    vtkFiles = glob.glob(os.path.join(vtkDir, filePrefix+"*"+fileSuffix+".vtk"))
+    if len(vtkFiles) == 0:
+        raise Exception("No VTK files with prefix '"+filePrefix+"' and suffix '"+fileSuffix+"' were found in the directory: "+vtkDir)
+    if showLog:
+        print("Extracting field '"+fieldName+"' from "+str(len(vtkFiles))+" files in the directory: "+vtkDir)
+        print("    File prefix: "+filePrefix)
+        print("    File suffix: "+fileSuffix)
+        print("    File extension: .vtk")
+        print("    No. of query points: "+str(len(query_points)))
+        print("    No. of files: "+str(len(vtkFiles)))
+        print("    Time multiplier: "+str(timeMultiplier))
+            
+    # extract the time from the file names
+    times = [float(os.path.basename(f).split(filePrefix)[-1].split(fileSuffix+'.vtk')[0]) for f in vtkFiles]
+    times = np.asarray(times)*timeMultiplier
+    
+    # sort the files based on time
+    vtkFiles = sorted(list(zip(vtkFiles, times)), key=lambda x: x[1])
+    vtkFiles = [x[0] for x in vtkFiles]
+    
+    # create a pool of workers
+    if num_processors > 1:
+        pool = mp.Pool(processes=num_processors)
+        
+    if showLog:
+        print("\n  Extracting data at points")
+    # loop over the files
+    data = []
+    progress = 0
+    for i, f in enumerate(vtkFiles):
+        if num_processors > 1:
+            # submit the job to the pool
+            data.append(pool.apply_async(extractDataAtPoints_single, args=(f, query_points, fieldName), kwds=kwargs_extSingle))
+            # progress += 1
+        else:
+            if showLog:
+                print(f"    time = {times[i]:.3f} \t({progress+1}/{len(vtkFiles)})")
+            # extract the data at points from each file
+            data.append(extractDataAtPoints_single(f, query_points, fieldName, **kwargs_extSingle))
+            progress += 1
+            
+    if num_processors > 1:
+        # close the pool
+        pool.close()
+        # join the pool
+        pool.join()
+        # append the result to the list. Make sure that the order is preserved.
+        data = [d.get() for d in data]
+        
+    # collect the field data into pandas.DataFrame with time as row index and points as column index.
+    # If the field is a vector, the components are stored in separate pandas.DataFrame per component.
+    if showLog:
+        print("\n  Collecting the data into pandas.DataFrame")
+    if usePointCoordAsColIdx:
+        columnIdx = query_points
+    else:
+        columnIdx = range(len(query_points))
+    rowIdx = times
+    if fieldName == 'U':
+        U = pd.DataFrame(index=rowIdx, columns=columnIdx, dtype=float)
+        V = pd.DataFrame(index=rowIdx, columns=columnIdx, dtype=float)
+        W = pd.DataFrame(index=rowIdx, columns=columnIdx, dtype=float)
+        for i in range(len(data)):
+            U.iloc[i,:] = data[i][:,0]
+            V.iloc[i,:] = data[i][:,1]
+            W.iloc[i,:] = data[i][:,2]
+        out = {'UofT':U, 'VofT':V, 'WofT':W}
+    elif fieldName == 'p':
+        out = pd.DataFrame(index=rowIdx, columns=columnIdx, dtype=float)
+        for i in range(len(data)):
+            out.iloc[i,:] = data[i]
+    else:
+        raise NotImplementedError("The field '"+fieldName+"' is not supported.")
+            
+    # write the data to a file if writeToFile is not None
+    if outputDir is not None:
+        tpr = 6
+        if showLog:
+            print("\n  Writing the data to file")
+        os.makedirs(outputDir, exist_ok=True)
+        
+        if numOfSplitWriteFiles == 1:
+            # write the data to a single file
+            if fieldName == 'p':
+                outFilePrefixExp = outFilePrefix+filePrefix+fileSuffix+"_"+fieldName+"_"+str(np.round(times[0],tpr))+"_"+str(np.round(times[-1],tpr))
+                outFile = os.path.join(outputDir, outFilePrefixExp+".csv")
+                out.to_csv(outFile, index=True, header=True, **kwargs_csv_write)
+                if showLog:
+                    print("    "+outFile)
+            elif fieldName == 'U':
+                for key in out:
+                    outFilePrefixExp = outFilePrefix+filePrefix+fileSuffix+"_"+key+"_"+str(np.round(times[0],tpr))+"_"+str(np.round(times[-1],tpr))
+                    outFile = os.path.join(outputDir, outFilePrefixExpanded+".csv")
+                    out[key].to_csv(outFile, index=True, header=True, **kwargs_csv_write)
+                    if showLog:
+                        print("    "+outFile)
+        else:
+            # split the data into numOfSplitWriteFiles along the time axis and write each to a separate file
+            if fieldName == 'p':
+                for i in range(numOfSplitWriteFiles):
+                    startIdx = int(i*len(out)/numOfSplitWriteFiles)
+                    endIdx = min(int((i+1)*len(out)/numOfSplitWriteFiles), len(out)-1)
+                    outFilePrefixExpanded = outFilePrefix+filePrefix+fileSuffix+"_"+fieldName+"_"+str(np.round(times[startIdx],tpr))+"_"+str(np.round(times[endIdx],tpr))
+                    outFile = os.path.join(outputDir, outFilePrefixExpanded+".csv")
+                    out.iloc[startIdx:endIdx,:].to_csv(outFile, index=True, header=True, **kwargs_csv_write)
+                    if showLog:
+                        print("    "+outFile)
+            elif fieldName == 'U':
+                for key in out:
+                    for i in range(numOfSplitWriteFiles):
+                        startIdx = int(i*len(out)/numOfSplitWriteFiles)
+                        endIdx = min(int((i+1)*len(out)/numOfSplitWriteFiles), len(out)-1)
+                        outFilePrefixExpanded = outFilePrefix+filePrefix+fileSuffix+"_"+key+str(np.round(times[startIdx],tpr))+"_"+str(np.round(times[endIdx],tpr))
+                        outFile = os.path.join(outputDir, outFilePrefixExpanded+".csv")
+                        out[key].iloc[startIdx:endIdx,:].to_csv(outFile, index=True, header=True, **kwargs_csv_write)
+                        if showLog:
+                            print("    "+outFile)
+            else:
+                raise NotImplementedError("The field '"+fieldName+"' is not supported.")            
+            
+    # stop the timer
+    end = time.time()
+    if showLog:
+        elTime = end-start
+        elTime = elTime if elTime < 60 else elTime/60 if elTime < 3600 else elTime/3600
+        tUnit = 's' if elTime < 60 else 'min' if elTime < 3600 else 'h'
+        print(f" Time elapsed: {elTime:.1f} {tUnit}")
+            
+    return out
+            
+
+
 
 def readRAWfile(file, numHeader=2, showLog=True):
     # space delimited column file with the following header:
@@ -249,6 +444,7 @@ def appendBDformattedFile(outDir, timeName, points, vel, writePointsFile=True, c
         if showLog:
             print("    Skipping existing time step: "+timeName+"/U")
     
+#---------------------------  Plotting  ----------------------------------------
 def plot2DvelField(x_orig,y_orig,u,v, fig=None, ax=None, Nx=100):
     # create a uniform grid based on the given Nx and calculated Ny so that the aspect ratio is close to 1
     xMin, xMax = np.min(x_orig), np.max(x_orig)
