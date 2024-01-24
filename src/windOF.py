@@ -47,6 +47,8 @@ from matplotlib.backends.backend_pdf import PdfPages
 from datetime import datetime
 from scipy.spatial import KDTree
 from vtk.util.numpy_support import vtk_to_numpy
+from tqdm import tqdm
+from multiprocessing import Pool, Manager
 
 import wind
 # import windLoadCaseProcessors__toBeRemoved as wProc
@@ -146,15 +148,29 @@ def readVTKfile(vtkFile, fieldName, showLog=True):
         print("    Shape of the field: "+str(np.shape(field)))
     return points, field
 
-def extractDataAtPoints_single(vtkFile, query_points, fieldName, distanceTolerance=1e-4, showLog=False, returnDist=False):
+def extractDataAtPoints_single(vtkFile, query_points, fieldName, distanceTolerance=1e-4, showLog=False, returnDist=False, stopOnError=True):
     """Extract data at points from vtk file"""
 
-    # baseFileName = os.path.basename(vtkFile)
-    # print(f"    working on: {baseFileName}")
-    
-    # read vtk file
-    points, field = readVTKfile(vtkFile, fieldName, showLog=showLog)
-    
+    basename = os.path.basename(vtkFile)
+    printlog(f"    working on: {basename}")
+
+    try:
+        # read vtk file
+        points, field = readVTKfile(vtkFile, fieldName, showLog=showLog)
+    except Exception as e:
+        if stopOnError:
+            raise e
+        else:
+            print(e)
+            print("    Skipping file: "+vtkFile)
+            print("    Returning NaNs")
+            dist = np.full(len(query_points), np.nan)
+            field_at_points = np.full((len(query_points),3), np.nan) if fieldName == 'U' else np.full(len(query_points), np.nan)
+            if returnDist:
+                return field_at_points, dist
+            else:
+                return field_at_points
+        
     # interpolation (nearest neighbour)
     tree = KDTree(points)
     dist, idx = tree.query(query_points)
@@ -170,9 +186,25 @@ def extractDataAtPoints_single(vtkFile, query_points, fieldName, distanceToleran
     else:
         return field_at_points
 
+'''
+def extract_data_wrapper(args):
+        f, query_points, fieldName, stopOnError, kwargs_extSingle = args
+        result = extractDataAtPoints_single(f, query_points, fieldName, stopOnError=stopOnError, **kwargs_extSingle)
+        with progress_lock:
+            progress.value += 1
+        return result
+
+# Create a shared variable for progress
+manager = Manager()
+progress = manager.Value('i', 0)
+progress_lock = manager.Lock()
+'''
+
 def extractDataAtPoints(vtkDir, query_points, fieldName, outputDir=None, timeMultiplier=1.0, filePrefix='', fileSuffix='', num_processors=1, showLog=True, 
-                        outFilePrefix='', numOfSplitWriteFiles=1, usePointCoordAsColIdx=False, 
-                        kwargs_extSingle={}, kwargs_csv_write={}):
+                        outFilePrefix='', numOfSplitWriteFiles=1, usePointCoordAsColIdx=False, stopOnError=False, timePrecision=None, writePointsFile=True,
+                        kwargs_extSingle={}, 
+                        kwargs_csv_write={'na_rep':'NaN'},
+                        ):
     """Extract data at points from vtk files in a directory"""
     # Strategy:
     # 1. get the list of vtk files in the directory
@@ -217,14 +249,17 @@ def extractDataAtPoints(vtkDir, query_points, fieldName, outputDir=None, timeMul
         print("    No. of query points: "+str(len(query_points)))
         print("    No. of files: "+str(len(vtkFiles)))
         print("    Time multiplier: "+str(timeMultiplier))
+
+    timePrecision = int(np.log10(1/timeMultiplier)) if timePrecision is None else timePrecision
             
     # extract the time from the file names
     times = [float(os.path.basename(f).split(filePrefix)[-1].split(fileSuffix+'.vtk')[0]) for f in vtkFiles]
     times = np.asarray(times)*timeMultiplier
+    times = np.round(times, timePrecision)
     
-    # sort the files based on time
-    vtkFiles = sorted(list(zip(vtkFiles, times)), key=lambda x: x[1])
-    vtkFiles = [x[0] for x in vtkFiles]
+    # sort the files based on time and update both vtkFiles and times
+    vtkFiles = [x for _,x in sorted(list(zip(times,vtkFiles)), key=lambda x: x[0])]
+    times = sorted(times)
     
     # create a pool of workers
     if num_processors > 1:
@@ -232,20 +267,29 @@ def extractDataAtPoints(vtkDir, query_points, fieldName, outputDir=None, timeMul
         
     if showLog:
         print("\n  Extracting data at points")
+        
     # loop over the files
     data = []
     progress = 0
     for i, f in enumerate(vtkFiles):
         if num_processors > 1:
             # submit the job to the pool
-            data.append(pool.apply_async(extractDataAtPoints_single, args=(f, query_points, fieldName), kwds=kwargs_extSingle))
-            # progress += 1
+            data.append(pool.apply_async(extractDataAtPoints_single, args=(f, query_points, fieldName), kwds={'stopOnError':stopOnError, **kwargs_extSingle}))
         else:
             if showLog:
-                print(f"    time = {times[i]:.3f} \t({progress+1}/{len(vtkFiles)})")
+                print(f"    time = {times[i]} \t({progress+1}/{len(vtkFiles)})")
             # extract the data at points from each file
-            data.append(extractDataAtPoints_single(f, query_points, fieldName, **kwargs_extSingle))
+            data.append(extractDataAtPoints_single(f, query_points, fieldName, stopOnError=stopOnError, **kwargs_extSingle))
             progress += 1
+    
+    # if num_processors > 1:
+    #     pool_args = [(f, query_points, fieldName, stopOnError, kwargs_extSingle) for f in vtkFiles]
+    #     with Pool(processes=num_processors) as pool:
+    #         for result in tqdm(pool.imap_unordered(extract_data_wrapper, pool_args), total=len(vtkFiles), desc="    Processing "):
+    #             data.append(result)
+    # else:
+    #     for i, f in enumerate(tqdm(vtkFiles, desc="    Processing ", total=len(vtkFiles))):
+    #         data.append(extractDataAtPoints_single(f, query_points, fieldName, stopOnError=stopOnError, **kwargs_extSingle))
             
     if num_processors > 1:
         # close the pool
@@ -282,7 +326,6 @@ def extractDataAtPoints(vtkDir, query_points, fieldName, outputDir=None, timeMul
             
     # write the data to a file if writeToFile is not None
     if outputDir is not None:
-        tpr = 6
         if showLog:
             print("\n  Writing the data to file")
         os.makedirs(outputDir, exist_ok=True)
@@ -290,41 +333,53 @@ def extractDataAtPoints(vtkDir, query_points, fieldName, outputDir=None, timeMul
         if numOfSplitWriteFiles == 1:
             # write the data to a single file
             if fieldName == 'p':
-                outFilePrefixExp = outFilePrefix+filePrefix+fileSuffix+"_"+fieldName+"_"+str(np.round(times[0],tpr))+"_"+str(np.round(times[-1],tpr))
+                outFilePrefixExp = outFilePrefix+filePrefix+fileSuffix+"_"+fieldName+"_"+str(np.round(times[0],timePrecision))+"_"+str(np.round(times[-1],timePrecision))
                 outFile = os.path.join(outputDir, outFilePrefixExp+".csv")
+                # write nan as NaN
                 out.to_csv(outFile, index=True, header=True, **kwargs_csv_write)
                 if showLog:
-                    print("    "+outFile)
+                    print("    Time history written to: \t"+outFile)
             elif fieldName == 'U':
                 for key in out:
-                    outFilePrefixExp = outFilePrefix+filePrefix+fileSuffix+"_"+key+"_"+str(np.round(times[0],tpr))+"_"+str(np.round(times[-1],tpr))
-                    outFile = os.path.join(outputDir, outFilePrefixExpanded+".csv")
+                    outFilePrefixExp = outFilePrefix+filePrefix+fileSuffix+"_"+key+"_"+str(np.round(times[0],timePrecision))+"_"+str(np.round(times[-1],timePrecision))
+                    outFile = os.path.join(outputDir, outFilePrefixExp+".csv")
                     out[key].to_csv(outFile, index=True, header=True, **kwargs_csv_write)
                     if showLog:
-                        print("    "+outFile)
+                        print("    Time history written to: \t"+outFile)
         else:
             # split the data into numOfSplitWriteFiles along the time axis and write each to a separate file
             if fieldName == 'p':
                 for i in range(numOfSplitWriteFiles):
                     startIdx = int(i*len(out)/numOfSplitWriteFiles)
                     endIdx = min(int((i+1)*len(out)/numOfSplitWriteFiles), len(out)-1)
-                    outFilePrefixExpanded = outFilePrefix+filePrefix+fileSuffix+"_"+fieldName+"_"+str(np.round(times[startIdx],tpr))+"_"+str(np.round(times[endIdx],tpr))
-                    outFile = os.path.join(outputDir, outFilePrefixExpanded+".csv")
+                    outFilePrefixExp = outFilePrefix+filePrefix+fileSuffix+"_"+fieldName+"_"+str(np.round(times[startIdx],timePrecision))+"_"+str(np.round(times[endIdx],timePrecision))
+                    outFile = os.path.join(outputDir, outFilePrefixExp+".csv")
                     out.iloc[startIdx:endIdx,:].to_csv(outFile, index=True, header=True, **kwargs_csv_write)
                     if showLog:
-                        print("    "+outFile)
+                        print("    Time history written to: \t"+outFile)
             elif fieldName == 'U':
                 for key in out:
                     for i in range(numOfSplitWriteFiles):
                         startIdx = int(i*len(out)/numOfSplitWriteFiles)
                         endIdx = min(int((i+1)*len(out)/numOfSplitWriteFiles), len(out)-1)
-                        outFilePrefixExpanded = outFilePrefix+filePrefix+fileSuffix+"_"+key+str(np.round(times[startIdx],tpr))+"_"+str(np.round(times[endIdx],tpr))
-                        outFile = os.path.join(outputDir, outFilePrefixExpanded+".csv")
+                        outFilePrefixExp = outFilePrefix+filePrefix+fileSuffix+"_"+key+str(np.round(times[startIdx],timePrecision))+"_"+str(np.round(times[endIdx],timePrecision))
+                        outFile = os.path.join(outputDir, outFilePrefixExp+".csv")
                         out[key].iloc[startIdx:endIdx,:].to_csv(outFile, index=True, header=True, **kwargs_csv_write)
                         if showLog:
-                            print("    "+outFile)
+                            print("    Time history written to: \t"+outFile)
             else:
-                raise NotImplementedError("The field '"+fieldName+"' is not supported.")            
+                raise NotImplementedError("The field '"+fieldName+"' is not supported.")
+            
+        if writePointsFile:
+            pointsFile = outFilePrefix+filePrefix+fileSuffix+"_"+fieldName+"_points.csv"
+            pointsFile = os.path.join(outputDir, pointsFile)
+            pts_df = pd.DataFrame(query_points, columns=['x','y','z'])
+            pts_df.to_csv(pointsFile, index=False, header=True, **kwargs_csv_write)
+            
+            if showLog:
+                print("    Query points written to: \t"+pointsFile)
+    if showLog:
+        print(f"    << Finished extracting {fieldName} time history data at query points")
             
     # stop the timer
     end = time.time()
@@ -335,8 +390,6 @@ def extractDataAtPoints(vtkDir, query_points, fieldName, outputDir=None, timeMul
         print(f" Time elapsed: {elTime:.1f} {tUnit}")
             
     return out
-            
-
 
 
 def readRAWfile(file, numHeader=2, showLog=True):

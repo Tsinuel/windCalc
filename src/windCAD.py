@@ -1442,12 +1442,12 @@ class Faces:
             tapNo.extend(f.tapNo)
         return tapNo
 
-    @property
-    def tapNo_all(self) -> List[int]:
-        tapNo = []
-        for f in self.memberFaces:
-            tapNo.extend(f.tapNo_all)
-        return tapNo
+    # @property
+    # def tapNo_all(self) -> List[int]:
+    #     tapNo = []
+    #     for f in self.memberFaces:
+    #         tapNo.extend(f.tapNo_all)
+    #     return tapNo
 
     @property
     def tapIdx(self) -> List[int]:

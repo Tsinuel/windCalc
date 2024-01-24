@@ -4028,6 +4028,38 @@ class bldgCp(windCAD.building):
         if debugMode:
             print(f"Saved C&C load to {filePath}")
 
+    def writeCpStatsToXLSX(self, filePath, fields=None, AoAs=None, taps=None, scaleFactor=1.0):
+        fields = self.CpStats.keys() if fields is None else fields
+        AoAs = self.AoA if AoAs is None else AoAs
+        taps = self.tapNo if taps is None else taps
+        
+        iAoAs = [list(self.AoA).index(a) for a in AoAs]
+        
+        dfs = {}
+        for fld in fields:
+            dfs[fld] = pd.DataFrame(columns=AoAs)
+            fact = scaleFactor if fld in SCALABLE_CP_STATS else 1.0
+            for i, tap in enumerate(taps):
+                idx = self.tapIdxOf(tap)
+                dfs[fld].loc[tap] = self.CpStats[fld][iAoAs,idx] * fact
+                
+        with pd.ExcelWriter(filePath) as writer:
+            df = pd.DataFrame(columns=['Description'])
+            df.loc['AoA'] = ['Angle of attack [deg] -- columns']
+            df.loc[' -> AoA vals.'] = [AoAs]
+            df.loc['Tap No.'] = ['Tap number -- rows']
+            df.loc[' -> Tap Nos'] = [taps]
+            df.loc['Cp Stats:'] = ['Statistics of Cp time history -- sheets']
+            df.loc[' -> Cp Stats'] = [fields]
+            df.loc['More notes ...'] = [self.notes_Cp]
+            df.to_excel(writer, sheet_name='READ_ME', index=True)
+            
+            for fld in fields:
+                dfs[fld].to_excel(writer, sheet_name=fld)
+        print(f"Saved Cp stats to {filePath}")
+        
+            
+            
     def paramsTable(self, normalized=True, fields=None) -> dict:
         
         data = {}
@@ -4123,7 +4155,7 @@ class bldgCp(windCAD.building):
                     factor = scaleFactor if fld in SCALABLE_CP_STATS else 1.0
                     ax.plot(self.AoA, self.CpStats[fld][:,tapIdxDt]*factor, label=label, **kwargs_perFld[f])
                     if overlayThis is not None:
-                        ax.plot(overlay_AoA, overlayThis[fld][:,tapPltCount], label=overlayLabel+' ('+fld+')', **kwargs_overlay[f])
+                        ax.plot(overlay_AoA, overlayThis[fld][:,tapPltCount], label=overlayLabel+': '+fullName(fld,abbreviate=True), **kwargs_overlay[f])
                 if drawHlines:
                     ax.hlines(hlinesAt,0,360,**kwargs_hlines)
                 if includeTapName:

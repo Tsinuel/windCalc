@@ -17,8 +17,8 @@ def main(args):
     timeMultiplier = float(args[3]) # factor to convert the integral form of the time in the vtk file names to seconds
     outputDir = args[4]
     outFilePrefix = args[5] # e.g. 'SurfProbExtr_'
-    numOfSplitWriteFiles = int(args[5])
-    nProcessors = int(args[6])
+    numOfSplitWriteFiles = int(args[6])
+    nProcessors = int(args[7])
     
     z1 = np.linspace(0, 0.08, 100)
     x = np.full_like(z1, 0.0)
