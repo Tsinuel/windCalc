@@ -154,6 +154,13 @@ class BLWTL_HFPI:
         self.read()
 
     def read(self):
+        # check if the case directory is provided and exists
+        if self.caseDir is None:
+            print("No case directory is provided. Exiting.")
+            return
+        if not os.path.exists(self.caseDir):
+            raise FileNotFoundError("The case directory does not exist: {}".format(self.caseDir))
+                
         print("Reading HFPI data from: {}".format(self.caseDir))
         files_pssr = glob.glob(os.path.join(self.caseDir, '*.pssr'))
         file_names = [os.path.splitext(os.path.basename(file_name))[0] for file_name in files_pssr]
