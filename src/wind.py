@@ -205,6 +205,8 @@ def mathName(rawname):
         return '$u_*$ [$m/s$]'
     elif rawname == 'Je':
         return '$Je$'
+    elif rawname == 'Je_U':
+        return '$Je_U$'
     # Spectra
     elif rawname == 'Suu':
         return '$S_{uu}$ $[m^2/s]$'
@@ -251,8 +253,8 @@ def mathName(rawname):
         return '$\lambda_V$ = 1:'
     elif rawname == 'tScl':
         return '$\lambda_T$ = 1:'
-    elif rawname == 'Re':
-        return '$Re$'
+    elif rawname == 'Re_H':
+        return '$Re_H=U_HH/\\nu$'
     elif rawname == 'ReTau':
         return '$Re_{\\tau}=u_* z_0/\\nu$'
     # Cp
@@ -326,6 +328,8 @@ def fullName(rawname, abbreviate=False):
         return 'Friction velocity'
     elif rawname == 'Je':
         return 'Jensen number'
+    elif rawname == 'Je_U':
+        return 'Jensen number fitted to the mean velocity profile'
     # Geometry and scaling
     elif rawname == 'H':
         return 'Mean roof height'
@@ -343,8 +347,8 @@ def fullName(rawname, abbreviate=False):
         return 'Velocity scaling factor'
     elif rawname == 'tScl':
         return 'Time scaling factor'    
-    elif rawname == 'Re':
-        return 'Reynolds number'
+    elif rawname == 'Re_H':
+        return 'Body Reynolds number'
     elif rawname == 'ReTau':
         return 'Friction Reynolds number'
     # Cp
@@ -1250,6 +1254,7 @@ class spectra:
                  Z=None, U=None, Iu=None, Iv=None, Iw=None,
                  xLu=None, xLv=None, xLw=None, keepTH=True):
         
+        
         self.name = name
         self.samplingFreq = samplingFreq
         self.n = n
@@ -1542,8 +1547,10 @@ class spectra:
                         raise Exception(f"Overlay data must have the following keys: 'rf', 'rf_avg', {fld}, {fld}'_avg'")
                     ax.plot(overlayThese['rf'][firstIdx:,:], overlayThese[fld][firstIdx:,...], 
                              **kwargs_overlay_all)
+                    ax.plot([], [], label=name, **kwargs_overlay_all) # dummy plot for the legend
                     ax.plot(overlayThese['rf_avg'][firstIdx:], overlayThese[fld+'_avg'][firstIdx:], 
-                            label=name, **kwargs_overlay)                
+                            label=name+' (Avg.)', **kwargs_overlay)
+
                 elif overlayType == 'errorBars':
                     print("The boxplot for spectra needs revision!.")
                     warnings.warn("The boxplot for spectra needs revision!.")
@@ -1986,6 +1993,15 @@ class profile:
             return None
         else:
             return self.H/z0
+    
+    @property
+    def Je_U(self) -> Union[float, None]:
+        ''' Computes the Jensen number, Je = H/z0, where z0 is the roughness length fitted to the mean velocity profile and H is the reference height.'''
+        z0 = self.z0_U
+        if self.stats_core is None or self.H is None or z0 is None:
+            return None
+        else:
+            return self.H/z0
         
     """---------------------------------- Normalizers ---------------------------------"""
     @property
@@ -2118,7 +2134,7 @@ class profile:
     def paramsTable(self, normalized=True, fields=None,) -> dict:
         if fields is None:
             fields = list(self.stats_core.keys())
-            fields.extend(['Name','H','Uh','T','n_smpl','z0','u*','Je','ReTau'])
+            fields.extend(['Name','H','Uh','T','n_smpl','z0','u*','Je','Je_U','ReTau'])
             
         data = {}
         if 'Name' in fields:
@@ -2141,6 +2157,8 @@ class profile:
             data[mathName('u*')+' @MS'] = self.shearVelocity
         if 'Je' in fields:
             data[mathName('Je')] = self.Je
+        if 'Je_U' in fields:
+            data[mathName('Je_U')] = self.Je_U
         if 'ReTau' in fields:
             data[mathName('ReTau')] = self.ReTau
 
@@ -2798,6 +2816,11 @@ class profile:
         plt.show()
 
 class ESDU74:
+    '''
+    References:
+    1. ESDU 74031
+    2. ESDU 72026
+    '''
     __Omega = 72.7e-6       # Angular rate of rotation of the earth in [rad/s].  ESDU 74031 sect. A.1
     __k = 0.4               # von Karman constant
 
@@ -3057,6 +3080,11 @@ class ESDU74:
         return prof
 
 class ESDU85:
+    '''
+    References:
+    1. ESDU 85020
+    2. ESDU 82026
+    '''
     __Omega = 72.9e-6            # Angular rate of rotation of the earth [rad/s] ESDU 82026 ssA1
 
     def __init__(self,
@@ -4076,7 +4104,7 @@ class bldgCp(windCAD.building):
         data['$B$ $[m]$ @FS'] = np.nan if self.B is None or self.lScl is None else self.B/self.lScl
         data['$D$ $[m]$ @FS'] = np.nan if self.D is None or self.lScl is None else self.D/self.lScl
         data['Roof slope $[^\circ]$'] = np.nan if self.roofSlope is None else self.roofSlope
-        data[mathName('Re')] = np.nan if Re is None else Re
+        data[mathName('Re_H')] = np.nan if Re is None else Re
         data['Design '+mathName('Uh')+' @FS'] = np.nan if self.Uref_FS is None else self.Uref_FS
         data[mathName('lScl')] = np.nan if self.lScl is None else 1/self.lScl
         data[mathName('vScl')] = np.nan if self.vScl is None else 1/self.vScl
@@ -4088,6 +4116,17 @@ class bldgCp(windCAD.building):
 
     def stat_on_a_line(self):
         raise NotImplementedError
+
+    def getStatsOfTaps(self, taps, fields=None):
+        if fields is None:
+            fields = self.CpStats.keys()
+        stats = {}
+        for fld in fields:
+            stats[fld] = {}
+            for tap in taps:
+                idx = self.tapIdxOf(tap)
+                stats[fld][tap] = self.CpStats[fld][:,idx]
+        return stats
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotTapCpStatsPerAoA(self, figs=None, all_axes=None, addMarginDetails=False, scaleFactor=1.0,
@@ -4371,7 +4410,7 @@ class bldgCp(windCAD.building):
                     plotExtremesPerNominalArea=True, nCols=3, areaFactor=1.0, CandCLoadFormat:Literal['default','NBCC','ASCE']='default', 
                     invertYAxis=False,
                     label_min=None, label_max=None,
-                    overlayThese=None, overlayFactors=None, overlayFirstInLegend=True, kwargs_overlay={'color':'k', 'linewidth':2, 'linestyle':'-'},
+                    overlayThese=None, overlayFactors=None, overlayTypes=None, overlayFirstInLegend=True, kwargs_overlay={'color':'k', 'linewidth':2, 'linestyle':'-'},
                     subplotLabels=None, subplotLabels_xy=[0.05,0.95], kwargs_subplotLabels={'fontsize':14},
                     legend_ax_idx=0, showLegend=True,
                     debugMode=False,
@@ -4385,6 +4424,8 @@ class bldgCp(windCAD.building):
             if overlayThese is None:
                 return
             if overlayType == 'single':
+                if np.isscalar(ar):
+                    ar = ar*np.ones_like(val)
                 ax.semilogx(ar, val, 
                         label=name, **kwargs_overlay)
             elif overlayType == 'errorBars':
@@ -4472,6 +4513,7 @@ class bldgCp(windCAD.building):
                         ax.semilogx(ar, valMin, label=overlayThis['Name'], **kwargs_overlay[ii])
                         ax.semilogx(ar, valMax, **kwargs_overlay[ii])
                     else:
+                        overlayType = overlayTypes[ii] if overlayTypes is not None else 'errorBars'
                         dim = 0 if np.shape(ar)[0] == np.shape(valMin)[0] else 1
                         if dim == 1:
                             valMin = valMin.T
@@ -4481,8 +4523,8 @@ class bldgCp(windCAD.building):
                             ax.semilogx(ar, valMin[:,a], label=overlayLabel, **kwargs_overlay[ii])
                             ax.semilogx(ar, valMax[:,a], **kwargs_overlay[ii])
                         bxPltName = overlayThis['Name']
-                        bxPltObj = addOverlay(ax, [ar[0],], np.array(valMin).flatten(), 'errorBars', name=bxPltName, kwargs_overlay={})
-                        addOverlay(ax, [ar[0],], np.array(valMax).flatten(), 'errorBars', name='_', kwargs_overlay={})
+                        bxPltObj = addOverlay(ax, [ar[0],], np.array(valMin).flatten(), overlayType, name=bxPltName, kwargs_overlay={})
+                        addOverlay(ax, [ar[0],], np.array(valMax).flatten(), overlayType, name='_', kwargs_overlay={})
             
             if invertYAxis:
                 ax.invert_yaxis()
@@ -5325,7 +5367,7 @@ class Profiles:
                 fig=None, ax_Suu=None, ax_Svv=None, ax_Sww=None, figsize=[15,4], wspace=0.3, shareY=False,
                 xLabel=None, yLabel_Suu=None, yLabel_Svv=None, yLabel_Sww=None,
                 xLimits=None, yLimits=None, subPlotLabels=None, showSubPlotLabels=True, subPlotLabel_xy=(0.075,0.925),
-                normalize=True, normZ:Literal['Z','xLi']='Z', normU:Literal['U','sigUi']='U',         
+                normalize=True, normZ:Literal['Z','xLi']='Z', normU:Literal['U','sigUi']='U', markTheseFreq=[0.1,2], markTheseFreq_kwargs={'color':'k','linestyle':'--','linewidth':0.5},
                 plotType: Literal['loglog', 'semilogx', 'semilogy']='loglog', avoidZeroFreq=True, 
                 overlayThese:dict=None, overlayType:Literal['single','scatter','errorBars']='single', kwargs_overlay={}, kwargs_overlay_all={},
                 lgnd_kwargs={'loc': 'best', 'ncol': 1},
@@ -5374,6 +5416,9 @@ class Profiles:
         
         for ax in axs.flatten():
             formatAxis(ax, **kwargs_ax, numFormat='default')
+            if markTheseFreq is not None:
+                for freq in markTheseFreq:
+                    ax.axvline(x=freq, **markTheseFreq_kwargs)
         # plt.show()
         # fig.tight_layout()
         return fig, axs
@@ -5457,9 +5502,9 @@ class Profiles:
         tableContent = self.paramsTable(normalized=normalize)
         if params == 'basic':
             if not normalize:
-                params = mathName(['H','Uh','Iu','Iv','Iw','xLu','xLv','xLw','uw','z0','Je','T'])
+                params = mathName(['H','Uh','Iu','Iv','Iw','xLu','xLv','xLw','uw','z0','Je','Je_U','T'])
             else:
-                params = mathName(['H','Uh','Iu','Iv','Iw','xLu/H','xLv/H','xLw/H','uw/Uh^2','z0','Je','T*'])
+                params = mathName(['H','Uh','Iu','Iv','Iw','xLu/H','xLv/H','xLw/H','uw/Uh^2','z0','Je','Je_U','T*'])
         elif params == 'all':
             params = list(tableContent.keys())
         else:
@@ -5752,9 +5797,9 @@ class BldgCps:
         tableContent = self.paramsTable(normalized=normalize)
         if params == 'basic':
             if not normalize:
-                params = mathName(['H','Uh','Iu','Iv','Iw','xLu','xLv','xLw','uw','z0','T','Re','lScl','vScl','tScl'])
+                params = mathName(['H','Uh','Iu','Iv','Iw','xLu','xLv','xLw','uw','z0','T','Re_H','lScl','vScl','tScl'])
             else:
-                params = mathName(['H','Uh','Iu','Iv','Iw','xLu/H','xLv/H','xLw/H','uw/Uh^2','Je','T*','Re','lScl','vScl','tScl'])
+                params = mathName(['H','Uh','Iu','Iv','Iw','xLu/H','xLv/H','xLw/H','uw/Uh^2','Je','Je_U','T*','Re_H','lScl','vScl','tScl'])
         elif params == 'all':
             params = list(tableContent.keys())
         else:
@@ -6327,6 +6372,7 @@ class validator:
                                    showSubPlotLabels=True, subplotLabels=None, 
                                    kwargs_subplotLabels={'xy':(0.03, 0.95), 'xycoords':'axes fraction', 'ha':'left', 'va':'top', 'backgroundcolor':[1,1,1,0.5], 'fontsize':14},
                                    tLbl=r'\textrm{BLWT}', mLbl=r'\textrm{LES}', yLims:dict=None, cols=def_cols,
+                                   showLegend:bool=True,
                                    kwargs_errEqnTxt={'xy':(0.95, 0.95), 'xycoords':'axes fraction', 'ha':'right', 'va':'top', 'backgroundcolor':[1,1,1,0.5], 'fontsize':12},
                                    kwargs_legend={'loc':'best'},
                                    kwargs_bar={ # add some border controls
@@ -6345,7 +6391,7 @@ class validator:
             subplotLabels = [f'({chr(97+i)})' for i in range(nErrTypes)]
 
         newFig = False
-        if fig is None:
+        if fig is None or axs is None:
             figsize = [nPltCols*figsize_per_ax[0], nPltRows*figsize_per_ax[1]]
             fig, axs = plt.subplots(nPltRows, nPltCols, figsize=figsize)
             newFig = True
@@ -6395,7 +6441,7 @@ class validator:
             # set the font size of the axis tick labels for x axis
             ax.tick_params(axis='x', labelsize=12)
 
-            if i == 0:
+            if showLegend and i == 0:
                 ax.legend(**kwargs_legend)
 
         if nErrTypes < nPltCols*nPltRows:

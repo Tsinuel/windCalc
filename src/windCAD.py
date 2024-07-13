@@ -432,7 +432,6 @@ def tranform2D(x, y, O, e1, e2, translateFirst=True,):
         ans_y = (x*e2[0] + y*e2[1]) - O[1]
     return np.array(ans_x, dtype=float), np.array(ans_y, dtype=float)
 
-
 def translate(x, y, t, z=None):
     x, y = np.asarray(x,dtype=float), np.asarray(y,dtype=float)
     t = np.array(t,dtype=float)
@@ -448,7 +447,7 @@ def translate(x, y, t, z=None):
 #================================ CLASSES ======================================
 #===============================================================================
 
-#----------------------------- BUILDING MODELS ---------------------------------
+#-------------------------- BUILDING ENVELOPE (WIND) ---------------------------
 class face:
     """---------------------------------- Internals -----------------------------------"""
     def __init__(self,
@@ -711,6 +710,12 @@ class face:
         return np.arctan2(self.basisVectors[1][1], self.basisVectors[1][0])
     
     @property
+    def faceNormal(self):
+        if self.basisVectors is None:
+            return None
+        return np.cross(self.basisVectors[0],self.basisVectors[1])
+    
+    @property
     def orientation_plt(self):
         if self.basisVectors_plt is None:
             return None
@@ -719,6 +724,11 @@ class face:
     @property
     def vertices3D(self):
         return transform(self.vertices, self.origin, self.basisVectors)
+
+    @property
+    def vertices3D_inv(self):
+        # 3D vertices in the face-local coordinate system
+        return transform(self.vertices, self.origin, np.linalg.inv(self.basisVectors))
 
     @property
     def verticesPlt(self):
@@ -1080,9 +1090,10 @@ class face:
         if newFig:
             ax.axis('equal')
 
-    def plotEdges_3D(self, ax=None, showName=True, drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0,
+    def plotEdges_3D(self, ax=None, showName=True, drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0, fill=True,
                     kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'},
                     kwargs_Name={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.3]},
+                    kwargs_Fill={'facecolor':[0.0,0.0,0.5,0.3], 'edgecolor':'None', 'lw':0.5, 'ls':'-'},
                     ):
         newFig = False
         if ax is None:
@@ -1091,6 +1102,10 @@ class face:
             ax = fig.add_subplot(projection='3d')
         xyz = np.array(self.vertices3D)
         ax.plot(xyz[:,0], xyz[:,1], xyz[:,2], **kwargs_Edge)
+        if fill:
+            from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+            vertices = xyz
+            ax.add_collection3d(Poly3DCollection([vertices], facecolors=kwargs_Fill['facecolor'], edgecolors=kwargs_Fill['edgecolor'], lw=kwargs_Fill['lw'], ls=kwargs_Fill['ls']))
         # # overlay a transparent filled polygon
         # verts = xyz
         # verts = np.append(verts, [verts[0]], axis=0)
@@ -2417,14 +2432,68 @@ class building(Faces):
             newFig = True
             fig = plt.figure(figsize=figsize)
             ax = fig.add_subplot(projection='3d')
-        # for fc in self._memberFaces:
-        #     fc.plotEdges_3D(ax=ax, showName=False)
+            
+        # plot axis (x,y,z) symbols at the origin
+        ax.quiver(0, 0, 0, 0.1, 0, 0, color='r', arrow_length_ratio=0.1)
+        ax.text(0.1, 0, 0, 'x', color='r', fontsize='large', ha='center', va='center')
+        
+        ax.quiver(0, 0, 0, 0, 0.1, 0, color='g', arrow_length_ratio=0.1)
+        ax.text(0, 0.1, 0, 'y', color='g', fontsize='large', ha='center', va='center')        
+        
+        ax.quiver(0, 0, 0, 0, 0, 0.1, color='b', arrow_length_ratio=0.1)
+        ax.text(0, 0, 0.1, 'z', color='b', fontsize='large', ha='center', va='center')
+            
+        for fc in self._memberFaces:
+            fc.plotEdges_3D(ax=ax, showName=False)
         #     break
-        self._memberFaces[2].plotEdges_3D(ax=ax, showName=False)
-        self._memberFaces[3].plotEdges_3D(ax=ax, showName=False)
+        # self._memberFaces[2].plotEdges_3D(ax=ax, showName=False)
+        # self._memberFaces[3].plotEdges_3D(ax=ax, showName=False)
             
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_zlabel('z')
 
+#---------------------------- BUILDING STRUCTURE --------------------------------
+class panel: # a cladding element that forms the outer surface of a building attached to the structural frame
+    def __init__(self,
+                parentFace: face,
+                vertices: np.ndarray = None,
+                center: np.ndarray = None,
+                ) -> None:
+        '''Cladding element that forms the outer surface of a building attached to the structural frame. It is defined by a set of local coordinates within a given face of the building.
+        Args:
+            parentFace (face): The face object to which the panel is attached.
+            vertices (np.ndarray, optional): The 2D vertices of the panel in the local coordinate system of the parent face. Defaults to None.
+            center (np.ndarray, optional): The center of the panel in the local coordinate system of the parent face. Defaults to None.
+        '''
+        self.parentFace = parentFace
+        self.vertices = vertices
+        self.center = center
+        
+        pass
+    
+    @property
+    def area(self) -> float:
+        if self.vertices is None:
+            return 0.0
+        return shp.Polygon(self.vertices).area
+    
+    @property
+    def normal(self) -> np.ndarray:
+        return self.parentFace.faceNormal
+    
 
+class frame_2D:
+    # a 2D frame that forms the structural skeleton of a building
+    def __init__(self) -> None:
+        pass
+
+class element:  # (to be implemented later)
+    # a structural element that forms a 2D or 3D frame (e.g. beam, column, etc.)
+    def __init__(self) -> None:
+        pass
+    
+class frame_3D: # (to be implemented later)
+    # a 3D frame that forms the structural skeleton of a building
+    def __init__(self) -> None:
+        pass

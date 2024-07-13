@@ -33,6 +33,7 @@ inflowTuner : A class for scaling inflow data.
 """
 import numpy as np
 import os
+import sys
 import glob
 import warnings
 import pandas as pd
@@ -814,37 +815,57 @@ def read_OF_probe_single(file,field):
     time  = np.zeros([0])
     with open(file, "r") as f:
         for line in f:
-            line = line.replace('(','')
-            line = line.replace(')','')
-            line = line.replace(',',' ')
-            if line.startswith('#'):
-                if line.startswith('# Probe'):
-                    line = line.split()
-                    prb_i = np.reshape(np.asarray(line[3:6],dtype=float),[1,3])
-                    if len(points) == 0:
-                        points = prb_i
+            try:
+                line = line.replace('(','')
+                line = line.replace(')','')
+                line = line.replace(',',' ')
+                if line.startswith('#'):
+                    if line.startswith('# Probe'):
+                        line = line.split()
+                        try:
+                            prb_i = np.reshape(np.asarray(line[3:6],dtype=float),[1,3])
+                        except:
+                            print("Error converting line to float for points: "+line)
+                            print(sys.exc_info()[0])
+                            continue
+                        if len(points) == 0:
+                            points = prb_i
+                        else:
+                            points = np.append(points,prb_i,axis=0)
                     else:
-                        points = np.append(points,prb_i,axis=0)
-                else:
-                    continue
-            else:
-                line = line.split()
-                if field == 'p':
-                    if len(line[1:]) < len(points): # inclomplete line
                         continue
-                    d = np.reshape(np.asarray(line[1:],dtype=(float)),[1,-1])
-                elif field == 'U':
-                    if len(line[1:])/3 < len(points): # inclomplete line
-                        continue
-                    d = np.reshape(np.asarray(line[1:],dtype=(float)),[1,-1,3])
                 else:
-                    raise Exception("The probe reader is not implemented for field '"+field+"'.")
+                    line = line.split()
+                    if field == 'p':
+                        if len(line[1:]) < len(points): # inclomplete line
+                            continue
+                        try:
+                            d = np.reshape(np.asarray(line[1:],dtype=(float)),[1,-1])
+                        except:
+                            print("Error converting line to float for p: "+line)
+                            print(sys.exc_info()[0])
+                            continue
+                    elif field == 'U':
+                        if len(line[1:])/3 < len(points): # inclomplete line
+                            continue
+                        try:
+                            d = np.reshape(np.asarray(line[1:],dtype=(float)),[1,-1,3])
+                        except:
+                            print("Error converting line to float for U: "+line)
+                            print(sys.exc_info()[0])
+                            continue
+                    else:
+                        raise Exception("The probe reader is not implemented for field '"+field+"'.")
 
-                if len(data) == 0:
-                    data = d
-                else:
-                    data = np.append(data, d,axis=0)
-                time = np.append(time,float(line[0]))
+                    if len(data) == 0:
+                        data = d
+                    else:
+                        data = np.append(data, d,axis=0)
+                    time = np.append(time,float(line[0]))
+            except:
+                print("Error in reading line: "+line)
+                print(sys.exc_info()[0])
+                continue
    
     return points, time, data
 
