@@ -4518,11 +4518,27 @@ class bldgCp(windCAD.building):
                         if dim == 1:
                             valMin = valMin.T
                             valMax = valMax.T
-                        for a in range(np.shape(valMin)[dim]):
-                            overlayLabel = overlayThis['Name'] if a == 0 else None
-                            ax.semilogx(ar, valMin[:,a], label=overlayLabel, **kwargs_overlay[ii])
-                            ax.semilogx(ar, valMax[:,a], **kwargs_overlay[ii])
-                        bxPltName = overlayThis['Name']
+                        # if zKey == "NBCC 2020, Zone r":
+                        #     for mm in range(len(valMin)):
+                        #         print(f"min of valMin[{mm}] = {min(valMin[mm])}")
+                        #         # constant psuedo area the same shape as valMin[mm]
+                        #         a_psuedo = np.ones_like(valMin[mm])
+                        #         ax.semilogx(a_psuedo, valMin[mm], 'xr')
+                        #     print(f"dims of valMin = {np.shape(valMin)}")
+                        #     print(f"value of 'dim' = {dim}")
+                        #     print(f"value of np.shape(valMin)[dim] = {np.shape(valMin)[dim]}")
+                        # for a in range(np.shape(valMin)[dim]):
+                        #     if zKey == "NBCC 2020, Zone c":
+                        #         print(f"Shape of ar = {np.shape(ar)}")
+                        #         print(f"Shape of valMin[:,a] = {np.shape(valMin[:,a])}")
+                        #     overlayLabel = overlayThis['Name'] if a == 0 else None
+                        #     ax.semilogx(ar, valMin[:,a], label=overlayLabel, **kwargs_overlay[ii])
+                        #     ax.semilogx(ar, valMax[:,a], **kwargs_overlay[ii])
+                        valMin_flattened = np.array(valMin).flatten()
+                        valMax_flattened = np.array(valMax).flatten()
+                        ax.semilogx(ar[0]*np.ones_like(valMin_flattened), valMin_flattened, label=overlayThis['Name'], **kwargs_overlay[ii])
+                        ax.semilogx(ar[0]*np.ones_like(valMax_flattened), valMax_flattened, **kwargs_overlay[ii])
+                        bxPltName = overlayThis['Name']+' (stats)'
                         bxPltObj = addOverlay(ax, [ar[0],], np.array(valMin).flatten(), overlayType, name=bxPltName, kwargs_overlay={})
                         addOverlay(ax, [ar[0],], np.array(valMax).flatten(), overlayType, name='_', kwargs_overlay={})
             

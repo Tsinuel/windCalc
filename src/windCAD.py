@@ -412,14 +412,42 @@ def calculateTapWeightsPerPanel(panels:shp.MultiPolygon,tapsAll,tapIdxAll, wghtT
     return weights, tapIdxs, overlaps, errIdxs
 
 #--------------------------- COORDINATE SYSTEMS --------------------------------
-def transform(geomIn,orig,T):
+def transform(geomIn,orig,T,inverse=False,debug=False):
     # geomIn = np.asarray(geomIn,dtype=float)
     # orig = np.asarray(orig,dtype=float)
     # T = np.asarray(T,dtype=float)
+    if debug:
+        print("Raw input:")
+        print(f"geomIn: {geomIn}")
+        print(f"orig: {orig}")
+        print(f"T: {T}")
+    
     N,M = np.shape(geomIn)
     if len(orig) == 3 and M == 2:
         geomIn = np.append(geomIn,np.zeros((N,1)),axis=1)
-    geomOut =np.transpose(np.dot(T,np.transpose(np.add(geomIn,orig))))
+        if debug:
+            print(f"geomIn after readjusting and adding zeros: {geomIn}")
+    if inverse:
+        # add the origin to the geometry dotted with the inverse of the transformation matrix
+        geomOut = np.transpose(np.dot(np.linalg.inv(T),np.transpose(geomIn)))
+        if debug:
+            print(f"Inverse of T: {np.linalg.inv(T)}")
+            print(f"shape of geomOut: {np.shape(geomOut)}")
+            print(f"geomOut after rotation by the inverse of T: {geomOut}")
+        geomOut = np.add(geomOut, orig)
+        if debug:
+            print(f"shape of geomOut: {np.shape(geomOut)}")
+            print(f"geomOut after translation to the origin: {geomOut}")        
+    else:
+        geomOut = np.add(geomIn,orig)
+        if debug:
+            print(f"geomOut after translation to the origin: {geomOut}")
+        geomOut = np.transpose(np.dot(T,np.transpose(geomOut)))
+        if debug:
+            print(f"shape of geomOut: {np.shape(geomOut)}")
+            print(f"geomOut after rotation by T: {geomOut}")
+        # geomOut =np.transpose(np.dot(T,np.transpose(np.add(geomIn,orig))))
+        
     return geomOut
 
 def tranform2D(x, y, O, e1, e2, translateFirst=True,):
@@ -723,7 +751,7 @@ class face:
 
     @property
     def vertices3D(self):
-        return transform(self.vertices, self.origin, self.basisVectors)
+        return transform(self.vertices, self.origin, self.basisVectors, inverse=True, debug=False)
 
     @property
     def vertices3D_inv(self):
@@ -1057,10 +1085,53 @@ class face:
         return tapIdx_inFace, tapIdx_inData
 
     """--------------------------------- Plotters -------------------------------------"""
-    def plotEdges(self, ax=None, showName=True, drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0, fill=False, 
+    def plotLocalAxes(self, ax=None, showLabels=True, drawOrigin=True, drawBasisVectors=True, vectorSize=1.0, 
+                    kwargs_vec_x={'arrowstyle':'->', 'lw':1.0, 'color':'r', 'connectionstyle':'arc3,rad=0.0'},
+                    kwargs_vec_y={'arrowstyle':'->', 'lw':1.0, 'color':'b', 'connectionstyle':'arc3,rad=0.0'},
+                    kwargs_Origin={'color':'k', 'marker':'o', 'ms':2.0, 'mfc':'k', 'mec':'none'},
+                    kwargs_x_label={'ha':'center', 'va':'center', 'color':'r', 'backgroundcolor':[1,1,1,0.3], 'fontsize':14},
+                    kwargs_y_label={'ha':'center', 'va':'center', 'color':'b', 'backgroundcolor':[1,1,1,0.3], 'fontsize':14},
+                    ):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot()
+        orig = tranform2D(self.origin_plt[0], self.origin_plt[1], [0,0], self.basisVectors_plt[0], self.basisVectors_plt[1])
+        
+        if drawOrigin:
+            ax.plot(orig[0], orig[1], **kwargs_Origin)
+        if drawBasisVectors:
+            # arrowLength = vectorSize*np.max([np.max(self.vertices[:,0])-np.min(self.vertices[:,0]), np.max(self.vertices[:,1])-np.min(self.vertices[:,1])])
+            # use fixed length relative to the axis bounding box (average of the x and y axis lengths) determined from axis limits
+            axLimits = ax.axis()
+            arrowLength = vectorSize*0.1*np.mean([axLimits[1]-axLimits[0], axLimits[3]-axLimits[2]])
+            
+            if showLabels:
+                ax.text((orig[0]+self.basisVectors_plt[0][0]*arrowLength)*1.1, orig[1]+self.basisVectors_plt[0][1]*arrowLength/2, 'x', **kwargs_x_label)
+                ax.text(orig[0]+self.basisVectors_plt[1][0]*arrowLength/2, (orig[1]+self.basisVectors_plt[1][1]*arrowLength)*1.1, 'y', **kwargs_y_label)
+        
+            # use ax.annotate with 'arrowtext' to plot the arrows with text instead of the ax.arrow and ax.text
+            ax.annotate('  ', xy=(orig[0]+self.basisVectors_plt[0][0]*arrowLength, orig[1]+self.basisVectors_plt[0][1]*arrowLength), 
+                        xytext=(orig[0], orig[1]), 
+                        arrowprops=kwargs_vec_x, ha='center', va='center')
+            ax.annotate(' ', xy=(orig[0]+self.basisVectors_plt[1][0]*arrowLength, orig[1]+self.basisVectors_plt[1][1]*arrowLength),
+                        xytext=(orig[0], orig[1]), 
+                        arrowprops=kwargs_vec_y, ha='center', va='center')
+        
+        if newFig:
+            ax.axis('equal')
+    
+    def plotEdges(self, ax=None, showName=True, drawOrigin=False, drawLocalAxes=False, basisVectorLength=1.0, fill=False, 
                   kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'}, 
                   kwargs_Name={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.3]},
                   kwargs_Fill={'facecolor':[0.8,0.8,0.8,0.3], 'edgecolor':'None', 'lw':0.5, 'ls':'-'},
+                  kwargs_lclAxs={'showLabels':True, 'drawOrigin':True, 'drawBasisVectors':True, 'vectorSize':1.0,
+                                    'kwargs_vec_x':{'color':'r', 'lw':1.0, 'ls':'-'}, 'kwargs_vec_y':{'color':'b', 'lw':1.0, 'ls':'-'},
+                                    'kwargs_Origin':{'color':'k', 'marker':'o', 'ms':5.0, 'mfc':'k', 'mec':'k'},
+                                    'kwargs_x_label':{'ha':'center', 'va':'center', 'color':'r', 'backgroundcolor':[1,1,1,0.3]},
+                                    'kwargs_y_label':{'ha':'center', 'va':'center', 'color':'b', 'backgroundcolor':[1,1,1,0.3]},
+                                    }
                   ):
         newFig = False
         if ax is None:
@@ -1078,15 +1149,8 @@ class face:
         if drawOrigin:
             # ax.plot(self.origin_plt[0], self.origin_plt[1], 'ko')
             pass
-        if drawBasisVectors:
-            # basis vectors of the local coord sys in 2D (not for the plotting).
-            # windowSize = 0.05*np.max([np.max(xy[:,0])-np.min(xy[:,0]), np.max(xy[:,1])-np.min(xy[:,1])])
-            # arrowLength = basisVectorLength*windowSize
-            # ax.arrow(self.origin_plt[0], self.origin_plt[1], self.basisVectors_plt[0][0]*arrowLength, self.basisVectors_plt[0][1]*arrowLength, color='r', width=0.01*windowSize, head_width=0.15*windowSize, head_length=0.2*windowSize)
-            # ax.arrow(self.origin_plt[0], self.origin_plt[1], self.basisVectors_plt[1][0]*arrowLength, self.basisVectors_plt[1][1]*arrowLength, color='g', width=0.01*windowSize, head_width=0.15*windowSize, head_length=0.2*windowSize)
-            # ax.text(self.origin_plt[0]+self.basisVectors_plt[0][0]*arrowLength + 0.15*windowSize, self.origin_plt[1]+self.basisVectors_plt[0][1]*arrowLength + 0.15*windowSize, 'x', **kwargs_Name)
-            # ax.text(self.origin_plt[0]+self.basisVectors_plt[1][0]*arrowLength + 0.15*windowSize, self.origin_plt[1]+self.basisVectors_plt[1][1]*arrowLength + 0.15*windowSize, 'y', **kwargs_Name)
-            pass
+        if drawLocalAxes:
+            self.plotLocalAxes(ax=ax, **kwargs_lclAxs)
         if newFig:
             ax.axis('equal')
 
@@ -1781,6 +1845,25 @@ class Faces:
                      )
 
     """--------------------------------- Plotters -------------------------------------"""
+    def plotLocalAxes(self, ax=None, showLabels=True, drawOrigin=True, drawBasisVectors=True, vectorSize=1.0, 
+                    kwargs_vec_x={'arrowstyle':'->', 'lw':1.0, 'color':'r', 'connectionstyle':'arc3,rad=0.0'},
+                    kwargs_vec_y={'arrowstyle':'->', 'lw':1.0, 'color':'b', 'connectionstyle':'arc3,rad=0.0'},
+                    kwargs_Origin={'color':'k', 'marker':'o', 'ms':2.0, 'mfc':'k', 'mec':'none'},
+                    kwargs_x_label={'ha':'center', 'va':'center', 'color':'r', 'backgroundcolor':[1,1,1,0.3], 'fontsize':14},
+                    kwargs_y_label={'ha':'center', 'va':'center', 'color':'b', 'backgroundcolor':[1,1,1,0.3], 'fontsize':14},
+                ):
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot()
+        for fc in self._memberFaces:
+            fc.plotLocalAxes(ax=ax, showLabels=showLabels, drawOrigin=drawOrigin, drawBasisVectors=drawBasisVectors, vectorSize=vectorSize, 
+                            kwargs_vec_x=kwargs_vec_x, kwargs_vec_y=kwargs_vec_y, kwargs_Origin=kwargs_Origin,
+                            kwargs_x_label=kwargs_x_label, kwargs_y_label=kwargs_y_label)
+        if newFig:
+            ax.axis('equal')
+    
     def plotEdges(self, ax=None, showName=True, fill=False, 
                   kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'},
                   kwargs_Fill={'facecolor':[0.8,0.8,0.8,0.3], 'edgecolor':'None', 'lw':0.5, 'ls':'-'},
@@ -2411,6 +2494,21 @@ class building(Faces):
     def faces(self,value: List[face]) -> None:
         self._memberFaces = value
 
+    @property
+    def boundingBox(self):
+        if len(self._memberFaces) == 0:
+            return None
+        # loop over all faces and get the vertices3D and then get the min and max of x, y, z
+        x = []
+        y = []
+        z = []
+        for fc in self._memberFaces:
+            verts = fc.vertices3D
+            x.extend(verts[:,0])
+            y.extend(verts[:,1])
+            z.extend(verts[:,2])
+        return np.array([[min(x), max(x)], [min(y), max(y)], [min(z), max(z)]])
+
     """-------------------------------- Data handlers ---------------------------------"""
     def writeToFile(self, file_basic, file_derived=None) -> None:
         # write the basic building details to the file 
@@ -2422,10 +2520,11 @@ class building(Faces):
         return copy.deepcopy(self)
 
     """--------------------------------- Plotters -------------------------------------"""
-    def plotBldg_3D(self, ax=None, figsize=(10,10), 
+    def plotBldg_3D(self, ax=None, figsize=(10,10), showOrigin=False, 
                     showAxis=True, showTaps=False, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
                     kwargs_taps={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
                     kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
+                    kwargs_view={'elev':30, 'azim':30},
                     ):
         newFig = False
         if ax is None:
@@ -2433,25 +2532,46 @@ class building(Faces):
             fig = plt.figure(figsize=figsize)
             ax = fig.add_subplot(projection='3d')
             
-        # plot axis (x,y,z) symbols at the origin
-        ax.quiver(0, 0, 0, 0.1, 0, 0, color='r', arrow_length_ratio=0.1)
-        ax.text(0.1, 0, 0, 'x', color='r', fontsize='large', ha='center', va='center')
-        
-        ax.quiver(0, 0, 0, 0, 0.1, 0, color='g', arrow_length_ratio=0.1)
-        ax.text(0, 0.1, 0, 'y', color='g', fontsize='large', ha='center', va='center')        
-        
-        ax.quiver(0, 0, 0, 0, 0, 0.1, color='b', arrow_length_ratio=0.1)
-        ax.text(0, 0, 0.1, 'z', color='b', fontsize='large', ha='center', va='center')
+        if showOrigin:
+            ax.quiver(0, 0, 0, 0.1, 0, 0, color='r', arrow_length_ratio=1)
+            ax.text(0.1, 0, 0, 'x', color='r', fontsize='large', ha='center', va='center')
+            
+            ax.quiver(0, 0, 0, 0, 0.1, 0, color='g', arrow_length_ratio=1)
+            ax.text(0, 0.1, 0, 'y', color='g', fontsize='large', ha='center', va='center')        
+            
+            ax.quiver(0, 0, 0, 0, 0, 0.1, color='b', arrow_length_ratio=1)
+            ax.text(0, 0, 0.1, 'z', color='b', fontsize='large', ha='center', va='center')
             
         for fc in self._memberFaces:
             fc.plotEdges_3D(ax=ax, showName=False)
-        #     break
-        # self._memberFaces[2].plotEdges_3D(ax=ax, showName=False)
-        # self._memberFaces[3].plotEdges_3D(ax=ax, showName=False)
             
         ax.set_xlabel('x')
         ax.set_ylabel('y')
         ax.set_zlabel('z')
+        
+        # rotate the view
+        ax.view_init(**kwargs_view)
+                
+        bounds = self.boundingBox  # [[xmin, xmax], [ymin, ymax], [zmin, zmax]]
+        ax.set_xlim(bounds[0])
+        ax.set_ylim(bounds[1])
+        ax.set_zlim(bounds[2])
+        
+        # set the axis to equal
+        ax.axis('equal')
+        ax.axis('off')
+
+        
+        
+        # set the x, y, z limits to proportionally fit the building
+        
+        
+        # if xlim is not None:
+        #     ax.set_xlim(xlim)
+        # if ylim is not None:
+        #     ax.set_ylim(ylim)
+        # if zlim is not None:
+        #     ax.set_zlim(zlim)
 
 #---------------------------- BUILDING STRUCTURE --------------------------------
 class panel: # a cladding element that forms the outer surface of a building attached to the structural frame
@@ -2482,7 +2602,59 @@ class panel: # a cladding element that forms the outer surface of a building att
     def normal(self) -> np.ndarray:
         return self.parentFace.faceNormal
     
-
+    @property
+    def centroid(self) -> np.ndarray:
+        if self.vertices is None:
+            return None
+        return np.mean(self.vertices, axis=0)
+    
+    def getTapIdxs(self) -> np.ndarray:
+        '''Get the taps that fall within the panel's area.
+        
+        '''
+        # create a shaplley polygon object from the vertices of the panel
+        panelPoly = shp.Polygon(self.vertices)
+        
+        # loop through the tap tributaries of the parent face and check if they fall (overlap) within the panel's area
+        tapIdxs = []
+        overlappingAreas = []
+        for i,trib in enumerate(self.parentFace.tapTribs.geoms):
+            out = panelPoly.intersection(trib)
+            if out.is_empty:
+                continue
+            # only consider the overlapping area if it is a polygon, a multipolygon, or a collection containing polygons. Otherwise, ignore it.
+            if isinstance(out, shp.Polygon):
+                tapIdxs.append(i)
+                overlappingAreas.append(out.area)
+            elif isinstance(out, shp.MultiPolygon):
+                counted = False
+                area = 0.0
+                for poly in out:
+                    if isinstance(poly, shp.Polygon):
+                        if not counted:
+                            tapIdxs.append(i)
+                            counted = True
+                        area += poly.area
+                if area > 0.0:
+                    overlappingAreas.append(area)
+                    
+            elif isinstance(out, shp.GeometryCollection):
+                counted = False
+                area = 0.0
+                for geom in out:
+                    if isinstance(geom, shp.Polygon):
+                        if not counted:
+                            tapIdxs.append(i)
+                            counted = True
+                        area += geom.area
+                if area > 0.0:
+                    overlappingAreas.append(area)
+        
+        tapIdxs = np.array(tapIdxs, dtype=int)
+        overlappingAreas = np.array(overlappingAreas, dtype=float)
+        return tapIdxs, overlappingAreas
+    
+    
 class frame_2D:
     # a 2D frame that forms the structural skeleton of a building
     def __init__(self) -> None:
