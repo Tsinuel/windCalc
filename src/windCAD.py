@@ -175,7 +175,8 @@ def trimmedVoronoi(bound,coords,showLog=False):
     totalArea = np.sum(areas)
     boundArea = boundPolygon.area
     if abs(totalArea - boundArea) > 0.00001*boundArea:
-        warnings.warn(f"The sum of tributary areas {totalArea} is not equal to the area of the bound {boundArea}.")
+        msg = f"The sum of tributary areas {totalArea} is not equal to the area of the bound {boundArea}."
+        warnings.warn(msg)
 
     temp = []
     for i in idx:
@@ -751,10 +752,11 @@ class face:
 
     @property
     def vertices3D(self):
-        return transform(self.vertices, self.origin, self.basisVectors, inverse=True, debug=False)
+        # return transform(self.vertices, self.origin, self.basisVectors, inverse=True, debug=False)
+        return self.toGlobalCoord(self.vertices)
 
     @property
-    def vertices3D_inv(self):
+    def vertices3D_inv____redacted(self):
         # 3D vertices in the face-local coordinate system
         return transform(self.vertices, self.origin, np.linalg.inv(self.basisVectors))
 
@@ -1083,6 +1085,13 @@ class face:
                 tapIdx_inFace.append(i)
                 tapIdx_inData.append(self.tapIdx[i])
         return tapIdx_inFace, tapIdx_inData
+
+    def toGlobalCoord(self, points, debug=False, kwargs={}):
+        # transform(self.vertices, self.origin, self.basisVectors, inverse=True, debug=False)
+        return transform(geomIn=points, orig=self.origin, T=self.basisVectors, inverse=True, debug=debug, **kwargs)
+
+    def toLocalCoord(self, points, debug=False, kwargs={}):
+        return transform(geomIn=points, orig=self.origin, T=self.basisVectors, inverse=False, debug=debug, **kwargs)
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotLocalAxes(self, ax=None, showLabels=True, drawOrigin=True, drawBasisVectors=True, vectorSize=1.0, 
@@ -2521,7 +2530,8 @@ class building(Faces):
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotBldg_3D(self, ax=None, figsize=(10,10), showOrigin=False, 
-                    showAxis=True, showTaps=False, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
+                    showAxis=True, axisArrowSize=1.0, axisVisibility:Literal['on','off']='off',
+                    showTaps=False, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
                     kwargs_taps={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
                     kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
                     kwargs_view={'elev':30, 'azim':30},
@@ -2533,14 +2543,15 @@ class building(Faces):
             ax = fig.add_subplot(projection='3d')
             
         if showOrigin:
-            ax.quiver(0, 0, 0, 0.1, 0, 0, color='r', arrow_length_ratio=1)
-            ax.text(0.1, 0, 0, 'x', color='r', fontsize='large', ha='center', va='center')
+            # draw the origin
+            ax.scatter(0, 0, 0, color='k', marker='o', s=5)
             
-            ax.quiver(0, 0, 0, 0, 0.1, 0, color='g', arrow_length_ratio=1)
-            ax.text(0, 0.1, 0, 'y', color='g', fontsize='large', ha='center', va='center')        
+        # draw the axes with arrows
+        if showAxis:
+            ax.quiver(0, 0, 0, axisArrowSize, 0, 0, color='r', arrow_length_ratio=0.1)
+            ax.quiver(0, 0, 0, 0, axisArrowSize, 0, color='g', arrow_length_ratio=0.1)
+            ax.quiver(0, 0, 0, 0, 0, axisArrowSize, color='b', arrow_length_ratio=0.1)
             
-            ax.quiver(0, 0, 0, 0, 0, 0.1, color='b', arrow_length_ratio=1)
-            ax.text(0, 0, 0.1, 'z', color='b', fontsize='large', ha='center', va='center')
             
         for fc in self._memberFaces:
             fc.plotEdges_3D(ax=ax, showName=False)
@@ -2559,7 +2570,7 @@ class building(Faces):
         
         # set the axis to equal
         ax.axis('equal')
-        ax.axis('off')
+        ax.axis(axisVisibility)
 
         
         
@@ -2574,49 +2585,202 @@ class building(Faces):
         #     ax.set_zlim(zlim)
 
 #---------------------------- BUILDING STRUCTURE --------------------------------
-class panel: # a cladding element that forms the outer surface of a building attached to the structural frame
+    
+class node_CAD:
+    # a node of a 2D or 3D frame
+    def __init__(self, x: float, y: float=None, z: float=None, ID: int=None, connectionType: Literal['fixed','pinned','roller','free']='fixed',
+                 nodeType: Literal['support','internal']='support',
+                 connectedTo_elements: List['element_CAD']=[],
+                 connectedTo_panels: List['panel_CAD']=[],
+                ) -> None:
+        self.x: float = x
+        self.y: float = y
+        self.z: float = z
+        self.ID: int = ID
+        self.connectionType: Literal['fixed','pinned','roller','free'] = connectionType
+        self.nodeType: Literal['support','internal'] = nodeType
+        self.connectedTo_elements: List[element_CAD] = connectedTo_elements
+        self.connectedTo_panels: List[panel_CAD] = connectedTo_panels
+    
+    @property
+    def is1D(self) -> bool:
+        return self.z is None and self.y is None
+    
+    @property
+    def is2D(self) -> bool:
+        return self.z is None and self.y is not None
+    
+    @property
+    def is3D(self) -> bool:
+        return self.z is not None and self.y is not None
+    
+    @property
+    def loc(self) -> np.ndarray:
+        if self.is1D:
+            return np.array([self.x], dtype=float)
+        elif self.is2D:
+            return np.array([self.x, self.y], dtype=float)
+        elif self.is3D:
+            return np.array([self.x, self.y, self.z], dtype=float)
+        else:
+            return None
+    
+    def __str__(self):
+        return 'Node at: '+str(self.loc)
+    
+    def __repr__(self):
+        return 'Node at: '+str(self.loc)
+    
+    def __eq__(self, other: 'node_CAD') -> bool:
+        return np.all(self.loc == other.loc)
+    
+    def __ne__(self, other: 'node_CAD') -> bool:
+        return not np.all(self.loc == other.loc)
+    
+    def __add__(self, other: 'node_CAD') -> 'node_CAD':
+        return node_CAD(self.loc + other.loc)
+    
+    def __sub__(self, other: 'node_CAD') -> 'node_CAD':
+        return node_CAD(self.loc - other.loc)
+    
+    def __hash__(self):
+        return hash(tuple(self.loc))
+    
+    def copy(self) -> 'node_CAD':
+        return copy.deepcopy(self)
+
+    ###---------------------- Data handlers ----------------------###
+    
+    def toLocalCoord(self, face: 'face') -> np.ndarray:
+        return face.toLocalCoord(points=self.loc)
+    
+    def toGlobalCoord(self, face: 'face') -> np.ndarray:
+        return face.toGlobalCoord(points=self.loc)
+    
+    ###---------------------- Plotters ----------------------###
+    
+    def plot(self, ax=None, showName=False, textOffset=[0,0],
+                kwargs_node={'color':'k', 'marker':'o', 'ms':5, 'ls':'None'},
+                kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
+                ):
+            newFig = False
+            if ax is None:
+                newFig = True
+                fig = plt.figure()
+                ax = fig.add_subplot()
+            ax.plot(self.loc[0], self.loc[1], **kwargs_node)
+            if showName:
+                ax.text(self.loc[0]+textOffset[0], self.loc[1]+textOffset[1], str(self.ID), **kwargs_text)
+            if newFig:
+                ax.axis('equal')
+                ax.axis('off')
+                
+    def plot3D(self, ax=None, showName=False, textOffset=[0,0,0],
+                kwargs_node={'color':'k', 'marker':'o', 'ms':5, 'ls':'None'},
+                kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
+                ):
+            newFig = False
+            if ax is None:
+                newFig = True
+                fig = plt.figure()
+                ax = fig.add_subplot(projection='3d')
+            ax.scatter(self.loc[0], self.loc[1], self.loc[2], **kwargs_node)
+            if showName:
+                ax.text(self.loc[0]+textOffset[0], self.loc[1]+textOffset[1], self.loc[2]+textOffset[2], str(self.ID), **kwargs_text)
+            if newFig:
+                ax.axis('equal')
+                ax.axis('off')
+                
+
+    
+class panel_CAD: # a cladding element that forms the outer surface of a building attached to the structural frame
     def __init__(self,
                 parentFace: face,
                 vertices: np.ndarray = None,
                 center: np.ndarray = None,
+                ID: int = None,
+                supportNodes: List[node_CAD] = None,
                 ) -> None:
-        '''Cladding element that forms the outer surface of a building attached to the structural frame. It is defined by a set of local coordinates within a given face of the building.
-        Args:
-            parentFace (face): The face object to which the panel is attached.
-            vertices (np.ndarray, optional): The 2D vertices of the panel in the local coordinate system of the parent face. Defaults to None.
-            center (np.ndarray, optional): The center of the panel in the local coordinate system of the parent face. Defaults to None.
-        '''
-        self.parentFace = parentFace
-        self.vertices = vertices
-        self.center = center
-        
-        pass
+        self.parentFace: face = parentFace
+        self.vertices: np.ndarray = vertices
+        self.center: np.ndarray = center
+        self.ID: int = ID
+        self.supportNodes: List[node_CAD] = supportNodes
     
     @property
     def area(self) -> float:
-        if self.vertices is None:
-            return 0.0
-        return shp.Polygon(self.vertices).area
+        return self.polygon.area
     
     @property
     def normal(self) -> np.ndarray:
         return self.parentFace.faceNormal
     
     @property
-    def centroid(self) -> np.ndarray:
+    def centroid_local(self) -> np.ndarray:
         if self.vertices is None:
             return None
         return np.mean(self.vertices, axis=0)
     
-    def getTapIdxs(self) -> np.ndarray:
-        '''Get the taps that fall within the panel's area.
+    @property
+    def centroid_global(self) -> np.ndarray:
+        return self.parentFace.toGlobalCoord(points=[self.centroid_local])
+    
+    @property
+    def corners_local(self) -> np.ndarray:
+        return self.vertices
+    
+    @property
+    def corners_global(self) -> np.ndarray:
+        return self.parentFace.toGlobalCoord(points=self.vertices)
+    
+    @property
+    def polygon(self) -> shp.Polygon:
+        return shp.Polygon(self.vertices)
         
+    @property
+    def supportNodesLocn_global(self) -> np.ndarray:
+        return np.array([n.loc for n in self.supportNodes])
+    
+    @property
+    def supportNodesLocn_local(self) -> np.ndarray:
+        return self.parentFace.toLocalCoord(points=self.supportNodesLocn_global)
+        
+    @property
+    def supportTributaries(self) -> shp.MultiPolygon:
+        '''Generate the tributaries for the supportNodes of the panel using voronoi tessellation.
+        Returns:
+            shp.MultiPolygon: A multipolygon object containing the tributaries.
+        '''
+        # trimmedVoronoi(self.vertices, self.tapCoord, showLog=showDetailedLog)
+        return trimmedVoronoi(self.vertices, self.supportNodesLocn_local)
+
+    @property
+    def supportAreaShares(self) -> np.ndarray:
+        '''Get the area shares of the supportNodes of the panel.
+        Returns:
+            np.ndarray: The area shares of the supportNodes.
+        '''
+        polygon = self.polygon
+        supportAreas = []
+        for i,tri in enumerate(self.supportTributaries.geoms):
+            out = tri.intersection(polygon)
+            if out.is_empty:
+                supportAreas.append(0.0)
+                warnings.warn(f"Support node {self.supportNodes[i]} of panel {self.ID} does not fall within the panel area.")
+            else:
+                supportAreas.append(out.area)
+        return np.array(supportAreas, dtype=float)
+
+    def getInvolvedTaps(self) -> np.ndarray:
+        '''Get the tap tributaries that fall within the panel area.
+        Returns:
+            np.ndarray: The indices of the tap tributaries that fall within the panel area.
         '''
         # create a shaplley polygon object from the vertices of the panel
-        panelPoly = shp.Polygon(self.vertices)
+        panelPoly = self.polygon
         
         # loop through the tap tributaries of the parent face and check if they fall (overlap) within the panel's area
-        tapIdxs = []
+        tapIdxs_inFace = []
         overlappingAreas = []
         for i,trib in enumerate(self.parentFace.tapTribs.geoms):
             out = panelPoly.intersection(trib)
@@ -2624,7 +2788,7 @@ class panel: # a cladding element that forms the outer surface of a building att
                 continue
             # only consider the overlapping area if it is a polygon, a multipolygon, or a collection containing polygons. Otherwise, ignore it.
             if isinstance(out, shp.Polygon):
-                tapIdxs.append(i)
+                tapIdxs_inFace.append(i)
                 overlappingAreas.append(out.area)
             elif isinstance(out, shp.MultiPolygon):
                 counted = False
@@ -2632,40 +2796,205 @@ class panel: # a cladding element that forms the outer surface of a building att
                 for poly in out:
                     if isinstance(poly, shp.Polygon):
                         if not counted:
-                            tapIdxs.append(i)
+                            tapIdxs_inFace.append(i)
                             counted = True
                         area += poly.area
                 if area > 0.0:
                     overlappingAreas.append(area)
-                    
             elif isinstance(out, shp.GeometryCollection):
                 counted = False
                 area = 0.0
                 for geom in out:
                     if isinstance(geom, shp.Polygon):
                         if not counted:
-                            tapIdxs.append(i)
+                            tapIdxs_inFace.append(i)
                             counted = True
                         area += geom.area
                 if area > 0.0:
                     overlappingAreas.append(area)
         
-        tapIdxs = np.array(tapIdxs, dtype=int)
+        tapIdxs_inFace = np.array(tapIdxs_inFace, dtype=int)
         overlappingAreas = np.array(overlappingAreas, dtype=float)
-        return tapIdxs, overlappingAreas
-    
-    
-class frame_2D:
-    # a 2D frame that forms the structural skeleton of a building
-    def __init__(self) -> None:
-        pass
+        return tapIdxs_inFace, overlappingAreas
 
-class element:  # (to be implemented later)
+
+        
+
+class element_CAD:
     # a structural element that forms a 2D or 3D frame (e.g. beam, column, etc.)
-    def __init__(self) -> None:
-        pass
+    def __init__(self, startNode: node_CAD, endNode: node_CAD, internalNodes: List[node_CAD]=[],
+                #  panels: List[panel_CAD]=[],
+                 ID: int=None,
+                 ) -> None:
+        self.startNode: node_CAD = startNode
+        self.endNode: node_CAD = endNode
+        self.internalNodes: List[node_CAD] = internalNodes
+        # self.panels : List[panel_CAD] = panels
+        self.ID: int = ID
     
-class frame_3D: # (to be implemented later)
+    @property
+    def is2D(self) -> bool:
+        return self.startNode.is2D and self.endNode.is2D
+    
+    @property
+    def is3D(self) -> bool:
+        return self.startNode.is3D and self.endNode.is3D
+    
+    @property
+    def length(self) -> float:
+        return linalg.norm(self.endNode.loc - self.startNode.loc)
+    
+    @property
+    def orientation(self) -> float:
+        if self.is2D:
+            return np.arctan2(self.endNode.loc[1]-self.startNode.loc[1], self.endNode.loc[0]-self.startNode.loc[0])
+        elif self.is3D:
+            # two angles: one in the xy-plane and the other the vertical angle between the xy-plane and the line
+            xy_angle = np.arctan2(self.endNode.loc[1]-self.startNode.loc[1], self.endNode.loc[0]-self.startNode.loc[0])
+            xyz_angle = np.arctan2(self.endNode.loc[2]-self.startNode.loc[2], self.length)
+            return {'xy-plane':xy_angle, 'xy-z--plane':xyz_angle}
+        else:
+            return None
+        
+    @property
+    def orientation_deg(self) -> float:
+        return np.rad2deg(self.orientation)
+    
+    @property
+    def orientation_unitVector(self) -> np.ndarray:
+        if self.is2D:
+            return (self.endNode.loc - self.startNode.loc)/self.length
+        elif self.is3D:
+            return (self.endNode.loc - self.startNode.loc)/linalg.norm(self.endNode.loc - self.startNode.loc)
+        else:
+            return None
+    
+    @property
+    def centroid(self) -> np.ndarray:
+        return 0.5*(self.nodes[0].loc + self.nodes[1].loc)
+
+    '''@property
+    def panelCentroids_fromStartNode(self) -> np.ndarray:
+        start = self.startNode.loc
+        # if the start point is a 2D element, add a zero z-coordinate to the start node
+        if len(start) == 2:
+            start = np.append(start, 0)
+        C = []
+        for p in self.panels:
+            C.append(p.centroid_global - start)
+        return np.array(C, dtype=float)
+
+    @property
+    def panelMomentArm(self) -> np.ndarray:
+        start = self.startNode.loc
+        # if the start point is a 2D element, add a zero z-coordinate to the start node
+        if len(start) == 2:
+            start = np.append(start, 0)
+        orientation = self.orientation_unitVector
+        L = []
+        for p in self.panels:
+            global_arm = linalg.norm(p.centroid_global - start)
+            # project the global arm onto the line of the element
+            local_arm = np.dot(p.centroid_global - start, orientation)
+            L.append(local_arm)
+            
+        return np.array(L, dtype=float)
+    
+    @property
+    def panelMomentArm_global(self) -> np.ndarray:
+        start = self.startNode.loc
+        # if the start point is a 2D element, add a zero z-coordinate to the start node
+        if len(start) == 2:
+            start = np.append(start, 0)
+        L = []
+        for p in self.panels:
+            L.append(linalg.norm(p.centroid_global - start))
+        return np.array(L, dtype=float)'''
+    
+    @property
+    def nodes(self) -> List[node_CAD]:
+        return [self.startNode, *self.internalNodes, self.endNode]
+    
+    
+class frame2D_CAD:
+    
+    # a 2D frame that forms the structural skeleton of a building
+    def __init__(self, parentBuilding: building,
+                 nodes: List[node_CAD]=[],
+                 elements: List[element_CAD]=[],
+                 panels: List[panel_CAD]=[],
+                 ) -> None:
+        self.NODE_PLANE_TOLERANCE = 1e-3
+        
+        self.parentBuilding: building = parentBuilding
+        self.nodes: List[node_CAD] = nodes
+        self.elements : List[element_CAD] = elements
+        self.panels: List[panel_CAD] = panels
+    
+    
+    @property
+    def supportNodes(self) -> List[node_CAD]:
+        return [n for n in self.nodes if n.nodeType == 'support']
+    
+    @property
+    def internalNodes(self) -> List[node_CAD]:
+        return [n for n in self.nodes if n.nodeType == 'internal']
+    
+    @property
+    def centroid(self) -> np.ndarray:
+        return np.mean(self.nodePoints, axis=0)
+    
+    @property
+    def nodeIDs(self) -> List[int]:
+        return [n.ID for n in self.nodes]
+    
+    @property
+    def elementIDs(self) -> List[int]:
+        return [el.ID for el in self.elements]
+    
+    @property
+    def planeNormal(self) -> np.ndarray:
+        # returns a normal vector to the plane of the frame
+        if len(self.elements) == 0:
+            return None
+        
+        # get the optimal plane (least squares) that fits all the nodes of the frame
+        # get the node points
+        nodePoints = self.nodePoints
+        # get the covariance matrix of the node points (it may not be centered at the origin)
+        cov = np.cov(nodePoints, rowvar=False)
+        # get the eigenvalues and eigenvectors of the covariance matrix
+        eigvals, eigvecs = linalg.eig(cov)
+        # get the eigenvector corresponding to the smallest eigenvalue
+        idx = np.argmin(eigvals)
+        planeNormal = eigvecs[:,idx]
+        
+        # if the deviation of the points from the plane is too high, then the plane is not optimal
+        # check the deviation of the points from the plane
+        deviations = np.abs(np.dot(nodePoints, planeNormal))
+        # subtract the mean deviation
+        deviations -= np.mean(deviations)        
+        if np.max(deviations) > self.NODE_PLANE_TOLERANCE:
+            # print a warning with info about the deviation and the node(s) that cause it
+            print(f"Warning: The deviation of the nodes from the plane is too high. The maximum deviation is {np.max(deviations)}.")
+            print(f"The node(s) that cause the deviation are:")
+            for i,dev in enumerate(deviations):
+                if dev > self.NODE_PLANE_TOLERANCE:
+                    print(f"    Node ID: {self.nodes[i].ID}, Deviation: {dev}")
+                    
+        return planeNormal
+        
+    @property
+    def origin(self) -> np.ndarray:
+        # use the projection of the vector to the centroid onto the plane normal as the origin
+        centroid = self.centroid
+        norm = self.planeNormal
+        return np.dot(centroid, norm)*norm
+        
+        
+        
+    
+class frame3D_CAD: # (to be implemented later)
     # a 3D frame that forms the structural skeleton of a building
     def __init__(self) -> None:
         pass

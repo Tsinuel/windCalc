@@ -4954,6 +4954,40 @@ class SampleLinesCp(windCAD.SamplingLines):
             ax.legend()
             plt.show()
     
+#------------------------------- STRUCTURES -----------------------------------
+class panel(windCAD.panel_CAD):
+    def __init__(self,
+                parentFace: windCAD.face = None,
+                vertices: np.ndarray = None,
+                center: np.ndarray = None,
+                ID: int = None,
+                parentBldg: bldgCp = None,
+                ) -> None:
+        super().__init__(parentFace=parentFace, vertices=vertices, center=center, ID=ID)
+        
+        self.parentBldg : bldgCp = parentBldg
+        
+class node(windCAD.node_CAD):
+    def __init__(self, x: float, y: float=None, z: float=None, ID: int=None, connectionType: Literal['fixed','pinned','roller','free']='fixed',                 
+                ) -> None:
+        super().__init__(x=x, y=y, z=z, ID=ID, connectionType=connectionType)
+        
+        
+    
+class element(windCAD.element_CAD):
+    def __init__(self,
+                ) -> None:
+        super().__init__()
+        
+        
+        
+class frame2D(windCAD.frame2D_CAD):
+    def __init__(self,
+                ) -> None:
+        super().__init__()
+        
+                
+
 
 #------------------------------- COLLECTIONS -----------------------------------
 class Profiles:
