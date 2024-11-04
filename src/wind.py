@@ -3384,6 +3384,24 @@ class ESDU85:
         return prof
 
 #---------------------------- SURFACE PRESSURE ---------------------------------
+'''
+Definitions:
+============
+--> PRESSURE COEFFICIENT (Cp): The pressure coefficient is defined as the difference between the local pressure and the free-stream pressure, divided by the dynamic pressure. It is a dimensionless quantity.
+    ----------------------------------------
+    | Cp = (p - p_inf) / (0.5 * rho * U^2) |
+    ----------------------------------------
+    where:
+        p: local pressure
+        p_inf: free-stream pressure
+        rho: fluid density
+        U: free-stream velocity
+
+        
+
+
+
+'''
 class faceCp(windCAD.face):
     def __init__(self, 
                  ID=None, name="Unnamed faceCp", note=None, origin=None, basisVectors=None, origin_plt=None, basisVectors_plt=None, vertices=None, tapNo: List[int] = None, tapIdx: List[int] = None, tapName: List[str] = None, tapCoord=None, zoneDict=None, nominalPanelAreas=None, numOfNominalPanelAreas=5, file_basic=None, file_derived=None):
@@ -3408,6 +3426,7 @@ class bldgCp(windCAD.building):
                 Uref_input=None,  # for the Cp TH being input below
                 Uref_FS=None,     # Full-scale reference velocity for scaling purposes
                 vScl=None,        # Scaling factor for velocity
+                A_ref=None,       # [3-components] Reference area for force normalization in x,y,z directions
                 samplingFreq=None,
                 fluidDensity=1.0,
                 fluidKinematicViscosity=1.48e-5,
@@ -3541,6 +3560,7 @@ class bldgCp(windCAD.building):
         self.fluidKinematicViscosity = fluidKinematicViscosity
 
         self.Zref = Zref_input
+        self.A_ref = A_ref
         self.AoA = [AoA,] if np.isscalar(AoA) else AoA          # [N_AoA]
         self.Uref = np.array([Uref_input for _ in AoA]) if np.isscalar(Uref_input) else Uref_input
         self.Uref_FS = Uref_FS
@@ -4954,41 +4974,6 @@ class SampleLinesCp(windCAD.SamplingLines):
             ax.legend()
             plt.show()
     
-#------------------------------- STRUCTURES -----------------------------------
-class panel(windCAD.panel_CAD):
-    def __init__(self,
-                parentFace: windCAD.face = None,
-                vertices: np.ndarray = None,
-                center: np.ndarray = None,
-                ID: int = None,
-                parentBldg: bldgCp = None,
-                ) -> None:
-        super().__init__(parentFace=parentFace, vertices=vertices, center=center, ID=ID)
-        
-        self.parentBldg : bldgCp = parentBldg
-        
-class node(windCAD.node_CAD):
-    def __init__(self, x: float, y: float=None, z: float=None, ID: int=None, connectionType: Literal['fixed','pinned','roller','free']='fixed',                 
-                ) -> None:
-        super().__init__(x=x, y=y, z=z, ID=ID, connectionType=connectionType)
-        
-        
-    
-class element(windCAD.element_CAD):
-    def __init__(self,
-                ) -> None:
-        super().__init__()
-        
-        
-        
-class frame2D(windCAD.frame2D_CAD):
-    def __init__(self,
-                ) -> None:
-        super().__init__()
-        
-                
-
-
 #------------------------------- COLLECTIONS -----------------------------------
 class Profiles:
     def __init__(self, profiles=[]):
