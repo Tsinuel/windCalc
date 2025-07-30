@@ -17,7 +17,7 @@
 
 ```bash
 git clone https://github.com/yourusername/windTools.git
-cd windTools
+cd windCalc
 pip install -r requirements.txt
 ```
 Note: This package depends on `numpy`, `scipy`, `pandas`, `matplotlib`, `sklearn`. Make sure these are available or included in your project.
