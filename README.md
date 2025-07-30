@@ -19,6 +19,42 @@
 git clone https://github.com/yourusername/windTools.git
 cd windTools
 pip install -r requirements.txt
-
+```
+Note: This package depends on `numpy`, `scipy`, `pandas`, `matplotlib`, `sklearn`. Make sure these are available or included in your project.
 
 ## Usage
+
+```python
+import wind
+
+# Example: Compute wind statistics
+UofT = ...  # np.ndarray of u-component time histories
+stats = wind.get_velTH_stats_1pt(UofT=UofT, dt=0.01)
+print(stats)
+
+# Example: Fit a log profile
+Z = np.array([1, 2, 5, 10])
+U = np.array([2.5, 3.0, 4.0, 5.0])
+z0, u_star, U_fit = wind.fitVelDataToLogProfile(Z, U, debugMode=True)
+```
+
+## Repository Structure
+
+```bash
+windTools/
+├── wind.py               # Main module with all core functionality
+├── windCAD.py            # Geometry and line sampling tools
+├── windCodes.py          # Theoretical spectrum and turbulence models
+├── windPlotting.py       # Visualization and plot formatting utilities
+├── refData/
+│   └── bluecoeff.json    # BLUE coefficients for Gumbel peak estimation
+├── tests/                # Test scripts (optional)
+└── examples/             # Example notebooks or scripts
+```
+
+## Citing
+If you use this module for published research, please consider citing the author:
+```arduino
+T. Geleta, "windCalc: A Python module for wind load analysis", 2022.
+```
+
