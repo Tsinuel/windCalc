@@ -1,4 +1,4 @@
-# windTools
+# windCalc: A Python module for wind load analysis
 
 **windTools** is a Python toolkit for wind engineering and atmospheric boundary layer (ABL) analysis. The `wind.py` module provides functions and classes for statistical and spectral analysis of wind velocity and pressure data, including integral scales, turbulence intensities, spectral densities, and peak pressure estimation using Gumbel distributions.
 
