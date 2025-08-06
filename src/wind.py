@@ -67,7 +67,7 @@ DEFAULT_PEAK_SPECS = {
                     }
 DEFAULT_VELOCITY_STAT_FIELDS = ['U','Iu','Iv','Iw','xLu','xLv','xLw','uw']
 PATH_SRC = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_RF = np.logspace(-5,3,400)
+DEFAULT_RF = np.logspace(-5,3,50)
 VON_KARMAN_CONST = 0.4
 VALID_ERROR_TYPES = ['RMSE', 'MAE', 'NMAE', 'SMAPE', 'MSLE', 'NRMSE', 'RAE', 'MBD', 'PCC', 'RAE', '$R^2$', 'Y-INTERCEPT', 'SLOPE']
 NORMALIZED_ERROR_TYPES = ['NMAE', 'NRMSE', 'RAE', 'SMAPE']
@@ -1006,6 +1006,84 @@ def peak_gumbel(x, axis:int=0,
                 specs: dict=DEFAULT_PEAK_SPECS,
                 unevenDataManagement: Literal['remove', 'padMean', 'padZero']='remove',
                 detailedOutput=False, debugMode=False):
+    ''' Compute the peak values of a time history using the Gumbel distribution method.
+    
+    Parameters
+    ----------
+    x : 1-D or 2-D float vector
+        Input time history data. If 2-D, the first dimension is considered as the time dimension.
+    axis : int, optional
+        The axis along which to compute the peak values. Default is 0 (i.e., time dimension).
+    specs : dict, optional
+        Specifications for the peak calculation. Default is DEFAULT_PEAK_SPECS.
+        DEFAULT_PEAK_SPECS contains:
+        - 'Num_seg': Number of segments to split the time history into.
+        - 'prob_non_excd': Probability of non-exceedance for the Gumbel distribution.
+        - 'fit_method': Method to fit the Gumbel distribution. Default is 'BLUE'.
+    unevenDataManagement : Literal['remove', 'padMean', 'padZero'], optional
+        Method to handle excess data points when the time dimension is not evenly divisible by 'Num_seg'.
+        Options are:
+        - 'remove': Remove excess data points from the end of the time history.
+        - 'padMean': Pad excess data points with the mean value.
+        - 'padZero': Pad excess data points with zero.
+    detailedOutput : bool, optional
+        If True, returns additional details about the calculation. Default is False.
+    debugMode : bool, optional
+        If True, prints debug information during the calculation. Default is False.
+    
+    Returns
+    -------
+    pkMax : float or np.ndarray
+        The peak value(s) for the maximum of the Gumbel distribution.
+    pkMin : float or np.ndarray
+        The peak value(s) for the minimum of the Gumbel distribution.
+    details : dict, optional
+        If detailedOutput is True, returns a dictionary with additional details about the calculation.
+        'details' contains:
+        - 'ai': Coefficients for the Gumbel distribution.
+        - 'bi': Coefficients for the Gumbel distribution.
+        - 'x_max': Maximum values of the segments.
+        - 'x_min': Minimum values of the segments.
+        
+    Raises
+    ------
+    Exception
+        If the time dimension of the input data is less than 'Num_seg' or if an unknown method for handling excess data is specified.
+    NotImplementedError
+    If the fitting method specified in 'specs' is not implemented.
+    
+    Notes
+    -----
+    This function computes the peak values of a time history using the Gumbel distribution method.
+    It splits the input data into segments, calculates the minimum and maximum values for each segment,
+    and then fits the Gumbel distribution to these values to compute the peak values.
+    The function can handle uneven data by either removing excess data points, padding with the mean value, or padding with zero.
+    The Gumbel distribution is fitted using the BLUE method, which is suitable for a specified number of segments.
+    The function also provides options for detailed output and debugging information.
+    If the input data is 1-D, it is split into segments based on 'Num_seg'.
+    If the input data is 2-D, it is split along the specified axis.
+    The function raises an exception if the time dimension is less than 'Num_seg' or if an unknown method for handling excess data is specified.
+    If the fitting method is not implemented, it raises a NotImplementedError.
+    
+    Examples
+    --------
+    >>> import numpy as np
+    >>> from windCalc import wind
+    >>> x = np.random.rand(1000)  # Example time history data
+    >>> pkMax, pkMin, details = wind.peak_gumbel(x, axis=0, specs={'Num_seg': 10, 'prob_non_excd': 0.01, 'fit_method': 'BLUE'}, unevenDataManagement='remove', detailedOutput=True, debugMode=True)
+    >>> print("Peak Max:", pkMax)
+    >>> print("Peak Min:", pkMin)
+    >>> print("Details:", details)
+    -----------
+    >>> x = np.random.rand(1000, 3)  # Example 2D time history data
+    >>> pkMax, pkMin, details = wind.peak_gumbel(x, axis=0, specs={'Num_seg': 10, 'prob_non_excd': 0.01, 'fit_method': 'BLUE'}, unevenDataManagement='padMean', detailedOutput=True, debugMode=True)
+    >>> print("Peak Max:", pkMax)
+    >>> print("Peak Min:", pkMin)
+    >>> print("Details:", details)
+    -----------
+       
+    
+    '''
     x = np.array(x, dtype=float)
     ndim = x.ndim
     xShp = x.shape
