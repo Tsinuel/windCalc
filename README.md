@@ -9,7 +9,7 @@
 
 `windCalc` is a comprehensive Python package designed for advanced wind engineering analysis. It supports the calculation, analysis, and visualization of wind pressure coefficients, wind profiles, structural response, and pressure averaging on building surfaces. The tool is ideal for researchers and engineers working in wind tunnel testing, building aerodynamics, structural wind loading, and related disciplines.
 
-The package includes modules for spectral analysis, coherence functions, structural modeling, data processing, and CAD-based panel/tap management, following standards like ESDU 74030 and ESDU 85020.
+The package includes modules for statistical analysis, structural modeling, data processing, and CAD-based panel/tap management, following standards like ESDU, ASCE, NBCC etc.
 
 ---
 
