@@ -1,0 +1,773 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="English">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>src &mdash; windCalc 0.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js?v=37ea5c94"></script>
+      <script src="_static/doctools.js?v=888ff710"></script>
+      <script src="_static/sphinx_highlight.js?v=4825356b"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            windCalc
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">src</a></li>
+</ul>
+</div>
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">windCalc</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">src</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/modules.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="src">
+<h1>src<a class="headerlink" href="#src" title="Permalink to this heading"></a></h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="src.html">src package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="src.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.calcSSL">src.calcSSL module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.calcSSL.SSL"><code class="docutils literal notranslate"><span class="pre">SSL</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.calcSSL.SSL.Refresh"><code class="docutils literal notranslate"><span class="pre">SSL.Refresh()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.calcSSL.curvedCoordSys"><code class="docutils literal notranslate"><span class="pre">curvedCoordSys</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.pyRunWind">src.pyRunWind module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.pyRunWind.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#src-setup-module">src.setup module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.spatialAvg_FFS">src.spatialAvg_FFS module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.spatialAvg_FFS.average_data"><code class="docutils literal notranslate"><span class="pre">average_data()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.structure">src.structure module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.structure.element"><code class="docutils literal notranslate"><span class="pre">element</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.element.global_stiffness_matrix"><code class="docutils literal notranslate"><span class="pre">element.global_stiffness_matrix</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.element.local_stiffness_matrix"><code class="docutils literal notranslate"><span class="pre">element.local_stiffness_matrix</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.element.transformation_matrix"><code class="docutils literal notranslate"><span class="pre">element.transformation_matrix</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.structure.frame2D"><code class="docutils literal notranslate"><span class="pre">frame2D</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.frame2D.AoA_axis"><code class="docutils literal notranslate"><span class="pre">frame2D.AoA_axis</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.frame2D.Cf_Stats"><code class="docutils literal notranslate"><span class="pre">frame2D.Cf_Stats</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.frame2D.Cf_Stats_MinMaxOf_AoA"><code class="docutils literal notranslate"><span class="pre">frame2D.Cf_Stats_MinMaxOf_AoA</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.frame2D.Cf_TH"><code class="docutils literal notranslate"><span class="pre">frame2D.Cf_TH</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.structure.node"><code class="docutils literal notranslate"><span class="pre">node</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.node.Cf_Stats"><code class="docutils literal notranslate"><span class="pre">node.Cf_Stats</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.node.Cf_TH"><code class="docutils literal notranslate"><span class="pre">node.Cf_TH</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.structure.panel"><code class="docutils literal notranslate"><span class="pre">panel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.panel.Cf_TH"><code class="docutils literal notranslate"><span class="pre">panel.Cf_TH</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.structure.panel.Cf_TH_atSupports"><code class="docutils literal notranslate"><span class="pre">panel.Cf_TH_atSupports</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.wind">src.wind module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CalculateInnerStats"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CalculateInnerStats()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormRange"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormRange</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormRange_AoATapAvg"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormRange_AoATapAvg</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormRange_AoATapAvg_eqn"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormRange_AoATapAvg_eqn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormRange_AoAavg"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormRange_AoAavg</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormRange_AoAavg_eqn"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormRange_AoAavg_eqn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormRange_TapAvg"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormRange_TapAvg</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormRange_TapAvg_eqn"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormRange_TapAvg_eqn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormRange_eqn"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormRange_eqn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormTmax"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormTmax</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormTmax_AoATapAvg"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormTmax_AoATapAvg</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormTmax_AoATapAvg_eqn"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormTmax_AoATapAvg_eqn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormTmax_AoAavg"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormTmax_AoAavg</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormTmax_AoAavg_eqn"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormTmax_AoAavg_eqn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormTmax_TapAvg"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormTmax_TapAvg</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormTmax_TapAvg_eqn"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormTmax_TapAvg_eqn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.CpStats_NormTmax_eqn"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.CpStats_NormTmax_eqn</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.Refresh"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.Refresh()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.T"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.T</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.T_star"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.T_star</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.T_star_AoAavg"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.T_star_AoAavg</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCp_cummulative.plot_CpStats_byTap"><code class="docutils literal notranslate"><span class="pre">BldgCp_cummulative.plot_CpStats_byTap()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.BldgCps"><code class="docutils literal notranslate"><span class="pre">BldgCps</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCps.CpStats"><code class="docutils literal notranslate"><span class="pre">BldgCps.CpStats()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCps.N_bldgs"><code class="docutils literal notranslate"><span class="pre">BldgCps.N_bldgs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCps.asBldgObj"><code class="docutils literal notranslate"><span class="pre">BldgCps.asBldgObj()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCps.paramsTable"><code class="docutils literal notranslate"><span class="pre">BldgCps.paramsTable()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCps.plotParamsTable"><code class="docutils literal notranslate"><span class="pre">BldgCps.plotParamsTable()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCps.plotTapCpStatsPerAoA"><code class="docutils literal notranslate"><span class="pre">BldgCps.plotTapCpStatsPerAoA()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.BldgCps.writeCandCloadToXLSX"><code class="docutils literal notranslate"><span class="pre">BldgCps.writeCandCloadToXLSX()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.Coh_Davenport"><code class="docutils literal notranslate"><span class="pre">Coh_Davenport()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.ESDU74"><code class="docutils literal notranslate"><span class="pre">ESDU74</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.C"><code class="docutils literal notranslate"><span class="pre">ESDU74.C()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Fu"><code class="docutils literal notranslate"><span class="pre">ESDU74.Fu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Fw"><code class="docutils literal notranslate"><span class="pre">ESDU74.Fw()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Iu"><code class="docutils literal notranslate"><span class="pre">ESDU74.Iu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Iv"><code class="docutils literal notranslate"><span class="pre">ESDU74.Iv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Iw"><code class="docutils literal notranslate"><span class="pre">ESDU74.Iw()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Suu"><code class="docutils literal notranslate"><span class="pre">ESDU74.Suu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Svv"><code class="docutils literal notranslate"><span class="pre">ESDU74.Svv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Sww"><code class="docutils literal notranslate"><span class="pre">ESDU74.Sww()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.U"><code class="docutils literal notranslate"><span class="pre">ESDU74.U()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Ug"><code class="docutils literal notranslate"><span class="pre">ESDU74.Ug()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Zd"><code class="docutils literal notranslate"><span class="pre">ESDU74.Zd()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.Zg"><code class="docutils literal notranslate"><span class="pre">ESDU74.Zg()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.checkZ"><code class="docutils literal notranslate"><span class="pre">ESDU74.checkZ()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.d"><code class="docutils literal notranslate"><span class="pre">ESDU74.d()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.f"><code class="docutils literal notranslate"><span class="pre">ESDU74.f</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.fitToIuRef"><code class="docutils literal notranslate"><span class="pre">ESDU74.fitToIuRef()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.lambda_"><code class="docutils literal notranslate"><span class="pre">ESDU74.lambda_()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.rSuu"><code class="docutils literal notranslate"><span class="pre">ESDU74.rSuu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.rSvv"><code class="docutils literal notranslate"><span class="pre">ESDU74.rSvv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.rSww"><code class="docutils literal notranslate"><span class="pre">ESDU74.rSww()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.rf"><code class="docutils literal notranslate"><span class="pre">ESDU74.rf()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.toProfileObj"><code class="docutils literal notranslate"><span class="pre">ESDU74.toProfileObj()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.uStar"><code class="docutils literal notranslate"><span class="pre">ESDU74.uStar()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.uw"><code class="docutils literal notranslate"><span class="pre">ESDU74.uw()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.xLu"><code class="docutils literal notranslate"><span class="pre">ESDU74.xLu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.xLv"><code class="docutils literal notranslate"><span class="pre">ESDU74.xLv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU74.xLw"><code class="docutils literal notranslate"><span class="pre">ESDU74.xLw()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.ESDU85"><code class="docutils literal notranslate"><span class="pre">ESDU85</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.A"><code class="docutils literal notranslate"><span class="pre">ESDU85.A()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.F2"><code class="docutils literal notranslate"><span class="pre">ESDU85.F2()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.Iu"><code class="docutils literal notranslate"><span class="pre">ESDU85.Iu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.Iv"><code class="docutils literal notranslate"><span class="pre">ESDU85.Iv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.Iw"><code class="docutils literal notranslate"><span class="pre">ESDU85.Iw()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.Suu"><code class="docutils literal notranslate"><span class="pre">ESDU85.Suu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.Svv"><code class="docutils literal notranslate"><span class="pre">ESDU85.Svv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.Sww"><code class="docutils literal notranslate"><span class="pre">ESDU85.Sww()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.U"><code class="docutils literal notranslate"><span class="pre">ESDU85.U()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.alpha"><code class="docutils literal notranslate"><span class="pre">ESDU85.alpha()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.beta1"><code class="docutils literal notranslate"><span class="pre">ESDU85.beta1()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.beta2"><code class="docutils literal notranslate"><span class="pre">ESDU85.beta2()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.f"><code class="docutils literal notranslate"><span class="pre">ESDU85.f</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.fitToIuRef"><code class="docutils literal notranslate"><span class="pre">ESDU85.fitToIuRef()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.h"><code class="docutils literal notranslate"><span class="pre">ESDU85.h</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.rSuu"><code class="docutils literal notranslate"><span class="pre">ESDU85.rSuu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.rSvv"><code class="docutils literal notranslate"><span class="pre">ESDU85.rSvv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.rSww"><code class="docutils literal notranslate"><span class="pre">ESDU85.rSww()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.rf"><code class="docutils literal notranslate"><span class="pre">ESDU85.rf()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.sigUbyUstar"><code class="docutils literal notranslate"><span class="pre">ESDU85.sigUbyUstar()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.sigVbySigU"><code class="docutils literal notranslate"><span class="pre">ESDU85.sigVbySigU()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.sigWbySigU"><code class="docutils literal notranslate"><span class="pre">ESDU85.sigWbySigU()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.toProfileObj"><code class="docutils literal notranslate"><span class="pre">ESDU85.toProfileObj()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.uStar"><code class="docutils literal notranslate"><span class="pre">ESDU85.uStar()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.uw"><code class="docutils literal notranslate"><span class="pre">ESDU85.uw()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.xLu"><code class="docutils literal notranslate"><span class="pre">ESDU85.xLu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.xLv"><code class="docutils literal notranslate"><span class="pre">ESDU85.xLv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.ESDU85.xLw"><code class="docutils literal notranslate"><span class="pre">ESDU85.xLw()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.LaTeXise"><code class="docutils literal notranslate"><span class="pre">LaTeXise()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.Profiles"><code class="docutils literal notranslate"><span class="pre">Profiles</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.N"><code class="docutils literal notranslate"><span class="pre">Profiles.N</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.copy"><code class="docutils literal notranslate"><span class="pre">Profiles.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.paramsTable"><code class="docutils literal notranslate"><span class="pre">Profiles.paramsTable()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.plot"><code class="docutils literal notranslate"><span class="pre">Profiles.plot()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.plotParamsTable"><code class="docutils literal notranslate"><span class="pre">Profiles.plotParamsTable()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.plotProfile_basic2"><code class="docutils literal notranslate"><span class="pre">Profiles.plotProfile_basic2()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.plotProfiles"><code class="docutils literal notranslate"><span class="pre">Profiles.plotProfiles()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.plotRefHeightStatsTable"><code class="docutils literal notranslate"><span class="pre">Profiles.plotRefHeightStatsTable()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.plotSpectra"><code class="docutils literal notranslate"><span class="pre">Profiles.plotSpectra()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.plotSpectra__depricated"><code class="docutils literal notranslate"><span class="pre">Profiles.plotSpectra__depricated()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.plotTimeHistory"><code class="docutils literal notranslate"><span class="pre">Profiles.plotTimeHistory()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.Profiles.plot__"><code class="docutils literal notranslate"><span class="pre">Profiles.plot__()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.SampleLinesCp"><code class="docutils literal notranslate"><span class="pre">SampleLinesCp</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.SampleLinesCp.CpStat"><code class="docutils literal notranslate"><span class="pre">SampleLinesCp.CpStat()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.SampleLinesCp.L_norm"><code class="docutils literal notranslate"><span class="pre">SampleLinesCp.L_norm</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.SampleLinesCp.copy"><code class="docutils literal notranslate"><span class="pre">SampleLinesCp.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.SampleLinesCp.joint_L_norm"><code class="docutils literal notranslate"><span class="pre">SampleLinesCp.joint_L_norm</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.SampleLinesCp.length_Norm"><code class="docutils literal notranslate"><span class="pre">SampleLinesCp.length_Norm</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.SampleLinesCp.name"><code class="docutils literal notranslate"><span class="pre">SampleLinesCp.name</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.SampleLinesCp.plotCpStats"><code class="docutils literal notranslate"><span class="pre">SampleLinesCp.plotCpStats()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.absolute_max_with_sign"><code class="docutils literal notranslate"><span class="pre">absolute_max_with_sign()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.bldgCp"><code class="docutils literal notranslate"><span class="pre">bldgCp</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.CandCLoad_factor"><code class="docutils literal notranslate"><span class="pre">bldgCp.CandCLoad_factor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.CpAavg_envMax_peakMax_allA"><code class="docutils literal notranslate"><span class="pre">bldgCp.CpAavg_envMax_peakMax_allA</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.CpAavg_envMax_peakMax_maxPerA"><code class="docutils literal notranslate"><span class="pre">bldgCp.CpAavg_envMax_peakMax_maxPerA</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.CpAavg_envMin_peakMin_allA"><code class="docutils literal notranslate"><span class="pre">bldgCp.CpAavg_envMin_peakMin_allA</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.CpAavg_envMin_peakMin_minPerA"><code class="docutils literal notranslate"><span class="pre">bldgCp.CpAavg_envMin_peakMin_minPerA</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.CpStatEnvlp"><code class="docutils literal notranslate"><span class="pre">bldgCp.CpStatEnvlp</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.CpStatEnvlp_high"><code class="docutils literal notranslate"><span class="pre">bldgCp.CpStatEnvlp_high</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.CpStatEnvlp_low"><code class="docutils literal notranslate"><span class="pre">bldgCp.CpStatEnvlp_low</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.CpStatsAreaAvgCollected"><code class="docutils literal notranslate"><span class="pre">bldgCp.CpStatsAreaAvgCollected()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.N_t"><code class="docutils literal notranslate"><span class="pre">bldgCp.N_t</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.NumAoA"><code class="docutils literal notranslate"><span class="pre">bldgCp.NumAoA</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.Re"><code class="docutils literal notranslate"><span class="pre">bldgCp.Re</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.Refresh"><code class="docutils literal notranslate"><span class="pre">bldgCp.Refresh()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.RemoveBadTaps"><code class="docutils literal notranslate"><span class="pre">bldgCp.RemoveBadTaps()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.T"><code class="docutils literal notranslate"><span class="pre">bldgCp.T</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.T_star"><code class="docutils literal notranslate"><span class="pre">bldgCp.T_star</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.allAreasForCpAavg"><code class="docutils literal notranslate"><span class="pre">bldgCp.allAreasForCpAavg</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.checkStatField"><code class="docutils literal notranslate"><span class="pre">bldgCp.checkStatField()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.copy"><code class="docutils literal notranslate"><span class="pre">bldgCp.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.dt"><code class="docutils literal notranslate"><span class="pre">bldgCp.dt</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.getStatsOfTaps"><code class="docutils literal notranslate"><span class="pre">bldgCp.getStatsOfTaps()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.paramsTable"><code class="docutils literal notranslate"><span class="pre">bldgCp.paramsTable()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.plotAoA_definition"><code class="docutils literal notranslate"><span class="pre">bldgCp.plotAoA_definition()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.plotAoA_symbol"><code class="docutils literal notranslate"><span class="pre">bldgCp.plotAoA_symbol()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.plotAreaAveragedStat___depricated"><code class="docutils literal notranslate"><span class="pre">bldgCp.plotAreaAveragedStat___depricated()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.plotCandC_load"><code class="docutils literal notranslate"><span class="pre">bldgCp.plotCandC_load()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.plotCpTimeHistories"><code class="docutils literal notranslate"><span class="pre">bldgCp.plotCpTimeHistories()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.plotPanelCpStatContour"><code class="docutils literal notranslate"><span class="pre">bldgCp.plotPanelCpStatContour()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.plotTapCpStatContour"><code class="docutils literal notranslate"><span class="pre">bldgCp.plotTapCpStatContour()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.plotTapCpStatsPerAoA"><code class="docutils literal notranslate"><span class="pre">bldgCp.plotTapCpStatsPerAoA()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.scaleCpStats"><code class="docutils literal notranslate"><span class="pre">bldgCp.scaleCpStats()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.stat_on_a_line"><code class="docutils literal notranslate"><span class="pre">bldgCp.stat_on_a_line()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.t"><code class="docutils literal notranslate"><span class="pre">bldgCp.t</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.write"><code class="docutils literal notranslate"><span class="pre">bldgCp.write()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.writeCandCloadToXLSX"><code class="docutils literal notranslate"><span class="pre">bldgCp.writeCandCloadToXLSX()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.bldgCp.writeCpStatsToXLSX"><code class="docutils literal notranslate"><span class="pre">bldgCp.writeCpStatsToXLSX()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.coherence"><code class="docutils literal notranslate"><span class="pre">coherence()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.faceCp"><code class="docutils literal notranslate"><span class="pre">faceCp</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.faceCp.Cf_N"><code class="docutils literal notranslate"><span class="pre">faceCp.Cf_N</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.fitESDUgivenIuRef"><code class="docutils literal notranslate"><span class="pre">fitESDUgivenIuRef()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.fitVelDataToLogProfile"><code class="docutils literal notranslate"><span class="pre">fitVelDataToLogProfile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.fitVelToPowerLawProfile"><code class="docutils literal notranslate"><span class="pre">fitVelToPowerLawProfile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.fit_dist"><code class="docutils literal notranslate"><span class="pre">fit_dist()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.formatAxis"><code class="docutils literal notranslate"><span class="pre">formatAxis()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.fullName"><code class="docutils literal notranslate"><span class="pre">fullName()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.getPlotParams"><code class="docutils literal notranslate"><span class="pre">getPlotParams()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.get_CpTH_stats"><code class="docutils literal notranslate"><span class="pre">get_CpTH_stats()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.get_pdf_data"><code class="docutils literal notranslate"><span class="pre">get_pdf_data()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.get_velTH_stats_1pt"><code class="docutils literal notranslate"><span class="pre">get_velTH_stats_1pt()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.integLengthScale"><code class="docutils literal notranslate"><span class="pre">integLengthScale()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.integTimeScale"><code class="docutils literal notranslate"><span class="pre">integTimeScale()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.isValidNumericScalar"><code class="docutils literal notranslate"><span class="pre">isValidNumericScalar()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.isValidNumericVector"><code class="docutils literal notranslate"><span class="pre">isValidNumericVector()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.line"><code class="docutils literal notranslate"><span class="pre">line</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.line.CpStats"><code class="docutils literal notranslate"><span class="pre">line.CpStats()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.logProfile"><code class="docutils literal notranslate"><span class="pre">logProfile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.lowpass"><code class="docutils literal notranslate"><span class="pre">lowpass()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.mathName"><code class="docutils literal notranslate"><span class="pre">mathName()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.measureError"><code class="docutils literal notranslate"><span class="pre">measureError()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.peak"><code class="docutils literal notranslate"><span class="pre">peak()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.peak_gumbel"><code class="docutils literal notranslate"><span class="pre">peak_gumbel()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.profile"><code class="docutils literal notranslate"><span class="pre">profile</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.H_idx"><code class="docutils literal notranslate"><span class="pre">profile.H_idx</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.Iu"><code class="docutils literal notranslate"><span class="pre">profile.Iu</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.Iv"><code class="docutils literal notranslate"><span class="pre">profile.Iv</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.Iw"><code class="docutils literal notranslate"><span class="pre">profile.Iw</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.Je"><code class="docutils literal notranslate"><span class="pre">profile.Je</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.Je_U"><code class="docutils literal notranslate"><span class="pre">profile.Je_U</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.N_pts"><code class="docutils literal notranslate"><span class="pre">profile.N_pts</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.N_t"><code class="docutils literal notranslate"><span class="pre">profile.N_t</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.ReTau"><code class="docutils literal notranslate"><span class="pre">profile.ReTau</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.Refresh"><code class="docutils literal notranslate"><span class="pre">profile.Refresh()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.T"><code class="docutils literal notranslate"><span class="pre">profile.T</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.T_star"><code class="docutils literal notranslate"><span class="pre">profile.T_star</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.U"><code class="docutils literal notranslate"><span class="pre">profile.U</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.U10_atModelScale"><code class="docutils literal notranslate"><span class="pre">profile.U10_atModelScale()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.U_plus"><code class="docutils literal notranslate"><span class="pre">profile.U_plus</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.UbyUh"><code class="docutils literal notranslate"><span class="pre">profile.UbyUh</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.Uh"><code class="docutils literal notranslate"><span class="pre">profile.Uh</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.Z_eff"><code class="docutils literal notranslate"><span class="pre">profile.Z_eff</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.Z_plus"><code class="docutils literal notranslate"><span class="pre">profile.Z_plus</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.ZbyH"><code class="docutils literal notranslate"><span class="pre">profile.ZbyH</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.copy"><code class="docutils literal notranslate"><span class="pre">profile.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.fit_z0"><code class="docutils literal notranslate"><span class="pre">profile.fit_z0()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.getCoherence"><code class="docutils literal notranslate"><span class="pre">profile.getCoherence()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.idx_eff"><code class="docutils literal notranslate"><span class="pre">profile.idx_eff</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.paramsTable"><code class="docutils literal notranslate"><span class="pre">profile.paramsTable()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.plot"><code class="docutils literal notranslate"><span class="pre">profile.plot()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.plotBasicStatsTable"><code class="docutils literal notranslate"><span class="pre">profile.plotBasicStatsTable()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.plotProfile_any"><code class="docutils literal notranslate"><span class="pre">profile.plotProfile_any()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.plotProfile_basic1"><code class="docutils literal notranslate"><span class="pre">profile.plotProfile_basic1()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.plotProfile_basic2"><code class="docutils literal notranslate"><span class="pre">profile.plotProfile_basic2()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.plotProfile_basic3"><code class="docutils literal notranslate"><span class="pre">profile.plotProfile_basic3()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.plotTimeHistory"><code class="docutils literal notranslate"><span class="pre">profile.plotTimeHistory()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.shearVelocity"><code class="docutils literal notranslate"><span class="pre">profile.shearVelocity</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.stat_at_H"><code class="docutils literal notranslate"><span class="pre">profile.stat_at_H()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.stat_norm"><code class="docutils literal notranslate"><span class="pre">profile.stat_norm()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.stats_at_H"><code class="docutils literal notranslate"><span class="pre">profile.stats_at_H</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.stats_norm"><code class="docutils literal notranslate"><span class="pre">profile.stats_norm</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.stats_norm_eff"><code class="docutils literal notranslate"><span class="pre">profile.stats_norm_eff</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.stats_norm_interp_to_Z"><code class="docutils literal notranslate"><span class="pre">profile.stats_norm_interp_to_Z()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.uw"><code class="docutils literal notranslate"><span class="pre">profile.uw</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.uwByUh"><code class="docutils literal notranslate"><span class="pre">profile.uwByUh</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.writeToFile__to_be_depricated"><code class="docutils literal notranslate"><span class="pre">profile.writeToFile__to_be_depricated()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.xLu"><code class="docutils literal notranslate"><span class="pre">profile.xLu</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.xLuByH"><code class="docutils literal notranslate"><span class="pre">profile.xLuByH</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.xLv"><code class="docutils literal notranslate"><span class="pre">profile.xLv</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.xLvByH"><code class="docutils literal notranslate"><span class="pre">profile.xLvByH</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.xLw"><code class="docutils literal notranslate"><span class="pre">profile.xLw</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.xLwByH"><code class="docutils literal notranslate"><span class="pre">profile.xLwByH</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.profile.z0"><code class="docutils literal notranslate"><span class="pre">profile.z0</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.psd"><code class="docutils literal notranslate"><span class="pre">psd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.skewed_bilinear_cmap"><code class="docutils literal notranslate"><span class="pre">skewed_bilinear_cmap()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.smooth"><code class="docutils literal notranslate"><span class="pre">smooth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.spectra"><code class="docutils literal notranslate"><span class="pre">spectra</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.Refresh"><code class="docutils literal notranslate"><span class="pre">spectra.Refresh()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.Suu_ESDU74"><code class="docutils literal notranslate"><span class="pre">spectra.Suu_ESDU74()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.Suu_ESDU85"><code class="docutils literal notranslate"><span class="pre">spectra.Suu_ESDU85()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.Suu_vonK"><code class="docutils literal notranslate"><span class="pre">spectra.Suu_vonK()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.Svv_ESDU74"><code class="docutils literal notranslate"><span class="pre">spectra.Svv_ESDU74()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.Svv_ESDU85"><code class="docutils literal notranslate"><span class="pre">spectra.Svv_ESDU85()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.Svv_vonK"><code class="docutils literal notranslate"><span class="pre">spectra.Svv_vonK()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.Sww_ESDU74"><code class="docutils literal notranslate"><span class="pre">spectra.Sww_ESDU74()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.Sww_ESDU85"><code class="docutils literal notranslate"><span class="pre">spectra.Sww_ESDU85()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.Sww_vonK"><code class="docutils literal notranslate"><span class="pre">spectra.Sww_vonK()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.copy"><code class="docutils literal notranslate"><span class="pre">spectra.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.plot"><code class="docutils literal notranslate"><span class="pre">spectra.plot()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.plotSpect_any"><code class="docutils literal notranslate"><span class="pre">spectra.plotSpect_any()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.rSuu"><code class="docutils literal notranslate"><span class="pre">spectra.rSuu()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.rSvv"><code class="docutils literal notranslate"><span class="pre">spectra.rSvv()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.rSww"><code class="docutils literal notranslate"><span class="pre">spectra.rSww()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.readFromJSON"><code class="docutils literal notranslate"><span class="pre">spectra.readFromJSON()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.rf"><code class="docutils literal notranslate"><span class="pre">spectra.rf()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.writeDataToFile"><code class="docutils literal notranslate"><span class="pre">spectra.writeDataToFile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.writeSpecsToFile"><code class="docutils literal notranslate"><span class="pre">spectra.writeSpecsToFile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.spectra.writeToJSON"><code class="docutils literal notranslate"><span class="pre">spectra.writeToJSON()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.sub_cmap"><code class="docutils literal notranslate"><span class="pre">sub_cmap()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.validator"><code class="docutils literal notranslate"><span class="pre">validator</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.validator.Refresh"><code class="docutils literal notranslate"><span class="pre">validator.Refresh()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.validator.compareProfiles"><code class="docutils literal notranslate"><span class="pre">validator.compareProfiles()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.validator.plotError_CpAavg"><code class="docutils literal notranslate"><span class="pre">validator.plotError_CpAavg()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.validator.plotError_CpStats"><code class="docutils literal notranslate"><span class="pre">validator.plotError_CpStats()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.validator.plotError_CpStats_perAoA"><code class="docutils literal notranslate"><span class="pre">validator.plotError_CpStats_perAoA()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.validator.plotError_barChart_CpStats"><code class="docutils literal notranslate"><span class="pre">validator.plotError_barChart_CpStats()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.validator.plotError_contour_CpStats"><code class="docutils literal notranslate"><span class="pre">validator.plotError_contour_CpStats()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.validator.plotError_velStats"><code class="docutils literal notranslate"><span class="pre">validator.plotError_velStats()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.validator.plotStats_on_a_line"><code class="docutils literal notranslate"><span class="pre">validator.plotStats_on_a_line()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.wind.validator.plotStats_on_lines"><code class="docutils literal notranslate"><span class="pre">validator.plotStats_on_lines()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.vonKarmanSpectra"><code class="docutils literal notranslate"><span class="pre">vonKarmanSpectra()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.vonKarmanSuu"><code class="docutils literal notranslate"><span class="pre">vonKarmanSuu()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.vonKarmanSvv"><code class="docutils literal notranslate"><span class="pre">vonKarmanSvv()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.wind.vonKarmanSww"><code class="docutils literal notranslate"><span class="pre">vonKarmanSww()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.windCAD">src.windCAD module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.Faces"><code class="docutils literal notranslate"><span class="pre">Faces</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.NumPanels"><code class="docutils literal notranslate"><span class="pre">Faces.NumPanels</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.NumPanelsPerArea"><code class="docutils literal notranslate"><span class="pre">Faces.NumPanelsPerArea</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.NumTaps"><code class="docutils literal notranslate"><span class="pre">Faces.NumTaps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.NumZones"><code class="docutils literal notranslate"><span class="pre">Faces.NumZones</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.Refresh"><code class="docutils literal notranslate"><span class="pre">Faces.Refresh()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.RemovedBadTaps"><code class="docutils literal notranslate"><span class="pre">Faces.RemovedBadTaps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.boundingBoxPlt"><code class="docutils literal notranslate"><span class="pre">Faces.boundingBoxPlt</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.copy"><code class="docutils literal notranslate"><span class="pre">Faces.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.error_in_panels"><code class="docutils literal notranslate"><span class="pre">Faces.error_in_panels</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.error_in_zones"><code class="docutils literal notranslate"><span class="pre">Faces.error_in_zones</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.memberFaces"><code class="docutils literal notranslate"><span class="pre">Faces.memberFaces</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.panelArea_nominal"><code class="docutils literal notranslate"><span class="pre">Faces.panelArea_nominal</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.panelAreas__to_be_redacted"><code class="docutils literal notranslate"><span class="pre">Faces.panelAreas__to_be_redacted</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.panelAreas_every"><code class="docutils literal notranslate"><span class="pre">Faces.panelAreas_every</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.panelAreas_groupAvg"><code class="docutils literal notranslate"><span class="pre">Faces.panelAreas_groupAvg</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.panelIdxRanges"><code class="docutils literal notranslate"><span class="pre">Faces.panelIdxRanges</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.panelingErrors"><code class="docutils literal notranslate"><span class="pre">Faces.panelingErrors</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.plotEdges"><code class="docutils literal notranslate"><span class="pre">Faces.plotEdges()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.plotLocalAxes"><code class="docutils literal notranslate"><span class="pre">Faces.plotLocalAxes()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.plotPanelField"><code class="docutils literal notranslate"><span class="pre">Faces.plotPanelField()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.plotPanels"><code class="docutils literal notranslate"><span class="pre">Faces.plotPanels()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.plotPanels_AllAreas"><code class="docutils literal notranslate"><span class="pre">Faces.plotPanels_AllAreas()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.plotTapField"><code class="docutils literal notranslate"><span class="pre">Faces.plotTapField()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.plotTaps"><code class="docutils literal notranslate"><span class="pre">Faces.plotTaps()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.plotTribs"><code class="docutils literal notranslate"><span class="pre">Faces.plotTribs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.plotZones"><code class="docutils literal notranslate"><span class="pre">Faces.plotZones()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.readFromFile"><code class="docutils literal notranslate"><span class="pre">Faces.readFromFile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.roofTaps"><code class="docutils literal notranslate"><span class="pre">Faces.roofTaps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.tapIdx"><code class="docutils literal notranslate"><span class="pre">Faces.tapIdx</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.tapIdxOf"><code class="docutils literal notranslate"><span class="pre">Faces.tapIdxOf()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.tapIdxsPerPanel"><code class="docutils literal notranslate"><span class="pre">Faces.tapIdxsPerPanel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.tapName"><code class="docutils literal notranslate"><span class="pre">Faces.tapName</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.tapNo"><code class="docutils literal notranslate"><span class="pre">Faces.tapNo</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.tapWeightsPerPanel"><code class="docutils literal notranslate"><span class="pre">Faces.tapWeightsPerPanel</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.wallTaps"><code class="docutils literal notranslate"><span class="pre">Faces.wallTaps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.writeToFile"><code class="docutils literal notranslate"><span class="pre">Faces.writeToFile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.zoneDict"><code class="docutils literal notranslate"><span class="pre">Faces.zoneDict</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.Faces.zoneDictKeys"><code class="docutils literal notranslate"><span class="pre">Faces.zoneDictKeys</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.SamplingLines"><code class="docutils literal notranslate"><span class="pre">SamplingLines</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.SamplingLines.L"><code class="docutils literal notranslate"><span class="pre">SamplingLines.L</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.SamplingLines.copy"><code class="docutils literal notranslate"><span class="pre">SamplingLines.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.SamplingLines.joint_L"><code class="docutils literal notranslate"><span class="pre">SamplingLines.joint_L</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.SamplingLines.length"><code class="docutils literal notranslate"><span class="pre">SamplingLines.length</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.SamplingLines.plot"><code class="docutils literal notranslate"><span class="pre">SamplingLines.plot()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.SamplingLines.tapIdx"><code class="docutils literal notranslate"><span class="pre">SamplingLines.tapIdx()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.SamplingLines.tapName"><code class="docutils literal notranslate"><span class="pre">SamplingLines.tapName()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.SamplingLines.tapNo"><code class="docutils literal notranslate"><span class="pre">SamplingLines.tapNo()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.building"><code class="docutils literal notranslate"><span class="pre">building</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.building.boundingBox"><code class="docutils literal notranslate"><span class="pre">building.boundingBox</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.building.copy"><code class="docutils literal notranslate"><span class="pre">building.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.building.faces"><code class="docutils literal notranslate"><span class="pre">building.faces</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.building.plotBldg_3D"><code class="docutils literal notranslate"><span class="pre">building.plotBldg_3D()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.building.writeToFile"><code class="docutils literal notranslate"><span class="pre">building.writeToFile()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.calculateTapWeightsPerPanel"><code class="docutils literal notranslate"><span class="pre">calculateTapWeightsPerPanel()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.element_CAD"><code class="docutils literal notranslate"><span class="pre">element_CAD</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.centroid"><code class="docutils literal notranslate"><span class="pre">element_CAD.centroid</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.connectedPanels"><code class="docutils literal notranslate"><span class="pre">element_CAD.connectedPanels</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.copy"><code class="docutils literal notranslate"><span class="pre">element_CAD.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.is2D"><code class="docutils literal notranslate"><span class="pre">element_CAD.is2D</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.is3D"><code class="docutils literal notranslate"><span class="pre">element_CAD.is3D</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.length"><code class="docutils literal notranslate"><span class="pre">element_CAD.length</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.loc"><code class="docutils literal notranslate"><span class="pre">element_CAD.loc</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.loc_2D"><code class="docutils literal notranslate"><span class="pre">element_CAD.loc_2D</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.nodes"><code class="docutils literal notranslate"><span class="pre">element_CAD.nodes</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.orientation"><code class="docutils literal notranslate"><span class="pre">element_CAD.orientation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.orientation_deg"><code class="docutils literal notranslate"><span class="pre">element_CAD.orientation_deg</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.orientation_unitVector"><code class="docutils literal notranslate"><span class="pre">element_CAD.orientation_unitVector</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.plot"><code class="docutils literal notranslate"><span class="pre">element_CAD.plot()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.plot3D"><code class="docutils literal notranslate"><span class="pre">element_CAD.plot3D()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.segments"><code class="docutils literal notranslate"><span class="pre">element_CAD.segments</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.x"><code class="docutils literal notranslate"><span class="pre">element_CAD.x</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.y"><code class="docutils literal notranslate"><span class="pre">element_CAD.y</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.element_CAD.z"><code class="docutils literal notranslate"><span class="pre">element_CAD.z</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.face"><code class="docutils literal notranslate"><span class="pre">face</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.NumPanels"><code class="docutils literal notranslate"><span class="pre">face.NumPanels</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.NumPanelsPerArea"><code class="docutils literal notranslate"><span class="pre">face.NumPanelsPerArea</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.NumTaps"><code class="docutils literal notranslate"><span class="pre">face.NumTaps</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.Refresh"><code class="docutils literal notranslate"><span class="pre">face.Refresh()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.RemoveBadTaps"><code class="docutils literal notranslate"><span class="pre">face.RemoveBadTaps()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.aspectRatio"><code class="docutils literal notranslate"><span class="pre">face.aspectRatio</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.boundingBox"><code class="docutils literal notranslate"><span class="pre">face.boundingBox</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.copy"><code class="docutils literal notranslate"><span class="pre">face.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.faceNormal"><code class="docutils literal notranslate"><span class="pre">face.faceNormal</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.from_dict"><code class="docutils literal notranslate"><span class="pre">face.from_dict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.getNearestTapsToLine__to_be_redacted"><code class="docutils literal notranslate"><span class="pre">face.getNearestTapsToLine__to_be_redacted()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.getTapsInFence"><code class="docutils literal notranslate"><span class="pre">face.getTapsInFence()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.indexOfTap"><code class="docutils literal notranslate"><span class="pre">face.indexOfTap()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.orientation"><code class="docutils literal notranslate"><span class="pre">face.orientation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.orientation_plt"><code class="docutils literal notranslate"><span class="pre">face.orientation_plt</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.panelAreas__redacted"><code class="docutils literal notranslate"><span class="pre">face.panelAreas__redacted</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.panelingErrors"><code class="docutils literal notranslate"><span class="pre">face.panelingErrors</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plot"><code class="docutils literal notranslate"><span class="pre">face.plot()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plotEdges"><code class="docutils literal notranslate"><span class="pre">face.plotEdges()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plotEdges_3D"><code class="docutils literal notranslate"><span class="pre">face.plotEdges_3D()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plotLocalAxes"><code class="docutils literal notranslate"><span class="pre">face.plotLocalAxes()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plotPanelField"><code class="docutils literal notranslate"><span class="pre">face.plotPanelField()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plotPanels"><code class="docutils literal notranslate"><span class="pre">face.plotPanels()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plotTapField"><code class="docutils literal notranslate"><span class="pre">face.plotTapField()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plotTaps"><code class="docutils literal notranslate"><span class="pre">face.plotTaps()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plotTilingErrors"><code class="docutils literal notranslate"><span class="pre">face.plotTilingErrors()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plotTribs"><code class="docutils literal notranslate"><span class="pre">face.plotTribs()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.plotZones"><code class="docutils literal notranslate"><span class="pre">face.plotZones()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.readFromFile"><code class="docutils literal notranslate"><span class="pre">face.readFromFile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.tapCoord3D"><code class="docutils literal notranslate"><span class="pre">face.tapCoord3D</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.tapCoordPlt"><code class="docutils literal notranslate"><span class="pre">face.tapCoordPlt</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.toGlobalCoord"><code class="docutils literal notranslate"><span class="pre">face.toGlobalCoord()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.toLocalCoord"><code class="docutils literal notranslate"><span class="pre">face.toLocalCoord()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.to_dict"><code class="docutils literal notranslate"><span class="pre">face.to_dict()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.vertices3D"><code class="docutils literal notranslate"><span class="pre">face.vertices3D</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.vertices3D_inv____redacted"><code class="docutils literal notranslate"><span class="pre">face.vertices3D_inv____redacted</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.verticesPlt"><code class="docutils literal notranslate"><span class="pre">face.verticesPlt</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.writeToFile"><code class="docutils literal notranslate"><span class="pre">face.writeToFile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.zoneDictKeys"><code class="docutils literal notranslate"><span class="pre">face.zoneDictKeys</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.face.zoneDictUniqe"><code class="docutils literal notranslate"><span class="pre">face.zoneDictUniqe</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.basisVectors"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.basisVectors</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.centroid"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.centroid</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.elementIDs"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.elementIDs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.internalNodes"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.internalNodes</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.joints"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.joints</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.nodeIDs"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.nodeIDs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.nodeL_alongFrame"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.nodeL_alongFrame</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.nodePoints"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.nodePoints</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.nodes"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.nodes</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.origin"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.origin</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.panels"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.panels</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.planeNormal"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.planeNormal</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.plot"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.plot()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.plot3D"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.plot3D()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.frame2D_CAD.supportNodes"><code class="docutils literal notranslate"><span class="pre">frame2D_CAD.supportNodes</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.generateTapsInBoundary"><code class="docutils literal notranslate"><span class="pre">generateTapsInBoundary()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.getIntersection"><code class="docutils literal notranslate"><span class="pre">getIntersection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.intersects"><code class="docutils literal notranslate"><span class="pre">intersects()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.meshRegionWithPanels"><code class="docutils literal notranslate"><span class="pre">meshRegionWithPanels()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.meshRegionWithWiggle"><code class="docutils literal notranslate"><span class="pre">meshRegionWithWiggle()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.node_CAD"><code class="docutils literal notranslate"><span class="pre">node_CAD</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.copy"><code class="docutils literal notranslate"><span class="pre">node_CAD.copy()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.idxs_inConnectedElements"><code class="docutils literal notranslate"><span class="pre">node_CAD.idxs_inConnectedElements</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.idxs_inConnectedPanels"><code class="docutils literal notranslate"><span class="pre">node_CAD.idxs_inConnectedPanels</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.is1D"><code class="docutils literal notranslate"><span class="pre">node_CAD.is1D</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.is2D"><code class="docutils literal notranslate"><span class="pre">node_CAD.is2D</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.is3D"><code class="docutils literal notranslate"><span class="pre">node_CAD.is3D</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.loc"><code class="docutils literal notranslate"><span class="pre">node_CAD.loc</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.loc_2D"><code class="docutils literal notranslate"><span class="pre">node_CAD.loc_2D</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.plot"><code class="docutils literal notranslate"><span class="pre">node_CAD.plot()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.plot3D"><code class="docutils literal notranslate"><span class="pre">node_CAD.plot3D()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.toGlobalCoord"><code class="docutils literal notranslate"><span class="pre">node_CAD.toGlobalCoord()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.node_CAD.toLocalCoord"><code class="docutils literal notranslate"><span class="pre">node_CAD.toLocalCoord()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.panel_CAD"><code class="docutils literal notranslate"><span class="pre">panel_CAD</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.area"><code class="docutils literal notranslate"><span class="pre">panel_CAD.area</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.centroid_global"><code class="docutils literal notranslate"><span class="pre">panel_CAD.centroid_global</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.centroid_local"><code class="docutils literal notranslate"><span class="pre">panel_CAD.centroid_local</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.edges"><code class="docutils literal notranslate"><span class="pre">panel_CAD.edges</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.getInvolvedTaps"><code class="docutils literal notranslate"><span class="pre">panel_CAD.getInvolvedTaps()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.involvedTapNo"><code class="docutils literal notranslate"><span class="pre">panel_CAD.involvedTapNo</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.normal"><code class="docutils literal notranslate"><span class="pre">panel_CAD.normal</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.plot"><code class="docutils literal notranslate"><span class="pre">panel_CAD.plot()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.plot3D"><code class="docutils literal notranslate"><span class="pre">panel_CAD.plot3D()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.polygon"><code class="docutils literal notranslate"><span class="pre">panel_CAD.polygon</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.supportAreaShares"><code class="docutils literal notranslate"><span class="pre">panel_CAD.supportAreaShares</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.supportAreaShares_normalized"><code class="docutils literal notranslate"><span class="pre">panel_CAD.supportAreaShares_normalized</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.supportLocations_global"><code class="docutils literal notranslate"><span class="pre">panel_CAD.supportLocations_global</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.supportLocations_local"><code class="docutils literal notranslate"><span class="pre">panel_CAD.supportLocations_local</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.supportNode_IDs"><code class="docutils literal notranslate"><span class="pre">panel_CAD.supportNode_IDs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.supportTributaries"><code class="docutils literal notranslate"><span class="pre">panel_CAD.supportTributaries</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.vertices_local"><code class="docutils literal notranslate"><span class="pre">panel_CAD.vertices_local</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.vertices_plt"><code class="docutils literal notranslate"><span class="pre">panel_CAD.vertices_plt</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.panel_CAD.warnedAboutZ"><code class="docutils literal notranslate"><span class="pre">panel_CAD.warnedAboutZ</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.samplingLine"><code class="docutils literal notranslate"><span class="pre">samplingLine</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.L"><code class="docutils literal notranslate"><span class="pre">samplingLine.L</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.basisVectors"><code class="docutils literal notranslate"><span class="pre">samplingLine.basisVectors</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.faceCoordOf_L"><code class="docutils literal notranslate"><span class="pre">samplingLine.faceCoordOf_L()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.fringeDistance_abs"><code class="docutils literal notranslate"><span class="pre">samplingLine.fringeDistance_abs</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.fringeZone_faceCoord"><code class="docutils literal notranslate"><span class="pre">samplingLine.fringeZone_faceCoord</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.fringeZone_faceCoord_plt"><code class="docutils literal notranslate"><span class="pre">samplingLine.fringeZone_faceCoord_plt</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.fringeZone_localCoord"><code class="docutils literal notranslate"><span class="pre">samplingLine.fringeZone_localCoord</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.length"><code class="docutils literal notranslate"><span class="pre">samplingLine.length</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.orientation"><code class="docutils literal notranslate"><span class="pre">samplingLine.orientation</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.orientation_Plt"><code class="docutils literal notranslate"><span class="pre">samplingLine.orientation_Plt</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.origin"><code class="docutils literal notranslate"><span class="pre">samplingLine.origin</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.plot"><code class="docutils literal notranslate"><span class="pre">samplingLine.plot()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.plotBasisVectors"><code class="docutils literal notranslate"><span class="pre">samplingLine.plotBasisVectors()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.plotFringeZone"><code class="docutils literal notranslate"><span class="pre">samplingLine.plotFringeZone()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.plotLine"><code class="docutils literal notranslate"><span class="pre">samplingLine.plotLine()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.plotTaps"><code class="docutils literal notranslate"><span class="pre">samplingLine.plotTaps()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.reverseBasisVectors"><code class="docutils literal notranslate"><span class="pre">samplingLine.reverseBasisVectors</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.sortOrder"><code class="docutils literal notranslate"><span class="pre">samplingLine.sortOrder</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.tapCoord"><code class="docutils literal notranslate"><span class="pre">samplingLine.tapCoord</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.tapCoordLocal"><code class="docutils literal notranslate"><span class="pre">samplingLine.tapCoordLocal</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.tapCoord_Plt"><code class="docutils literal notranslate"><span class="pre">samplingLine.tapCoord_Plt</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.tapIdx_inData"><code class="docutils literal notranslate"><span class="pre">samplingLine.tapIdx_inData</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.tapIdx_inFace"><code class="docutils literal notranslate"><span class="pre">samplingLine.tapIdx_inFace</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.tapName"><code class="docutils literal notranslate"><span class="pre">samplingLine.tapName</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.tapNo"><code class="docutils literal notranslate"><span class="pre">samplingLine.tapNo</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.toFaceCoords"><code class="docutils literal notranslate"><span class="pre">samplingLine.toFaceCoords()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.toFaceCoords_plt"><code class="docutils literal notranslate"><span class="pre">samplingLine.toFaceCoords_plt()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.toLocalCoords"><code class="docutils literal notranslate"><span class="pre">samplingLine.toLocalCoords()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.xy"><code class="docutils literal notranslate"><span class="pre">samplingLine.xy</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windCAD.samplingLine.xy_plt"><code class="docutils literal notranslate"><span class="pre">samplingLine.xy_plt</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.sortVoronoi"><code class="docutils literal notranslate"><span class="pre">sortVoronoi()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.tranform2D"><code class="docutils literal notranslate"><span class="pre">tranform2D()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.transform"><code class="docutils literal notranslate"><span class="pre">transform()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.translate"><code class="docutils literal notranslate"><span class="pre">translate()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCAD.trimmedVoronoi"><code class="docutils literal notranslate"><span class="pre">trimmedVoronoi()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.windCodes">src.windCodes module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCodes.ASCE7_22_GCp"><code class="docutils literal notranslate"><span class="pre">ASCE7_22_GCp()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCodes.ASCE_49_21"><code class="docutils literal notranslate"><span class="pre">ASCE_49_21</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCodes.ASCE_7_22"><code class="docutils literal notranslate"><span class="pre">ASCE_7_22</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCodes.CpConversionFactor"><code class="docutils literal notranslate"><span class="pre">CpConversionFactor()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCodes.NBCC2020_CpCg"><code class="docutils literal notranslate"><span class="pre">NBCC2020_CpCg()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCodes.NBCC_2020"><code class="docutils literal notranslate"><span class="pre">NBCC_2020</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCodes.getDurstFactor"><code class="docutils literal notranslate"><span class="pre">getDurstFactor()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCodes.velRatio_exposureChange"><code class="docutils literal notranslate"><span class="pre">velRatio_exposureChange()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCodes.velRatio_gustDurationChange"><code class="docutils literal notranslate"><span class="pre">velRatio_gustDurationChange()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windCodes.velRatio_heightChange"><code class="docutils literal notranslate"><span class="pre">velRatio_heightChange()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.windIO">src.windIO module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windIO.extractTapDataFromCSV"><code class="docutils literal notranslate"><span class="pre">extractTapDataFromCSV()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windIO.extractTapDataFromVTK"><code class="docutils literal notranslate"><span class="pre">extractTapDataFromVTK()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windIO.writeSpecFile"><code class="docutils literal notranslate"><span class="pre">writeSpecFile()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.windOF">src.windOF module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#functions">Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#classes">Classes</a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.appendBDformattedFile"><code class="docutils literal notranslate"><span class="pre">appendBDformattedFile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.convertSectionSampleToBoundaryDataInflow"><code class="docutils literal notranslate"><span class="pre">convertSectionSampleToBoundaryDataInflow()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.extractDataAtPoints"><code class="docutils literal notranslate"><span class="pre">extractDataAtPoints()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.extractDataAtPoints_single"><code class="docutils literal notranslate"><span class="pre">extractDataAtPoints_single()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.extractSampleProfileFromInflow"><code class="docutils literal notranslate"><span class="pre">extractSampleProfileFromInflow()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.foamCase"><code class="docutils literal notranslate"><span class="pre">foamCase</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windOF.foamCase.Refresh"><code class="docutils literal notranslate"><span class="pre">foamCase.Refresh()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windOF.foamCase.readProfile"><code class="docutils literal notranslate"><span class="pre">foamCase.readProfile()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.getClosest2DcoordsTo"><code class="docutils literal notranslate"><span class="pre">getClosest2DcoordsTo()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.getProfileScaleFactor"><code class="docutils literal notranslate"><span class="pre">getProfileScaleFactor()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.inflowTuner"><code class="docutils literal notranslate"><span class="pre">inflowTuner</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windOF.inflowTuner.addIncident"><code class="docutils literal notranslate"><span class="pre">inflowTuner.addIncident()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windOF.inflowTuner.addInflow"><code class="docutils literal notranslate"><span class="pre">inflowTuner.addInflow()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windOF.inflowTuner.allProfiles"><code class="docutils literal notranslate"><span class="pre">inflowTuner.allProfiles</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windOF.inflowTuner.getScaledTarget__redacted"><code class="docutils literal notranslate"><span class="pre">inflowTuner.getScaledTarget__redacted()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windOF.inflowTuner.plotProfiles"><code class="docutils literal notranslate"><span class="pre">inflowTuner.plotProfiles()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windOF.inflowTuner.plotSpectra"><code class="docutils literal notranslate"><span class="pre">inflowTuner.plotSpectra()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windOF.inflowTuner.targetProfileTable"><code class="docutils literal notranslate"><span class="pre">inflowTuner.targetProfileTable()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windOF.inflowTuner.writeProfile"><code class="docutils literal notranslate"><span class="pre">inflowTuner.writeProfile()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.meshSizeFromCutoffFreq"><code class="docutils literal notranslate"><span class="pre">meshSizeFromCutoffFreq()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.plot2DvelField"><code class="docutils literal notranslate"><span class="pre">plot2DvelField()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.printlog"><code class="docutils literal notranslate"><span class="pre">printlog()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.processVelProfile"><code class="docutils literal notranslate"><span class="pre">processVelProfile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.readBDformattedFile"><code class="docutils literal notranslate"><span class="pre">readBDformattedFile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.readInflowDict"><code class="docutils literal notranslate"><span class="pre">readInflowDict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.readProfiles"><code class="docutils literal notranslate"><span class="pre">readProfiles()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.readRAWfile"><code class="docutils literal notranslate"><span class="pre">readRAWfile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.readSurfacePressure"><code class="docutils literal notranslate"><span class="pre">readSurfacePressure()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.readVTKfile"><code class="docutils literal notranslate"><span class="pre">readVTKfile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.readVelProfile"><code class="docutils literal notranslate"><span class="pre">readVelProfile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.read_OF_probe"><code class="docutils literal notranslate"><span class="pre">read_OF_probe()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.read_OF_probe_single"><code class="docutils literal notranslate"><span class="pre">read_OF_probe_single()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.scaleInflowData"><code class="docutils literal notranslate"><span class="pre">scaleInflowData()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.scaleInflowFromSectionSample"><code class="docutils literal notranslate"><span class="pre">scaleInflowFromSectionSample()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.scaleVelocity"><code class="docutils literal notranslate"><span class="pre">scaleVelocity()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.writeBDformattedFile"><code class="docutils literal notranslate"><span class="pre">writeBDformattedFile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.writeOpenFOAMdict"><code class="docutils literal notranslate"><span class="pre">writeOpenFOAMdict()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windOF.writeProbeDict"><code class="docutils literal notranslate"><span class="pre">writeProbeDict()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.windPlotting">src.windPlotting module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windPlotting.plotProfiles"><code class="docutils literal notranslate"><span class="pre">plotProfiles()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windPlotting.plotProfiles____depricated"><code class="docutils literal notranslate"><span class="pre">plotProfiles____depricated()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windPlotting.plotSpectra"><code class="docutils literal notranslate"><span class="pre">plotSpectra()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windPlotting.plotSpectra____depricated"><code class="docutils literal notranslate"><span class="pre">plotSpectra____depricated()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windPlotting.plotVelTimeHistories"><code class="docutils literal notranslate"><span class="pre">plotVelTimeHistories()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src.windWT">src.windWT module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.CpOfT_atTaps"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.CpOfT_atTaps()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.Refresh"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.Refresh()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.Uref"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.Uref</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.Uref_TH"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.Uref_TH</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.Uref_Xchk"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.Uref_Xchk</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.Uref_Xchk_TH"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.Uref_Xchk_TH</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.description"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.description</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.indexOfTaps"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.indexOfTaps()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.read"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.read()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.trimTimeEndIdx"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.trimTimeEndIdx</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="src.html#src.windWT.BLWTL_HFPI.trimTimeStartIdx"><code class="docutils literal notranslate"><span class="pre">BLWTL_HFPI.trimTimeStartIdx</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windWT.readPSSfile"><code class="docutils literal notranslate"><span class="pre">readPSSfile()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windWT.read_cobraProbe_th_file___notCheckedYet____"><code class="docutils literal notranslate"><span class="pre">read_cobraProbe_th_file___notCheckedYet____()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.windWT.writeSpecFile"><code class="docutils literal notranslate"><span class="pre">writeSpecFile()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="src.html#module-src">Module contents</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="src.html#src.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Tsinuel Geleta.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
