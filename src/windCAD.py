@@ -122,7 +122,8 @@ def getIntersection(pA, pB, allowMultiPolygon=True, showLog=False):
                             overlap = overlap.union(geom)
             elif overlap.geom_type == "MultiPolygon":
                 if allowMultiPolygon:
-                    warnings.warn("MultiPolygon obtained while intersecting. Make sure that the receiving function is capable of treating it.")
+                    msg = "MultiPolygon obtained while intersecting. Make sure that the receiving function is capable of treating it."
+                    warnings.warn(msg)
                 else:
                     overlap = None
             elif overlap.geom_type == "LineString" or overlap.geom_type == "Point" or overlap.geom_type == "MultiLineString":
@@ -233,7 +234,8 @@ def trimmedVoronoi(bound,query_points,query_points_can_be_on_boundary=False,show
     for i in idx:
         temp.append(tribs[i])
         if not type(tribs[i]) == shp.Polygon:
-            warnings.warn(f"Type of tributary {i} is {type(tribs[i])}. There is a risk of voronoi not completely tiling the bound.")
+            msg = f"Type of tributary {i} is {type(tribs[i])}. There is a risk of voronoi not completely tiling the bound."
+            warnings.warn(msg)
     tribs = shp.GeometryCollection(temp)
 
     # tribs = shp.MultiPolygon([tribs[i] for i in idx])
@@ -458,7 +460,8 @@ def calculateTapWeightsPerPanel(panels:shp.MultiPolygon,tapsAll,tapIdxAll, wghtT
                 continue
         if abs(sum(w)-1) > wghtTolerance:
             errIdxs.append(p)
-            warnings.warn(f"The sum of area weights {sum(w)} from involved taps does not add up to 1 within the tolerance of 0.1%.")
+            msg = f"Panel {p} has a sum of weights {sum(w)} that is not equal to 1 within the tolerance of {wghtTolerance}."
+            warnings.warn(msg)
         weights += (w,)
         tapIdxs += (idx,)
         overlaps += (ovlps,)
@@ -467,6 +470,20 @@ def calculateTapWeightsPerPanel(panels:shp.MultiPolygon,tapsAll,tapIdxAll, wghtT
     
     return weights, tapIdxs, overlaps, errIdxs
 
+def generateTapsInBoundary(bound_xy:np.ndarray, N_taps:int, 
+                           densify_at_edge:dict={'densify':True, 'dist':[0.1,0.1,0.1,0.1], 'density':[1.0,1.0,1.0,1.0], 'force_parallel_to_edges':True},
+                           densify_custom:dict={'densify':False, 'polygon_xy':np.array([[0,0],[1,0],[1,1],[0,1]]), 'density':1.0},
+                           tap_count_tolerance:int=5,
+                           method:Literal['grid','random','spiderweb']='grid',
+                           showLog=False) -> np.ndarray:
+    # principles
+    # * the taps are generated in a grid arranged parallel to the edges of the boundary marching towards the center
+    # * the grid is optionally densified at the edges of the boundary
+    # 
+    
+    
+    pass
+    
 #--------------------------- COORDINATE SYSTEMS --------------------------------
 def transform(geomIn:np.ndarray,orig:np.ndarray,T:np.ndarray,inverseTransform:bool=False,debug:bool=False):
     '''
@@ -551,7 +568,6 @@ def translate(x, y, t, z=None):
     else:
         z = np.asarray(z,dtype=float)
         return x+t[0], y+t[1], z+t[2]
-    
     
 
 #===============================================================================
@@ -685,10 +701,12 @@ class face:
         if self.badTaps is None:
             return
         if self.tapNo is None:
-            warnings.warn("List of bad taps is provided for a face without defined tap numbers. Define the taps or the bad taps will be ignored.")
+            msg = "List of bad taps is provided for a face without defined tap numbers. Define the taps or the bad taps will be ignored."
+            warnings.warn(msg)
             return
         if allBldgTaps is None:
-            warnings.warn("If bad taps are provided, the full building tap list has to be provided as well so the updated indices can be determined.")
+            msg = "If bad taps are provided, the full building tap list has to be provided as well so the updated indices can be determined."
+            warnings.warn(msg)
             return
         
         badIdx = np.where(np.in1d(self.tapNo, self.badTaps))[0]
@@ -776,7 +794,8 @@ class face:
                 
                 if abs(errorInArea) > 1.0:
                     err_zn_z += (a,)
-                    warnings.warn(f"The difference between Zone area and the sum of its panel areas exceeds the tolerance level.")
+                    msg = f"The difference between Zone area and the sum of its panel areas exceeds the tolerance level."
+                    warnings.warn(msg)
                 
             self.panels += (panels_z,)
             # self.panelAreas += (panelA_z,)
@@ -808,7 +827,8 @@ class face:
     """--------------------------------- Properties -----------------------------------"""
     @property
     def tapCoord3D(self):
-        return transform(self.tapCoord, self.origin, self.basisVectors)
+        # return transform(self.tapCoord, self.origin, self.basisVectors)
+        return self.toGlobalCoord(self.tapCoord)
 
     @property
     def tapCoordPlt(self):
@@ -1308,7 +1328,8 @@ class face:
         if newFig:
             ax.axis('equal')
 
-    def plotEdges_3D(self, ax=None, showName=True, drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0, fill=True,
+    def plotEdges_3D(self, ax=None, showFaceName=True, plotTaps=True,
+                     drawOrigin=False, drawBasisVectors=False, basisVectorLength=1.0, fill=True, scale=1.0,
                     kwargs_Edge={'color':'k', 'lw':1.0, 'ls':'-'},
                     kwargs_Name={'ha':'center', 'va':'center', 'color':'k', 'backgroundcolor':[1,1,1,0.3]},
                     kwargs_Fill={'facecolor':[0.0,0.0,0.5,0.3], 'edgecolor':'None', 'lw':0.5, 'ls':'-'},
@@ -1318,12 +1339,20 @@ class face:
             newFig = True
             fig = plt.figure()
             ax = fig.add_subplot(projection='3d')
-        xyz = np.array(self.vertices3D)
+        xyz = np.array(self.vertices3D) * scale
         ax.plot(xyz[:,0], xyz[:,1], xyz[:,2], **kwargs_Edge)
         if fill:
             from mpl_toolkits.mplot3d.art3d import Poly3DCollection
             vertices = xyz
             ax.add_collection3d(Poly3DCollection([vertices], facecolors=kwargs_Fill['facecolor'], edgecolors=kwargs_Fill['edgecolor'], lw=kwargs_Fill['lw'], ls=kwargs_Fill['ls']))
+        if showFaceName:
+            txt = self.name
+            txt = txt.replace('_', '\_')
+            ax.text(np.mean(xyz[:,0]), np.mean(xyz[:,1]), np.mean(xyz[:,2]), txt, **kwargs_Name)
+            
+        if plotTaps:
+            ax.plot(self.tapCoord3D[:,0], self.tapCoord3D[:,1], self.tapCoord3D[:,2], 'k.', ms=1)
+        
         # # overlay a transparent filled polygon
         # verts = xyz
         # verts = np.append(verts, [verts[0]], axis=0)
@@ -1382,7 +1411,8 @@ class face:
                     xy.extend(transform(np.transpose(t.exterior.xy), self.origin_plt, self.basisVectors_plt))
                 xy = np.array(xy)
             else:
-                warnings.warn(f"Unknown geometry type: {type(trib)}")
+                msg = f"Unknown geometry type: {type(trib)}"
+                warnings.warn(msg)
                 continue
             ax.plot(xy[:,0], xy[:,1], **kwargs_Edge)
         if newFig:
@@ -2675,8 +2705,8 @@ class building(Faces):
 
     """--------------------------------- Plotters -------------------------------------"""
     def plotBldg_3D(self, ax=None, figsize=(10,10), showOrigin=False, 
-                    showAxis=True, axisArrowSize=1.0, axisVisibility:Literal['on','off']='off',
-                    showTaps=False, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
+                    showAxis=True, axisArrowSize=1.0, axisVisibility:Literal['on','off']='off', scale=None,
+                    showFaceName=True, showTaps=False, showTapNo=False, showTapName=False, textOffset_tapNo=[0,0], textOffset_tapName=[0,0],
                     kwargs_taps={'color':'k', 'lw':0.5, 'ls':'None', 'marker':'.', 'markersize':3},
                     kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
                     kwargs_view={'elev':30, 'azim':30},
@@ -2697,9 +2727,11 @@ class building(Faces):
             ax.quiver(0, 0, 0, 0, axisArrowSize, 0, color='g', arrow_length_ratio=0.1)
             ax.quiver(0, 0, 0, 0, 0, axisArrowSize, color='b', arrow_length_ratio=0.1)
             
+        if scale is None:
+            scale = 1/self.lScl
             
         for fc in self._memberFaces:
-            fc.plotEdges_3D(ax=ax, showName=False)
+            fc.plotEdges_3D(ax=ax, showFaceName=showFaceName, plotTaps=showTaps, scale=scale, )
             
         ax.set_xlabel('x')
         ax.set_ylabel('y')
@@ -2717,7 +2749,9 @@ class building(Faces):
         ax.axis('equal')
         ax.axis(axisVisibility)
 
-        
+        # if newFig:
+        #     ax.grid(False)
+        #     plt.show()
         
         # set the x, y, z limits to proportionally fit the building
         
@@ -2728,11 +2762,13 @@ class building(Faces):
         #     ax.set_ylim(ylim)
         # if zlim is not None:
         #     ax.set_zlim(zlim)
+        
+        return fig, ax
 
 #---------------------------- BUILDING STRUCTURE ---------------------------------#
 class node_CAD:
     # a node of a 2D or 3D frame
-    def __init__(self, x: float, y: float=None, z: float=None, ID: int=None, name=None, 
+    def __init__(self, x: float, y: float=None, z: float=None, ID: int=None, name: str=None, 
                  fixedDOF: List[bool]=[False, False, False, False, False, False],
                  DOF_indices: List[int]=[None, None, None, None, None, None],
                  nodeType: Literal['support','joint','internal']='joint',
@@ -2752,11 +2788,11 @@ class node_CAD:
         self.connectedElements: List[element_CAD] = connectedElements
         self.connectedPanels: List[panel_CAD] = connectedPanels
         self.parentFrame: frame2D_CAD = parentFrame
-        
+
     @property
     def is1D(self) -> bool:
         return self.z is None and self.y is None
-    
+
     @property
     def is2D(self) -> bool:
         return self.z is None and self.y is not None
@@ -2814,8 +2850,8 @@ class node_CAD:
     
     def __str__(self):
         # ID, name, loc, connectionType, nodeType, parent frame, connectedElements, connectedPanels
-        msg = 'Node ID:\t\t'+str(self.ID)+'\nname:\t\t\t'+self.name+'\nLocation:\t\t'+str(self.loc)+'\nDoF fixed:\t'+self.fixedDOF+'\nNode type:\t\t'+self.nodeType
-        msg += '\nParent frame:\t\t'+self.parentFrame.name+' ['+str(self.parentFrame.ID)+']'
+        msg = 'Node ID:\t\t'+str(self.ID)+'\nname:\t\t\t'+str(self.name)+'\nLocation:\t\t'+str(self.loc)+'\nDoF fixed:\t\t'+str(self.fixedDOF)+'\nNode type:\t\t'+str(self.nodeType)
+        msg += '\nParent frame:\t\t'+self.parentFrame.name+' ['+str(self.parentFrame.ID)+']' if self.parentFrame is not None else '\nParent frame:\t\tNone'
         msg += '\nConnected elements:\t'+str([e.ID for e in self.connectedElements])
         msg += '\nConnected panels:\t'+str([p.ID for p in self.connectedPanels])
         return msg
@@ -2868,8 +2904,8 @@ class node_CAD:
                 ax.axis('equal')
                 ax.axis('off')
                 
-    def plot3D(self, ax=None, showName=False, textOffset=[0,0,0],
-                kwargs_node={'color':'k', 'marker':'o', 'ms':5, 'ls':'None'},
+    def plot3D(self, ax=None, showName=False, textOffset=[0,0,0], scale=None,
+                kwargs_node_scatterPlt={'color':'k', 'marker':'o', 's':5},
                 kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
                 ):
             newFig = False
@@ -2877,14 +2913,21 @@ class node_CAD:
                 newFig = True
                 fig = plt.figure()
                 ax = fig.add_subplot(projection='3d')
-            ax.scatter(self.loc[0], self.loc[1], self.loc[2], **kwargs_node)
+            if scale is None:
+                if self.parentFrame is not None and self.parentFrame.parentBuilding is not None:
+                    scale = 1/self.parentFrame.parentBuilding.lScl
+                else:
+                    scale = 1.0
+            loc = np.asarray(self.loc, dtype=float) * scale
+            ax.scatter(loc[0], loc[1], loc[2], **kwargs_node_scatterPlt)
             if showName:
-                ax.text(self.loc[0]+textOffset[0], self.loc[1]+textOffset[1], self.loc[2]+textOffset[2], str(self.ID), **kwargs_text)
+                ax.text(loc[0]+textOffset[0], loc[1]+textOffset[1], loc[2]+textOffset[2], str(self.ID), **kwargs_text)
             if newFig:
                 ax.axis('equal')
                 ax.axis('off')
     
-class panel_CAD: 
+class panel_CAD:
+    warnedAboutZ = False
     def __init__(self,
                 parentFace: face,
                 vertices_global: np.ndarray = None,
@@ -2923,7 +2966,10 @@ class panel_CAD:
         
         # if the z values are not zero, set them to zero and warn the user
         if not np.allclose(crnrs[:,2], 0):
-            warnings.warn(f"Panel {self.ID} has non-zero local z values. Setting them to zero.")
+            if not self.warnedAboutZ:
+                self.warnedAboutZ = True
+                msg = f"Panel {self.ID} has non-zero local z values of {crnrs[:,2]}. Setting them to zero."
+                warnings.warn(msg)
             crnrs[:,2] = 0
         return crnrs
     
@@ -2948,7 +2994,10 @@ class panel_CAD:
         ans = self.parentFace.toLocalCoord(self.supportLocations_global, debug=False)
         # if the z values are not zero, set them to zero and warn the user
         if not np.allclose(ans[:,2], 0):
-            warnings.warn(f"Panel {self.ID} has support nodes with non-zero local z values. Setting them to zero.")
+            if not self.warnedAboutZ:
+                self.warnedAboutZ = True
+                msg = f"Panel {self.ID} has support nodes with non-zero local z values of {ans[:,2]}. Setting them to zero."
+                warnings.warn(msg)
             ans[:,2] = 0
         return ans
         
@@ -2973,7 +3022,8 @@ class panel_CAD:
             out = tri.intersection(polygon)
             if out.is_empty:
                 supportAreas.append(0.0)
-                warnings.warn(f"Support node {self.supportNodes[i]} of panel {self.ID} does not fall within the panel area.")
+                msg = f"Support node {self.supportNodes[i]} of panel {self.ID} does not fall within the panel area."
+                warnings.warn(msg)
             else:
                 supportAreas.append(out.area)
         return np.array(supportAreas, dtype=float)
@@ -2991,12 +3041,25 @@ class panel_CAD:
         # list of list of node IDs forming the edges of the panel (also include the last edge that connects the last node to the first node)
         return [[self.supportNodes[i].ID, self.supportNodes[i+1].ID] for i in range(len(self.supportNodes)-1)] + [[self.supportNodes[-1].ID, self.supportNodes[0].ID]]
 
+    @property
+    def involvedTapNo(self) -> np.ndarray:
+        ''' Get the tap numbers that fall within the panel area.
+        Returns:
+            np.ndarray: The tap numbers that fall within the panel area.
+        '''
+        tapIdxs_inFace, _ = self.getInvolvedTaps()
+        return self.parentFace.tapNo[tapIdxs_inFace]
+        
+
     ###---------------------- Data handlers ----------------------###
     def __str__(self) -> str:
         # ID, parentFace, supportNodes[.ID]
         fcStr = self.parentFace.name+'['+str(self.parentFace.ID)+']' if self.parentFace is not None else 'None'
-        supportNodesStr = [n.name+'['+str(n.ID)+']' for n in self.supportNodes] 
+        supportNodesStr = [str(n.name)+'['+str(n.ID)+']' for n in self.supportNodes] 
         return 'Panel ID:\t'+str(self.ID)+'\nParent face:\t'+fcStr+'\nSupport nodes:\t'+str(supportNodesStr)
+    
+    def __copy__(self) -> 'panel_CAD':
+        return copy.deepcopy(self)
     
     def getInvolvedTaps(self, debug=False, showPlots=False) -> np.ndarray:
         '''Get the tap tributaries that fall within the panel area.
@@ -3067,7 +3130,8 @@ class panel_CAD:
         tapIdxs_inFace = np.array(tapIdxs_inFace, dtype=int)
         overlappingAreas = np.array(overlappingAreas, dtype=float)
         if np.abs(self.area - np.sum(overlappingAreas)) > 1e-6:
-            warnings.warn(f"Panel {self.ID} area ({self.area}) and the sum of overlapping tap areas ({np.sum(overlappingAreas)}) do not match within a tolerance of 1e-6.")
+            msg = f"Panel {self.ID} area ({self.area}) and the sum of overlapping tap areas ({np.sum(overlappingAreas)}) do not match within a tolerance of 1e-6."
+            warnings.warn(msg)
             
         return tapIdxs_inFace, overlappingAreas
 
@@ -3089,22 +3153,40 @@ class panel_CAD:
                 ax.axis('equal')
                 ax.axis('off')
 
-    def plot_3D(self, ax=None, showName=False, textOffset=[0,0,0],
-                kwargs_node={'color':'k', 'marker':'o', 'ms':5, 'ls':'None'},
+    def plot3D(self, ax=None, showName=False, textOffset=[0,0,0], showEdges=True, showFill=True, showTaps=False, scale=1.0,
+                kwargs_edges={'color':'g', 'marker':'None', 'ms':2, 'ls':'-', 'lw':0.5},
+                kwargs_fill={'color':'g', 'alpha':0.5},
                 kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
+                kwargs_taps={'color':'r', 'marker':'o', 's':3, 'ls':'None'},
                 ):
-            newFig = False
-            if ax is None:
-                newFig = True
-                fig = plt.figure()
-                ax = fig.add_subplot(projection='3d')
-            verts = self.vertices_global
-            ax.plot(verts[:,0], verts[:,1], verts[:,2], **kwargs_node)
-            if showName:
-                ax.text(self.centroid_global[0]+textOffset[0], self.centroid_global[1]+textOffset[1], self.centroid_global[2]+textOffset[2], str(self.ID), **kwargs_text)
-            if newFig:
-                ax.axis('equal')
-                ax.axis('off')
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+        
+        newFig = False
+        if ax is None:
+            newFig = True
+            fig = plt.figure()
+            ax = fig.add_subplot(projection='3d')
+        
+        xyz = np.array(self.vertices_global) * scale
+        # edges
+        if showEdges:
+            ax.plot(xyz[:,0], xyz[:,1], xyz[:,2], **kwargs_edges)
+        # fill (using Poly3DCollection)
+        if showFill:
+            verts = [list(zip(xyz[:,0], xyz[:,1], xyz[:,2]))] 
+            ax.add_collection3d(Poly3DCollection(verts, **kwargs_fill))
+        if showTaps:
+            # use getInvolvedTaps to get the tap tributaries that fall within the panel area
+            tapIdxs_inFace, _ = self.getInvolvedTaps()
+            for i in tapIdxs_inFace:
+                tapLoc = self.parentFace.tapCoord3D[i] * scale
+                ax.scatter(tapLoc[0], tapLoc[1], tapLoc[2], **kwargs_taps)                
+            
+        if showName:
+            ax.text(self.centroid_global[0]+textOffset[0], self.centroid_global[1]+textOffset[1], self.centroid_global[2]+textOffset[2], str(self.ID), **kwargs_text)
+        if newFig:
+            ax.axis('equal')
+            ax.axis('off')
 
 class element_CAD:
     # a structural element that forms a 2D or 3D frame (e.g. beam, column, etc.)
@@ -3284,7 +3366,7 @@ class element_CAD:
         msg += 'Length:\t\t\t'+str(self.length)+'\n'
         msg += 'Orientation:\t\t'+str(self.orientation)+'\n'
         msg += 'Connected panels:\t'+str([p.ID for p in self.connectedPanels])+'\n'
-        msg += 'Parent frame:\t\t'+self.parentFrame.name+' ['+str(self.parentFrame.ID)+']'
+        msg += 'Parent frame:\t\t'+self.parentFrame.name+' ['+str(self.parentFrame.ID)+']' if self.parentFrame is not None else 'None'
         return msg
     
     ###---------------------- Plotters ----------------------###
@@ -3306,6 +3388,28 @@ class element_CAD:
                 ax.axis('equal')
                 ax.axis('off')
 
+    def plot3D(self, ax=None, showName=False, textOffset=[0,0,0], scale=None,
+                kwargs_line={'color':'b', 'lw':3, 'ls':'-'},
+                kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
+                ):
+            newFig = False
+            if ax is None:
+                newFig = True
+                fig = plt.figure()
+                ax = fig.add_subplot(projection='3d')
+            if scale is None:
+                if self.parentFrame is not None and self.parentFrame.parentBuilding is not None:
+                    scale = 1/self.parentFrame.parentBuilding.lScl
+                else:
+                    scale = 1.0
+            loc = self.loc * scale
+            ax.plot(loc[:,0], loc[:,1], loc[:,2], **kwargs_line)
+            if showName:
+                ax.text(self.centroid[0]+textOffset[0], self.centroid[1]+textOffset[1], self.centroid[2]+textOffset[2], str(self.ID), **kwargs_text)
+            if newFig:
+                ax.axis('equal')
+                ax.axis('off')
+           
 class frame2D_CAD:
     
     # a 2D frame that forms the structural skeleton of a building
@@ -3321,7 +3425,6 @@ class frame2D_CAD:
         self.parentBuilding: building = parentBuilding
         self._nodes: List[node_CAD] = nodes
         self.elements : List[element_CAD] = elements
-        
     
     def __redefineDOF_indices(self):
         # assign the degrees of freedom indices to the nodes
@@ -3336,8 +3439,7 @@ class frame2D_CAD:
     def __redefineBoundaryConditions(self):
         # assign the boundary conditions to the nodes
         pass
-        
-
+    
     @property
     def nodes(self) -> List[node_CAD]:
         return self._nodes
@@ -3442,10 +3544,102 @@ class frame2D_CAD:
     @property
     def nodePoints(self) -> np.ndarray:
         return np.array([n.loc for n in self.nodes])
+    
+    @property
+    def nodeL_alongFrame(self) -> np.ndarray:
         
+        # # get the curvilinear abscissa of the nodes along the frame. The first node is at L=0
+        # # use the connected elements to get the lengths of the segments
+        
+        # # create a list of NaNs with the same length as the number of nodes
+        # L = np.full(len(self.nodes), np.nan)
+        
+        # # loop through the elements and get the lengths of the segments
+        # L[0] = 0
+        # for i,el in enumerate(self.elements):
+        #     L[i+1] = L[i] + el.length
+        pass
+            
+            
+            
+            
+    
     def __str__(self) -> str:
         # ID, name, parentBuilding.name, nodes.ID, elements.ID, if(panels.ID)
         msg = 'Frame ID:\t'+str(self.ID)+'\nname:\t\t'+self.name+'\nBuilding:\t'+self.parentBuilding.name+'\nNodes:\t\t'+str(self.nodeIDs)+'\nElements:\t'+str(self.elementIDs)
         if len(self.panels) > 0:
             msg += '\nPanels:\t\t'+str([p.ID for p in self.panels])
         return msg
+
+    def __copy__(self) -> 'frame2D_CAD':
+        return copy.deepcopy(self)        
+
+    ###---------------------- Data handlers ----------------------###
+    
+    ###---------------------- Plotters ----------------------###
+    def plot(self, ax=None, showNodes=True, showElements=True, showPanels=True, showName=False, textOffset=[0,0],
+                kwargs_node={'color':'k', 'marker':'o', 'ms':5, 'ls':'None'},
+                kwargs_element={'color':'b', 'lw':3, 'ls':'-'},
+                kwargs_panel={'color':'g', 'alpha':0.5},
+                kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':45},
+                ):
+            newFig = False
+            if ax is None:
+                newFig = True
+                fig = plt.figure()
+                ax = fig.add_subplot()
+            if showNodes:
+                for n in self.nodes:
+                    n.plot(ax=ax, showName=showName, textOffset=textOffset, kwargs_node=kwargs_node, kwargs_text=kwargs_text)
+            if showElements:
+                for el in self.elements:
+                    el.plot(ax=ax, showName=showName, textOffset=textOffset, kwargs_line=kwargs_element, kwargs_text=kwargs_text)
+            if showPanels:
+                for p in self.panels:
+                    p.plot(ax=ax, showName=showName, textOffset=textOffset, kwargs_node=kwargs_node, kwargs_text=kwargs_text)
+            if newFig:
+                ax.axis('equal')
+                ax.axis('off')
+                
+    def plot3D(self, ax=None, showNodes=True, showElements=True, showPanels=True, showName=True, name_loc=None,
+                showNodeName=False, showElementName=False, showPanelName = False, textOffset=[0,0,0], scale=None,
+                kwargs_node_scatterPlt={'color':'k', 'marker':'o', 's':5},
+                kwargs_element={'color':'b', 'lw':3, 'ls':'-'},
+                kwargs_panel_edges={'color':'g', 'marker':'None', 'ms':2, 'ls':'-', 'lw':0.5},
+                kwargs_panel_fill={'color':'g', 'alpha':0.5},
+                kwargs_text={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':0},
+                kwargs_text_node={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':0},
+                kwargs_text_element={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':0},
+                kwargs_text_panel={'ha':'left', 'va':'top', 'color':'k', 'backgroundcolor':[1,1,1,0.0], 'fontsize':'small', 'rotation':0},
+                ):
+            newFig = False
+            if ax is None:
+                newFig = True
+                fig = plt.figure()
+                ax = fig.add_subplot(projection='3d')
+            if scale is None:
+                if self.parentBuilding is not None:
+                    scale = 1/self.parentBuilding.lScl
+                else:
+                    scale = 1.0
+            if showName:
+                # if name_loc is not given, place the name at the centroid of the frame
+                if name_loc is None:
+                    name_loc = self.centroid * scale
+                ax.text(name_loc[0], name_loc[1], name_loc[2], self.name, **kwargs_text)
+            if showNodes:
+                for n in self.nodes:
+                    n.plot3D(ax=ax, showName=showNodeName, textOffset=textOffset, scale=scale,
+                             kwargs_node_scatterPlt=kwargs_node_scatterPlt, kwargs_text=kwargs_text_node)
+            if showElements:
+                for el in self.elements:
+                    el.plot3D(ax=ax, showName=showElementName, textOffset=textOffset, scale=scale,
+                              kwargs_line=kwargs_element, kwargs_text=kwargs_text_element)
+            if showPanels:
+                for p in self.panels:
+                    p.plot3D(ax=ax, showName=showPanelName, textOffset=textOffset, scale=scale,
+                             kwargs_edges=kwargs_panel_edges, kwargs_fill=kwargs_panel_fill, kwargs_text=kwargs_text_panel)
+            if newFig:
+                ax.axis('equal')
+                ax.axis('off')
+

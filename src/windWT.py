@@ -12,6 +12,7 @@ import glob
 import warnings
 import wind as wd
 import json
+import struct
 
 
 #===============================================================================
@@ -78,8 +79,100 @@ def readPSSfile(file_pssr,file_pssd):
 
     return cp_data,analog,WTTDATALOG
 
-def readCobraProbeData():
-    raise NotImplemented
+def read_cobraProbe_th_file___notCheckedYet____(filename, num_samples_to_process=0, offset=0):
+    """ Reads a time-history (TH) data file """
+    def num_samples_per_channel(f):
+        current_pos = f.tell()
+        f.seek(0, 2)  # Seek to end
+        file_length = f.tell()
+        f.seek(current_pos, 0)
+        return (file_length - current_pos) // 4
+
+    def device_type_name(device_type):
+        types = {
+            0: 'Cobra', 4: 'Four-hole Cobra', 5: 'Five-hole Cobra',
+            13: 'Thirteen-hole ECA', 1000: 'DP Module', 1015: '15-channel DP Module',
+            1016: '16-channel DP Module', 1032: '32-channel DP Module',
+            1064: '64-channel DP Module', 1128: '128-channel DP Module',
+            1256: '256-channel DP Module', 8000: 'Force Balance',
+            8010: 'JR3 Balance', 8011: 'JR3 Balance (A/D)', 8012: 'JR3 Balance (DSP)',
+            8020: 'Aeroelastic Base Balance', 10000: 'Analog Data Device'
+        }
+        return types.get(device_type, 'Unknown')
+    
+    def data_type_name(data_type):
+        data_types = {
+            0: 'Analogue', 10: 'Voltage', 20: 'Pressure',
+            30: 'Temperature', 100: 'Velocity', 200: 'Force-Moment'
+        }
+        return data_types.get(data_type, 'Unknown')
+    
+    def read_date(fid):
+        year, month, _, day = struct.unpack('hhhh', fid.read(8))
+        return f"{day:02d}-{month:02d}-{year}"
+    
+    def read_time(fid):
+        hour, minute, second, milli_second = struct.unpack('hhhh', fid.read(8))
+        return f"{hour:02d}:{minute:02d}:{second:02d}.{milli_second:03d}"
+    
+    if not filename:
+        raise ValueError("Filename must be provided")
+    
+    with open(filename, 'rb') as f:
+        file_format = struct.unpack('i', f.read(4))[0]
+        
+        if file_format in [1, 6401, 2, 3]:
+            probe_id = struct.unpack('i', f.read(4))[0]
+            num_samples = struct.unpack('i', f.read(4))[0]
+            block_size = struct.unpack('i', f.read(4))[0]
+            data_rate = struct.unpack('d', f.read(8))[0]
+            has_pref = struct.unpack('B', f.read(1))[0]
+            
+            if num_samples == 0:
+                num_samples = num_samples_per_channel(f)
+            
+            print(f"Probe ID: {probe_id}\nNum Samples: {num_samples}\nData Rate: {data_rate} Hz")
+            
+            if file_format == 2:
+                pbaro = struct.unpack('d', f.read(8))[0]
+                mean_temp = struct.unpack('d', f.read(8))[0]
+                print(f"Barometric Pressure: {pbaro} Pa\nMean Temperature: {mean_temp} °C")
+            
+        elif file_format in [101, 102, 201, 202]:
+            data_type = struct.unpack('i', f.read(4))[0]
+            data_order = struct.unpack('i', f.read(4))[0]
+            num_channels = struct.unpack('i', f.read(4))[0]
+            num_samples = struct.unpack('i', f.read(4))[0]
+            block_size = struct.unpack('i', f.read(4))[0]
+            data_rate = struct.unpack('d', f.read(8))[0]
+            
+            print(f"Num Channels: {num_channels}\nNum Samples: {num_samples}\nData Rate: {data_rate} Hz")
+        
+        else:
+            raise ValueError("Unsupported file format")
+        
+        # Seek to start position
+        if offset > num_samples:
+            raise ValueError("Offset larger than number of samples in file")
+        block_start_sample = (offset // block_size) * block_size
+        f.seek(block_start_sample * 4 * (5 if has_pref else 4), 1)
+        
+        num_blocks = (num_samples // block_size) if num_samples_to_process == 0 else (num_samples_to_process // block_size)
+        
+        data = np.zeros((num_blocks * block_size, num_channels), dtype=np.float32)
+        
+        for block_num in range(num_blocks):
+            index1 = block_num * block_size
+            index2 = (block_num + 1) * block_size
+            data[index1:index2, :] = np.fromfile(f, dtype=np.float32, count=block_size * num_channels).reshape(block_size, num_channels)
+        
+    return data, {
+        "file_format": file_format,
+        "data_rate": data_rate,
+        "num_samples": num_samples,
+        "num_channels": num_channels,
+        "block_size": block_size
+    }
 
 def writeSpecFile(file,keyword,value,writeType):
     pass

@@ -38,7 +38,7 @@ import glob
 import warnings
 import pandas as pd
 import time
-import vtk
+# import vtk
 import scipy.interpolate as scintrp
 import matplotlib.pyplot as plt
 from typing import List,Literal,Dict,Tuple,Any
@@ -47,7 +47,7 @@ import multiprocessing as mp
 from matplotlib.backends.backend_pdf import PdfPages
 from datetime import datetime
 from scipy.spatial import KDTree
-from vtk.util.numpy_support import vtk_to_numpy
+# from vtk.util.numpy_support import vtk_to_numpy
 from tqdm import tqdm
 from multiprocessing import Pool, Manager
 
@@ -179,8 +179,8 @@ def extractDataAtPoints_single(vtkFile, query_points, fieldName, distanceToleran
     
     if max(dist) > distanceTolerance:
         percentageOfPoints = 100*len(dist[dist>distanceTolerance])/len(dist)
-        message = f"\nThe maximum distance between the points is {max(dist):.3e} which is greater than the tolerance of {distanceTolerance:.3e}. {percentageOfPoints:.1f}% of the points are farther than the tolerance."
-        warnings.warn(message)
+        msg = f"\nThe maximum distance between the points is {max(dist):.3e} which is greater than the tolerance of {distanceTolerance:.3e}. {percentageOfPoints:.1f}% of the points are farther than the tolerance."
+        warnings.warn(msg)
     
     if returnDist:
         return field_at_points, dist

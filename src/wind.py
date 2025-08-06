@@ -271,7 +271,8 @@ def mathName(rawname):
     elif rawname == 'kurtosis':
         return '$\\kappa_{C_p}$'
     else:
-        warnings.warn("Unknown rawname: "+rawname)
+        msg = f"Unknown rawname: '{rawname}'"
+        warnings.warn(msg)
         return rawname
 
 def fullName(rawname, abbreviate=False):
@@ -382,7 +383,8 @@ def fullName(rawname, abbreviate=False):
         else:
             return r'Kurtosis of $C_p$'
     else:
-        warnings.warn("Unknown rawname: "+rawname)
+        msg = f"Unknown rawname: '{rawname}'"
+        warnings.warn(msg)
         return rawname
 
 def LaTeXise(rawname):
@@ -1018,7 +1020,8 @@ def peak_gumbel(x, axis:int=0,
     nUnevenExcessData = xShp[axis] % specs['Num_seg']
     if nUnevenExcessData > 0:
         if nUnevenExcessData > 0.25*xShp[axis]:
-            warnings.warn(f"Excess data points ({nUnevenExcessData}) is more than 25% of the total data points ({xShp[axis]}).")
+            msg = f"Excess data points ({nUnevenExcessData}) is more than 25% of the total data points ({xShp[axis]})."
+            warnings.warn(msg)
         if debugMode:
             print(f"Excess data found.")
         if unevenDataManagement == 'remove':
@@ -4850,7 +4853,8 @@ class line(windCAD.samplingLine):
             return None
         idx = self.tapIdx_inData[self.sortOrder] if sortByL else self.tapIdx_inData
         if len(idx) == 0:
-            warnings.warn(f"Line {self.name} in face {self.parentFace.name} has no taps in the data. Returning None.")
+            msg = f"Line {self.name} in face {self.parentFace.name} has no taps in the data. Returning None."
+            warnings.warn(msg)
             return None
         stats = {}
         for fld in self.parentBldg.CpStats.keys():
@@ -6714,4 +6718,3 @@ class BldgCp_cummulative:
             # fig.tight_layout()  
             plt.show()
             return fig, ax
-    

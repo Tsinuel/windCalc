@@ -3,6 +3,12 @@
 Created on Mon Nov 4, 2024
 
 @author: Tsinuel Geleta
+
+This module contains the classes for the structural components of the building.
+
+Future Work:
+    - interface with OpenSeesPy to perform structural analysis
+    - add more structural components (e.g. beams, columns, slabs, etc)
 """
 import numpy as np
 import pandas as pd
@@ -30,6 +36,8 @@ import windPlotting as wplt
 import windCAD
 import windCodes as wc
 import wind
+
+# openseespy imports
 
 #------------------------------- STRUCTURES -----------------------------------
 '''
@@ -81,14 +89,17 @@ class panel(windCAD.panel_CAD):
     @property
     def Cf_TH(self) -> np.ndarray:  # [N_AoA, N_components=3, Ntime]
         debug = False
+        debug_deep = False
         if self.parentBldg is None:
             return None
         # get involved taps
-        tapIdxs_inFace, overlappingAreas = self.getInvolvedTaps(debug=debug,showPlots=debug)
+        tapIdxs_inFace, overlappingAreas = self.getInvolvedTaps(debug=debug_deep,showPlots=debug_deep)
         if debug:
             print(f"tapIdxs_inFace = {tapIdxs_inFace}")
             print(f"overlappingAreas = {overlappingAreas}")
-        mainTapIdxs = self.parentFace.tapIdx[tapIdxs_inFace]
+            print(f"Shape of parentFace.tapIdx = {np.shape(self.parentFace.tapIdx)}")
+            print(f"Type of parentFace.tapIdx = {type(self.parentFace.tapIdx)}")
+        mainTapIdxs = np.array(self.parentFace.tapIdx,int)[tapIdxs_inFace]
         if debug:
             print(f"mainTapIdxs = {mainTapIdxs}")
         # CpTH has shape [N_AoA, Ntaps, Ntime]
@@ -105,6 +116,17 @@ class panel(windCAD.panel_CAD):
         CpTH_aAvgd = np.sum(CpOfT*overlappingAreas, axis=1)/self.area
         # CpTH_aAvgd = CpTH_aAvgd[:,np.newaxis,:]
         
+        if debug:
+            print(f"Shape of CpTH_aAvgd = {np.shape(CpTH_aAvgd)}")
+            print(f"self.parentBldg.A_ref = {self.parentBldg.A_ref}")
+            print(f"self.area = {self.area}")
+            print(f"self.normal = {self.normal}")
+            print(f"")
+        
+        if self.parentBldg.A_ref is None:
+            msg = "Reference area is not defined for the parent building. Building name: "+self.parentBldg.name
+            raise ValueError(msg)
+                
         Aref = self.parentBldg.A_ref # [N_components=3]
         # area ratio between self.area over each of the reference areas
         Area_ratio = np.array([self.area/Aref[i] for i in range(3)], dtype=float)
@@ -133,8 +155,6 @@ class panel(windCAD.panel_CAD):
             print(f"Shape of Cf_TH_sup = {np.shape(Cf_TH_sup)}")
         return Cf_TH_sup
         
-    
-        
 class node(windCAD.node_CAD):
     def __init__(self, x: float, y: float=None, z: float=None, ID: int=None, name=None, 
                  fixedDOF: List[bool]=[False,False,False,False,False,False],
@@ -145,8 +165,7 @@ class node(windCAD.node_CAD):
                  parentFrame: windCAD.frame2D_CAD=None,
                 ) -> None:
         super().__init__(x=x, y=y, z=z, ID=ID, name=name, fixedDOF=fixedDOF, DOF_indices=DOF_indices, nodeType=nodeType, connectedElements=connectedElements, connectedPanels=connectedPanels, parentFrame=parentFrame)
-        
-        
+    
     @property
     def Cf_TH(self) -> np.ndarray:
         # Cf_TH [N_AoA, N_components=3, Ntime]
@@ -158,7 +177,13 @@ class node(windCAD.node_CAD):
             else:
                 Cf_TH += panel.Cf_TH_atSupports[:,:,this_nodes_id_in_panel,:]
         return Cf_TH
-        
+
+    @property
+    def Cf_Stats(self) -> dict:
+        Cf_TH = self.Cf_TH
+        Cf_stats = wind.get_CpTH_stats(Cf_TH,axis=len(np.shape(Cf_TH))-1, peakSpecs=self.parentFrame.parentBuilding.peakSpecs, 
+                                       fields=self.parentFrame.parentBuilding.CpStats_fields)
+        return Cf_stats
     
 class element(windCAD.element_CAD):
     def __init__(self,
@@ -178,9 +203,7 @@ class element(windCAD.element_CAD):
         self.Iy: float = Iy # moment of inertia about the y-axis
         self.Iz: float = Iz # moment of inertia about the z-axis
         self.J: float = J   # torsional constant
-        
-        
-        
+    
     @property
     def local_stiffness_matrix(self) -> np.ndarray:
         # local stiffness matrix [6,6]
@@ -219,10 +242,7 @@ class element(windCAD.element_CAD):
         ])
         
         return k
-                        
-        
-    
-    
+
     @property
     def transformation_matrix(self) -> np.ndarray:
         # transformation matrix [12,12]
@@ -263,7 +283,6 @@ class element(windCAD.element_CAD):
         T[9:, 9:] = R
         
         return T
-            
     
     @property
     def global_stiffness_matrix(self) -> np.ndarray:
@@ -272,9 +291,9 @@ class element(windCAD.element_CAD):
         T = self.transformation_matrix
         k_global = T.T @ k @ T
         return k_global
-        
-        
+
 class frame2D(windCAD.frame2D_CAD):
+    AoA_axis = 0
     def __init__(self,
                  parentBuilding: wind.bldgCp,
                  ID: int, name=None,
@@ -300,6 +319,23 @@ class frame2D(windCAD.frame2D_CAD):
     
     @property
     def Cf_Stats(self) -> dict:
-        Cf_stats = wind.get_CpTH_stats(self.Cf_TH,axis=-1, peakSpecs=self.parentBuilding.peakSpecs)
+        # Cf_TH [N_AoA, N_components=3, N_nodes, Ntime]
+        # Cf_stats {N_stats}[N_AoA, N_components=3, N_nodes]
+        Cf_TH = self.Cf_TH
+        Cf_stats = wind.get_CpTH_stats(Cf_TH,axis=len(np.shape(Cf_TH))-1, peakSpecs=self.parentBuilding.peakSpecs, 
+                                       fields=self.parentBuilding.CpStats_fields)
         return Cf_stats
 
+    @property
+    def Cf_Stats_MinMaxOf_AoA(self) -> dict:
+        Cf_stats = self.Cf_Stats
+        ans = {'min':{}, 'max':{}}
+        for i, field in enumerate(Cf_stats):
+            if i == 0:
+                ans['min'] = np.min(Cf_stats[field], axis=self.AoA_axis)
+                ans['max'] = np.max(Cf_stats[field], axis=self.AoA_axis)
+            else:
+                ans['min'] = np.min([ans['min'], np.min(Cf_stats[field], axis=self.AoA_axis)], axis=0)
+                ans['max'] = np.max([ans['max'], np.max(Cf_stats[field], axis=self.AoA_axis)], axis=0)
+        return ans
+    
