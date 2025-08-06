@@ -44,30 +44,103 @@ The package includes modules for spectral analysis, coherence functions, structu
 ## Modules Summary
 
 ### `src.wind`
-Handles wind-specific functions and statistical operations:
-- `BldgCp_cummulative`, `BldgCps`: Compute cumulative and per-building Cp statistics.
-- `profile`, `Profiles`: Wind profile creation, analysis, and plotting.
-- `ESDU74`, `ESDU85`: Turbulence modeling functions from ESDU standards.
-- `spectra`, `vonKarmanSpectra`: Frequency domain analyses and plotting.
-- `validator`: Validation utilities for experimental/model comparison.
+This core module handles wind engineering computations, including pressure coefficient (Cp) analysis, turbulence modeling, coherence, spectral analysis, and wind profile fitting. Major components include:
 
-### `src.structure`
-Provides finite element-like structural representation:
-- `element`, `node`, `panel`, `frame2D`: Represent structural members and their mechanical properties.
-- Methods to compute stiffness matrices and structural responses under aerodynamic loads.
+- **Cp Analysis**:
+  - `bldgCp`, `BldgCps`, `BldgCp_cummulative`: Handle individual and ensemble building Cp statistics. Functions include envelope extraction, peak and average Cp computations, and Cp data export to Excel.
+  - `SampleLinesCp`, `faceCp`, `line`: Manage Cp statistics along sample lines, building faces, or specific coordinates.
 
-### `src.spatialAvg_FFS`
-- `average_data()`: Computes spatial averages using Full-Field Sampling methods.
+- **Wind Profile Modeling**:
+  - `profile`, `Profiles`: Compute and visualize velocity profiles. Fit experimental or CFD velocity data to log-law or power-law profiles.
+  - `logProfile()`, `fitVelToPowerLawProfile()`, `fitVelDataToLogProfile()`: Fit velocity data and extract roughness parameters (`z0`, `u*`).
 
-### `src.calcSSL`
-- `SSL`, `curvedCoordSys`: Utilities for streamlined coordinate transformations and structural line elements.
+- **Spectral Analysis**:
+  - `spectra`, `vonKarmanSpectra`, `vonKarmanSuu/Svv/Sww`: Compute wind spectra using von Kármán or ESDU models.
+  - `ESDU74`, `ESDU85`: Provide all relevant functions and parameterizations for turbulence intensities (`Iu`, `Iv`, `Iw`), power spectral densities, and integral scales.
+
+- **Coherence and Time Scales**:
+  - `coherence()`, `Coh_Davenport()`: Calculate coherence between points based on distance and frequency.
+  - `integLengthScale()`, `integTimeScale()`: Estimate turbulence length and time scales.
+
+- **Validation Tools**:
+  - `validator`: Provides error metrics and plotting tools for comparing modeled vs. experimental Cp or velocity statistics (e.g., bar charts, contours, line plots).
+  - `measureError()`, `plotError_CpStats()`, `plotError_velStats()`: Visual diagnostics for assessing model accuracy.
+
+- **Utility Functions**:
+  - `LaTeXise()`, `mathName()`, `fullName()`: Formatting functions for labeling.
+  - `lowpass()`, `smooth()`, `psd()`: Signal filtering and spectral density estimations.
+
+---
 
 ### `src.windCAD`
-- `Faces`, `Taps`, `Zones`: Interface with geometric and panelized building models.
-- Visualization and error-checking tools for CAD data.
+This module interfaces wind analysis with CAD-like representations of surfaces and pressure tap distributions. It enables detailed paneling, geometric zone definition, and visualization:
 
-### `src.pyRunWind`
-- `main()`: Execution entry-point for wind analysis automation.
+- **Panel and Tap Management**:
+  - `Faces`, `Taps`, `Zones`: Classes for defining the geometry and attributes of building faces, pressure taps, and aerodynamic zones.
+  - Functions include `plotPanels()`, `plotTaps()`, `plotZones()`, `boundingBoxPlt()`, and tap/panel field plotting.
+
+- **Geometry and Quality Checks**:
+  - `panelingErrors`, `error_in_panels`, `error_in_zones`: Tools for verifying spatial consistency and tap assignments.
+  - `Refresh()`, `RemovedBadTaps`: Update and clean geometry definitions.
+
+- **Panel Attributes**:
+  - `panelAreas_groupAvg`, `panelIdxRanges`, `panelArea_nominal`: Compute and organize panel properties by face and zone.
+
+---
+
+### `src.windCodes`
+A standards-compliant module for implementing wind loading rules from international codes and guidelines:
+
+- **Code-Specific Implementations** (depending on availability):
+  - Compute reference wind pressures, gust factors, and terrain multipliers.
+  - Evaluate code-specific Cp or Cf distributions for simplified design.
+
+- **Potential Support**:
+  - Standards such as ASCE 7, NBCC, or EN 1991 may be implemented here or extended.
+
+---
+
+### `src.windIO`
+Handles data input/output for wind analysis tasks. Facilitates efficient loading, parsing, and exporting of wind data in structured formats:
+
+- **Supported Formats**:
+  - Time history data, Cp tables, processed stats, and structured JSON.
+
+- **Export Functions**:
+  - `writeCpStatsToXLSX()`, `writeCandCloadToXLSX()`: Export Cp statistics and derived load values to Excel.
+  - `writeDataToFile()`, `writeToJSON()`: Save computed or validated profiles and spectra to files for later use.
+
+- **Reading Utilities**:
+  - `readFromFile()`, `readFromJSON()`: Ingest saved datasets into the analysis pipeline.
+
+---
+
+### `src.windOF`
+This module acts as a bridge between windCalc and **OpenFOAM** (OF) outputs. It parses CFD results and enables streamlined post-processing:
+
+- **Typical Use Cases**:
+  - Extract Cp or velocity fields from OF output files.
+  - Convert sampled data into `profile`, `spectra`, or `bldgCp` objects for direct analysis.
+
+- **Functions**:
+  - Parsing `sampleDict`, `probeData`, or other post-processing outputs.
+  - Matching geometry or time-series data with CAD panels/taps.
+
+---
+
+### `src.windWT`
+Provides interfaces and utilities tailored for **Wind Tunnel (WT)** data processing:
+
+- **WT-Specific Workflows**:
+  - Reads Cp time histories and metadata from pressure tap files.
+  - Matches tap locations with CAD models (`windCAD`) and formats time series for analysis.
+
+- **Data Conditioning**:
+  - Performs cleaning, interpolation, and filtering on WT time history data.
+  - Converts raw tunnel data into `bldgCp`, `profile`, or `spectra` formats.
+
+- **Calibration and Setup**:
+  - Tools for handling Reynolds number matching, AoA variation, and reference pressure conversions.
 
 ---
 
