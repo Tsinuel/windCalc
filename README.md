@@ -171,7 +171,7 @@ bldgs.plotTapCpStatsPerAoA()
 
 ## Documentation
 
-Full API documentation is available in HTML format. Open docs/index.html in your browser or rebuild with:
+Full documentation is available in HTML format. Open docs/index.html in your browser or rebuild with:
 ```bash
 make html
 ```
